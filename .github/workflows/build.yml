@@ -83,10 +83,24 @@ jobs:
           files: release/*
           body: |
             Built from ${{ github.sha }}.
-            First flash (USB-C): add files at the offsets in OFFSETS.txt on https://espressif.github.io/esptool-js/
+            Flash from a phone (USB-C): https://jobot101.github.io/xarm/ — one tap, files built in.
             Updates (WiFi): http://xarm.local → Firmware → upload xarm-voice.bin
 
       - uses: actions/upload-artifact@v4
         with:
           name: release
           path: release/
+
+      # phone flasher page with this build's files baked in -> https://jobot101.github.io/xarm/
+      - name: build flasher page
+        working-directory: flasher
+        run: |
+          npm ci && npm run build
+          mkdir -p dist/fw && cp ../release/* dist/fw/
+
+      - name: publish flasher to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: flasher/dist
+          force_orphan: true

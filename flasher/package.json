@@ -1,0 +1,17 @@
+{
+  "name": "xarm-flasher",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "esptool-js": "0.7.0",
+    "web-serial-polyfill": "1.0.15"
+  },
+  "devDependencies": {
+    "vite": "5.4.11"
+  },
+  "private": true,
+  "type": "module"
+}

@@ -27,7 +27,7 @@ The owner wants to **flash and update this board from an Android phone**. A PC i
 
 CI also writes `OFFSETS.txt` and an ESP Web Tools `manifest.json`, taking the offsets from `build/flasher_args.json`. Files land at `https://github.com/jobot101/xarm/releases/download/latest/<file>`.
 
-The first flash happens from the phone over a USB-C OTG cable, using Chrome on Android (Web Serial) and Espressif's web flasher at https://espressif.github.io/esptool-js/: add each file at its offset, then Program. If it won't connect, hold BOOT, tap RESET, and release BOOT. If that phone's Chrome lacks Web Serial, flash once from the PC with `idf.py flash`. Every flash after that is OTA.
+The first flash happens from the phone over USB-C using **`flasher/`**, a one-tap page that CI deploys to https://jobot101.github.io/xarm/ (gh-pages branch) with that build's files baked in. Android Chrome can't open the S3's built-in USB-Serial-JTAG (303A:1001) through Web Serial, and esptool-js's own WebUSB mode only supports CH340. So the flasher hands esptool-js a port from Google's `web-serial-polyfill`, which drives the board's CDC-ACM interfaces over WebUSB. Keep baud at 115200 (USB-JTAG ignores it, and a baud change would reopen the port). Every flash after the first is OTA.
 
 **3. OTA from the phone.** Add this, following the existing patterns:
 - `ota.c`: `POST /api/ota` takes the raw `.bin` body and streams it with `esp_ota_begin` / `esp_ota_write` (4 KB chunks, heap buffer) / `esp_ota_end`, then `esp_ota_set_boot_partition`, replies `{ok}`, and restarts after 500 ms. Refuse while `pick_busy()`, and call `pick_stop()` first. Raise httpd `recv_wait_timeout` for the upload.

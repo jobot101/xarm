@@ -7,3 +7,5 @@ firmware/sdkconfig.old
 firmware/dependencies.lock
 firmware/test/t
 release/
+flasher/node_modules/
+flasher/dist/

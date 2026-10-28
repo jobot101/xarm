@@ -53,7 +53,7 @@ Use the 2×9 header on the audio board.
 
 GitHub Actions builds every push. The files are on the **latest** release: https://github.com/jobot101/xarm/releases/tag/latest
 
-- **First flash:** download the five `.bin` files and `OFFSETS.txt` from that release. Plug the board into the phone with a USB-C OTG cable, open https://espressif.github.io/esptool-js/ in Chrome, add each file at its offset, and press Program. If it won't connect, hold BOOT, tap RESET, and release BOOT.
+- **First flash:** plug the board into the phone with a USB-C data cable. Open **https://jobot101.github.io/xarm/** in Chrome, keep **Full install** selected, and tap **Flash**. That page already has the latest build's files. If it can't find the board, hold BOOT, tap RESET, release BOOT, and try again. (Espressif's own esptool-js page can't see this board from Android, because its WebUSB mode only works with CH340 boards.)
 - **Every flash after that:** open http://xarm.local, go to **Firmware**, pick `xarm-voice.bin`, and upload. It goes over WiFi with no cable. If a bad build won't start, the board rolls back on its own.
 
 ## First run
