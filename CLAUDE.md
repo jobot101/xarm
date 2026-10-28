@@ -6,7 +6,7 @@ Voice and web control for a Hiwonder xArm 1S. The brain is a Waveshare ESP32-S3-
 
 - `core.c` passes its host tests. The frames match the byte examples in Hiwonder's protocol docs.
 - The web app builds and has been checked against the mock API.
-- **The firmware has never been compiled or run on hardware.**
+- **The firmware compiles clean in CI** (ESP-IDF v5.5.1, first try) and the `latest` release is published. It has **not been run on hardware yet**.
 - The partition table already has two OTA app slots (`ota_0`/`ota_1`), and rollback is on in `sdkconfig.defaults`. The OTA code itself is task 3 below.
 
 ## The job, in order
