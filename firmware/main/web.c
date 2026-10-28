@@ -526,6 +526,7 @@ bool web_start(void)
     c.max_uri_handlers = 24;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
+    c.stack_size = 8192;                      // /api/state builds a big JSON tree; 4 KB default is tight
     c.recv_wait_timeout = 15;                 // OTA uploads: a 1 MB .bin over WiFi needs more than the 5 s default
     httpd_handle_t h;
     if (httpd_start(&h, &c) != ESP_OK) { ESP_LOGE(TAG, "httpd start failed"); return false; }
