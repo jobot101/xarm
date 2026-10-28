@@ -13,6 +13,7 @@ export const api = {
   state:  ()            => call('/api/state'),
   cmd:    (text)        => call('/api/cmd', { text }),
   jog:    (id, pos, ms) => call('/api/jog', { id, pos, ms }),
+  drive:  (d)           => call('/api/drive', d),          // hold-to-move: {base|lift|reach|tilt|twist|grip: ±1, step, ms}
   torque: (on)          => call('/api/torque', { on }),
   teach:  (what)        => call('/api/teach', { what }),
   getConfig: ()         => call('/api/config'),

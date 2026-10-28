@@ -65,7 +65,7 @@ export default function App() {
         </button>
         <div className="hall-name">
           <b>Ragamuffin Hall</b>
-          <small>{mode === 'play' ? 'the robot arm' : 'workshop'}</small>
+          <small>{mode === 'play' ? 'arm control' : 'workshop'}</small>
         </div>
         {mode === 'workshop' && <button className="pill" onClick={() => switchMode('play')}>Back to play</button>}
       </header>

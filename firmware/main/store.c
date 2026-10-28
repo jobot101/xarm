@@ -8,6 +8,7 @@
 #define MAGIC 0x58415234u     // bump when cfg_t layout changes -> defaults reload
 static const char *TAG = "store";
 cfg_t g_cfg;
+int16_t g_reach[NSERVO] = {0, 0, 0, -90, 90, 0};   // elbow out, shoulder forward. flip in Settings if backwards
 static SemaphoreHandle_t s_mx;
 
 void store_lock(void)   { xSemaphoreTake(s_mx, portMAX_DELAY); }
@@ -46,6 +47,8 @@ void store_load(void)
     if (nvs_open("xarm", NVS_READONLY, &h) == ESP_OK) {
         esp_err_t e = nvs_get_blob(h, "cfg", &g_cfg, &len);
         nvs_close(h);
+        nvs_handle_t r; size_t rl = sizeof g_reach;
+        if (nvs_open("xarm", NVS_READONLY, &r) == ESP_OK) { nvs_get_blob(r, "reach", g_reach, &rl); nvs_close(r); }
         if (e == ESP_OK && len == sizeof g_cfg && g_cfg.magic == MAGIC) {
             ESP_LOGI(TAG, "loaded, %d calib pts", g_cfg.n_calib);
             return;
@@ -65,4 +68,14 @@ void store_save(void)
         nvs_close(h);
     }
     store_unlock();
+}
+
+void store_reach_save(void)
+{
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_blob(h, "reach", g_reach, sizeof g_reach);
+        nvs_commit(h);
+        nvs_close(h);
+    }
 }

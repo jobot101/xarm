@@ -16,7 +16,7 @@ const st = {
   fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true },
 }
 const cfg = { home: [500, 500, 500, 500, 500, 500], drop: [500, 500, 500, 500, 500, 800],
-  lift: [0, 0, 0, 0, -120, 0], grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'], cam_on_head: true, scan: [0, -200, 200], stack_pct: 30 }
+  lift: [0, 0, 0, 0, -120, 0], reach: [0, 0, 0, -90, 90, 0], grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'], cam_on_head: true, scan: [0, -200, 200], stack_pct: 30 }
 
 createServer((req, res) => {
   let b = ''
@@ -55,6 +55,7 @@ createServer((req, res) => {
         if (body.action === 'play') { st.state = 'playing'; st.busy = true; setTimeout(() => { st.state = 'idle'; st.busy = false }, 2000) }
         return send({ ok: true, msg: body.action === 'save' ? `saved "${body.name}"` : 'ok' })
       }
+      case 'POST /api/drive': if (body.base) st.arm.pos[5] = Math.max(0, Math.min(1000, st.arm.pos[5] + body.base * body.step)); return send({ ok: true, msg: 'ok' })
       case 'POST /api/fx': return send({ ok: true, msg: 'ok' })
       case 'POST /api/kids': {
         const k = st.kids

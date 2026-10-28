@@ -40,6 +40,14 @@ export default function Settings({ run }) {
           ))}
         </div>
       )}
+      <h3>Reach direction <small>what “Out” adds per step on the drive pad</small></h3>
+      <div className="fields six">
+        {JOINTS.map((j, i) => (
+          <label className="field" key={i}>{j}
+            <input type="number" value={c.reach?.[i] ?? 0} onChange={e => setIdx('reach', i, +e.target.value)} />
+          </label>
+        ))}
+      </div>
       <h3>Lift offset <small>added to grasp pose for the approach</small></h3>
       <div className="fields six">
         {JOINTS.map((j, i) => (

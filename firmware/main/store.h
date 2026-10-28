@@ -27,6 +27,9 @@ typedef struct {
 } cfg_t;
 
 extern cfg_t g_cfg;
+// drive "reach" direction (forward/back) — kept outside cfg_t so adding it didn't reset anyone's setup
+extern int16_t g_reach[NSERVO];
+void store_reach_save(void);
 
 void store_load(void);   // loads or fills defaults
 void store_save(void);

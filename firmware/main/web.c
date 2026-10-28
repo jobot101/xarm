@@ -302,6 +302,31 @@ static esp_err_t h_jog(httpd_req_t *r)
     return reply(r, true, "ok");
 }
 
+// ---------- POST /api/drive {"base":-1|0|1,"lift":..,"reach":..,"tilt":..,"twist":..,"grip":..,"step":n,"ms":n}
+// continuous hold-to-move: the app sends this ~every 100 ms while a direction is held.
+// base/twist/tilt/grip step joints directly; lift/reach move along the taught lift and reach vectors.
+static esp_err_t h_drive(httpd_req_t *r)
+{
+    if (pick_busy()) return reply(r, false, "busy");
+    cJSON *b = body(r);
+    int step = num(b, "step", 10), ms = num(b, "ms", 110);
+    int base = num(b, "base", 0), lift = num(b, "lift", 0), reach = num(b, "reach", 0);
+    int tilt = num(b, "tilt", 0), twist = num(b, "twist", 0), grip = num(b, "grip", 0);
+    cJSON_Delete(b);
+    uint16_t p[NSERVO];
+    arm_last(p);
+    int v[NSERVO];
+    for (int i = 0; i < NSERVO; i++)
+        v[i] = p[i] + (lift * g_cfg.lift[i] + reach * g_reach[i]) * step / 100;
+    v[5] += base * step;
+    v[1] += twist * step * 3 / 2;
+    v[2] += tilt * step;
+    v[0] += grip * step * 2 * (g_cfg.grip_close > g_cfg.grip_open ? 1 : -1);   // +1 = close
+    for (int i = 0; i < NSERVO; i++) p[i] = clamp_pos(v[i]);
+    arm_move(p, ms);
+    return reply(r, true, "ok");
+}
+
 // ---------- POST /api/torque {"on":false} ----------
 static esp_err_t h_torque(httpd_req_t *r)
 {
@@ -385,6 +410,8 @@ static esp_err_t h_cfg_get(httpd_req_t *r)
     cJSON *j = cJSON_CreateObject();
     cJSON_AddItemToObject(j, "home", u16arr(g_cfg.home, NSERVO));
     cJSON_AddItemToObject(j, "drop", u16arr(g_cfg.drop, NSERVO));
+    cJSON *rc = cJSON_AddArrayToObject(j, "reach");
+    for (int i = 0; i < NSERVO; i++) cJSON_AddItemToArray(rc, cJSON_CreateNumber(g_reach[i]));
     cJSON *l = cJSON_AddArrayToObject(j, "lift");
     for (int i = 0; i < NSERVO; i++) cJSON_AddItemToArray(l, cJSON_CreateNumber(g_cfg.lift[i]));
     cJSON_AddNumberToObject(j, "grip_open", g_cfg.grip_open);
@@ -408,6 +435,7 @@ static esp_err_t h_cfg_post(httpd_req_t *r)
     read_arr(b, "home", g_cfg.home, false);
     read_arr(b, "drop", g_cfg.drop, false);
     read_arr(b, "lift", g_cfg.lift, true);
+    if (cJSON_IsArray(cJSON_GetObjectItem(b, "reach"))) { read_arr(b, "reach", g_reach, true); store_reach_save(); }
     g_cfg.grip_open  = clamp_pos(num(b, "grip_open", g_cfg.grip_open));
     g_cfg.grip_close = clamp_pos(num(b, "grip_close", g_cfg.grip_close));
     g_cfg.move_ms    = (uint16_t)num(b, "move_ms", g_cfg.move_ms);
@@ -452,6 +480,7 @@ bool web_start(void)
         {"/api/state",  HTTP_GET,  h_state},
         {"/api/cmd",    HTTP_POST, h_cmd},
         {"/api/jog",    HTTP_POST, h_jog},
+        {"/api/drive",  HTTP_POST, h_drive},
         {"/api/torque", HTTP_POST, h_torque},
         {"/api/teach",  HTTP_POST, h_teach},
         {"/api/config", HTTP_GET,  h_cfg_get},
