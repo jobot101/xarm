@@ -51,7 +51,7 @@ Use the 2×9 header on the audio board.
 
 ### From an Android phone
 
-GitHub Actions builds every push. The files are on the **latest** release: https://github.com/jobot101/xarm-voice/releases/tag/latest
+GitHub Actions builds every push. The files are on the **latest** release: https://github.com/jobot101/xarm/releases/tag/latest
 
 - **First flash:** download the five `.bin` files and `OFFSETS.txt` from that release. Plug the board into the phone with a USB-C OTG cable, open https://espressif.github.io/esptool-js/ in Chrome, add each file at its offset, and press Program. If it won't connect, hold BOOT, tap RESET, and release BOOT.
 - **Every flash after that:** open http://xarm.local, go to **Firmware**, pick `xarm-voice.bin`, and upload. It goes over WiFi with no cable. If a bad build won't start, the board rolls back on its own.

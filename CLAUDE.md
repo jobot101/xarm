@@ -25,7 +25,7 @@ The owner wants to **flash and update this board from an Android phone**. A PC i
 | `xarm-voice.bin` | 0x10000 | first USB flash, **and** every OTA update after that |
 | `srmodels.bin` | 0x810000 | first USB flash (speech models; only reflash if the model changes) |
 
-CI also writes `OFFSETS.txt` and an ESP Web Tools `manifest.json`, taking the offsets from `build/flasher_args.json`. Files land at `https://github.com/jobot101/xarm-voice/releases/download/latest/<file>`.
+CI also writes `OFFSETS.txt` and an ESP Web Tools `manifest.json`, taking the offsets from `build/flasher_args.json`. Files land at `https://github.com/jobot101/xarm/releases/download/latest/<file>`.
 
 The first flash happens from the phone over a USB-C OTG cable, using Chrome on Android (Web Serial) and Espressif's web flasher at https://espressif.github.io/esptool-js/: add each file at its offset, then Program. If it won't connect, hold BOOT, tap RESET, and release BOOT. If that phone's Chrome lacks Web Serial, flash once from the PC with `idf.py flash`. Every flash after that is OTA.
 
