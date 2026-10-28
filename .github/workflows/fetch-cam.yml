@@ -1,0 +1,27 @@
+# one-off: pull Hiwonder's ESP32-S3 vision module sketches into cam/hiwonder/ (their docs site is the only source)
+name: fetch-cam-source
+on:
+  push:
+    paths: [.github/workflows/fetch-cam.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: download
+        run: |
+          set -x
+          B=https://docs.hiwonder.com/projects/ESP32-S3/en/latest/_static/source_code
+          mkdir -p cam/hiwonder && cd cam/hiwonder
+          for z in ColorDetection FaceDetection; do
+            curl -fsSL -o $z.zip "$B/$z.zip" && unzip -o -q $z.zip -d $z && rm $z.zip || echo "::error::$z download failed"
+          done
+          find . -type f | head -100
+          find . -type f -size +2M -delete    # keep the repo light
+      - name: commit
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add cam/hiwonder && git commit -m "Fetch Hiwonder vision module sketches" && git push || echo nothing
