@@ -102,6 +102,12 @@ static esp_err_t h_state(httpd_req_t *r)
     cJSON_AddBoolToObject(arm, "torque", arm_torque_on());
     cJSON_AddBoolToObject(arm, "link", arm_link_ok());
     cJSON_AddNumberToObject(arm, "battery_mv", arm_battery_mv());
+    {
+        uint16_t l[NSERVO][2];
+        arm_limits(l);
+        cJSON *la = cJSON_AddArrayToObject(arm, "lim");
+        for (int i = 0; i < NSERVO; i++) cJSON_AddItemToArray(la, u16arr(l[i], 2));
+    }
 
     cJSON *cam = cJSON_AddObjectToObject(j, "cam");
     cJSON_AddBoolToObject(cam, "ok", cam_ok());
@@ -284,6 +290,17 @@ static esp_err_t h_fx(httpd_req_t *r)
     else if (cJSON_IsString(e)) fx_event(!strcmp(e->valuestring, "sad") ? FX_ERROR : FX_CHEER);
     cJSON_Delete(b);
     return reply(r, true, "ok");
+}
+
+// ---------- POST /api/limits {"i":0..5,"min":n,"max":n} ----------
+static esp_err_t h_limits(httpd_req_t *r)
+{
+    cJSON *b = body(r);
+    int i = num(b, "i", -1), lo = num(b, "min", 0), hi = num(b, "max", 1000);
+    cJSON_Delete(b);
+    if (i < 0 || i >= NSERVO || hi - lo < 20) return reply(r, false, "bad limits");
+    arm_limits_set(i, lo, hi);
+    return reply(r, true, "limits saved");
 }
 
 // ---------- POST /api/voice {"gain":0..42,"thresh":5..90} ----------
@@ -528,6 +545,7 @@ bool web_start(void)
         {"/api/fx",     HTTP_POST, h_fx},
         {"/api/kids",   HTTP_POST, h_kids},
         {"/api/voice",  HTTP_POST, h_voice},
+        {"/api/limits", HTTP_POST, h_limits},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);

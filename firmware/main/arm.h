@@ -11,4 +11,6 @@ void arm_hold(void);            // freeze in place (used by stop)
 bool arm_torque_on(void);
 void arm_last(uint16_t out[NSERVO]);   // last commanded / last read
 int  arm_battery_mv(void);
-bool arm_link_ok(void);         // got any reply in the last 5 s
+bool arm_link_ok(void);
+void arm_limits(uint16_t out[NSERVO][2]);          // [i][0]=min, [i][1]=max, servo index 0..5
+void arm_limits_set(int i, int lo, int hi);        // saved to NVS; every move is clamped to these         // got any reply in the last 5 s

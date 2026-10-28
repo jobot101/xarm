@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 
 const st = {
   state: 'idle', detail: '', busy: false, holding: false, marked: false,
-  arm: { pos: [500, 500, 500, 500, 500, 500], torque: true, link: true, battery_mv: 7480 },
+  arm: { pos: [500, 500, 500, 500, 500, 500], torque: true, link: true, battery_mv: 7480, lim: [[100, 800], [50, 950], [80, 920], [80, 920], [80, 920], [0, 1000]] },
   cam: { ok: true, raw: '50 3C 14 12 | 00 00 00 00', slots: [
     { name: 'red', seen: true, x: 80, y: 60, w: 20, h: 18 },
     { name: 'blue', seen: false, x: 0, y: 0, w: 0, h: 0 } ] },
@@ -56,6 +56,7 @@ createServer((req, res) => {
         return send({ ok: true, msg: body.action === 'save' ? `saved "${body.name}"` : 'ok' })
       }
       case 'POST /api/drive': if (body.base) st.arm.pos[5] = Math.max(0, Math.min(1000, st.arm.pos[5] + body.base * body.step)); return send({ ok: true, msg: 'ok' })
+      case 'POST /api/limits': st.arm.lim[body.i] = [body.min, body.max]; return send({ ok: true, msg: 'limits saved' })
       case 'POST /api/voice': if (body.gain >= 0) st.voice.gain = body.gain; if (body.thresh >= 5) st.voice.thresh = body.thresh; return send({ ok: true, msg: 'voice tuned' })
       case 'POST /api/fx': return send({ ok: true, msg: 'ok' })
       case 'POST /api/kids': {

@@ -9,6 +9,7 @@ const SPANS = [['Fine', 80], ['Normal', 200], ['Coarse', 500]]   // units per fu
 export default function Joints({ s, run, title = 'Joints', torqueBtn = false, disabled = false }) {
   const pos = s?.arm?.pos || [500, 500, 500, 500, 500, 500]
   const limp = s?.arm?.torque === false
+  const lim = s?.arm?.lim || []
   const [span, setSpan] = useState(1)
   const last = useRef({})
 
@@ -33,7 +34,7 @@ export default function Joints({ s, run, title = 'Joints', torqueBtn = false, di
       </h2>
       {order.map(i => (
         <BigSlider key={i} label={JOINTS[i]} value={pos[i]} disabled={disabled || limp || !s}
-          span={SPANS[span][1]} onMove={v => send(i, v)} onDone={v => send(i, v, true)} />
+          span={SPANS[span][1]} lo={lim[i]?.[0] ?? 0} hi={lim[i]?.[1] ?? 1000} onMove={v => send(i, v)} onDone={v => send(i, v, true)} />
       ))}
       <p className="hint">Drag anywhere on a bar — it moves from where the joint is, never jumps.</p>
     </section>

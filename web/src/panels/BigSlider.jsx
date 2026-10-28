@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 
 // Massive, low-sensitivity slider. Drag is relative: touching never jumps the joint,
 // and a full-width swipe moves only `span` units (default 200 of 0..1000).
-export default function BigSlider({ label, value, onMove, onDone, disabled, span = 200 }) {
+export default function BigSlider({ label, value, onMove, onDone, disabled, span = 200, lo = 0, hi = 1000 }) {
   const ref = useRef(null)
   const start = useRef(null)
   const [live, setLive] = useState(null)
@@ -17,7 +17,7 @@ export default function BigSlider({ label, value, onMove, onDone, disabled, span
   const move = e => {
     if (!start.current) return
     const s = start.current
-    const nv = Math.round(Math.min(1000, Math.max(0, s.v + (e.clientX - s.x) / s.w * span)))
+    const nv = Math.round(Math.min(hi, Math.max(lo, s.v + (e.clientX - s.x) / s.w * span)))
     setLive(nv)
     onMove(nv)
   }
@@ -32,6 +32,8 @@ export default function BigSlider({ label, value, onMove, onDone, disabled, span
     <div ref={ref} className={`bigslider ${disabled ? 'dis' : ''} ${live !== null ? 'on' : ''}`}
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
       <div className="bs-fill" style={{ width: `${v / 10}%` }} />
+      <div className="bs-off" style={{ left: 0, width: `${lo / 10}%` }} />
+      <div className="bs-off" style={{ right: 0, width: `${(1000 - hi) / 10}%` }} />
       <span className="bs-label">{label}</span>
       <span className="bs-val">{v}</span>
     </div>

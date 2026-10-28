@@ -1,6 +1,7 @@
 #include "arm.h"
 #include <string.h>
 #include "driver/uart.h"
+#include "nvs.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -18,6 +19,41 @@ static uint16_t s_rd[NSERVO];
 static volatile int s_batt;
 static volatile bool s_torque = true;
 static volatile int64_t s_last_rx_us;
+#define UNREAD 0xFFFF
+// soft limits per servo (index 0 gripper .. 5 base). Every move is clamped here — one choke point.
+static uint16_t s_lim[NSERVO][2] = {{100, 800}, {50, 950}, {80, 920}, {80, 920}, {80, 920}, {0, 1000}};
+
+static uint16_t lim(int i, int v)
+{
+    if (v < s_lim[i][0]) return s_lim[i][0];
+    if (v > s_lim[i][1]) return s_lim[i][1];
+    return (uint16_t)v;
+}
+
+void arm_limits(uint16_t out[NSERVO][2]) { memcpy(out, s_lim, sizeof s_lim); }
+
+void arm_limits_set(int i, int lo, int hi)
+{
+    if (i < 0 || i >= NSERVO) return;
+    lo = clamp_pos(lo); hi = clamp_pos(hi);
+    if (hi - lo < 20) return;                  // refuse a nonsense range
+    s_lim[i][0] = lo; s_lim[i][1] = hi;
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_blob(h, "limits", s_lim, sizeof s_lim);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
+static void limits_load(void)
+{
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READONLY, &h) != ESP_OK) return;
+    uint16_t l[NSERVO][2]; size_t n = sizeof l;
+    if (nvs_get_blob(h, "limits", l, &n) == ESP_OK && n == sizeof l) memcpy(s_lim, l, sizeof l);
+    nvs_close(h);
+}
 
 static void tx(const uint8_t *b, size_t n)
 {
@@ -63,6 +99,7 @@ void arm_init(void)
     s_tx = xSemaphoreCreateMutex();
     s_txn = xSemaphoreCreateMutex();
     s_read_done = xSemaphoreCreateBinary();
+    limits_load();
     uart_config_t c = {
         .baud_rate = 9600,
         .data_bits = UART_DATA_8_BITS,
@@ -83,8 +120,10 @@ void arm_init(void)
 void arm_move(const uint16_t pos[NSERVO], uint16_t ms)
 {
     uint8_t f[32];
-    tx(f, xf_move(f, IDS, pos, NSERVO, ms));
-    for (int i = 0; i < NSERVO; i++) s_last[i] = clamp_pos(pos[i]);
+    uint16_t p[NSERVO];
+    for (int i = 0; i < NSERVO; i++) p[i] = lim(i, pos[i]);
+    tx(f, xf_move(f, IDS, p, NSERVO, ms));
+    memcpy(s_last, p, sizeof p);
     s_torque = true;                           // any move re-energizes the servos
 }
 
@@ -92,8 +131,9 @@ void arm_move_one(int id, uint16_t pos, uint16_t ms)
 {
     if (id < 1 || id > NSERVO) return;
     uint8_t f[16], i = (uint8_t)id;
+    pos = lim(id - 1, pos);
     tx(f, xf_move(f, &i, &pos, 1, ms));
-    s_last[id - 1] = clamp_pos(pos);
+    s_last[id - 1] = pos;
 }
 
 bool arm_read(uint16_t out[NSERVO])
@@ -101,9 +141,15 @@ bool arm_read(uint16_t out[NSERVO])
     uint8_t f[16];
     xSemaphoreTake(s_txn, portMAX_DELAY);
     xSemaphoreTake(s_read_done, 0);            // drop a stale reply
+    for (int i = 0; i < NSERVO; i++) s_rd[i] = UNREAD;
     tx(f, xf_ids(f, XCMD_POS_READ, IDS, NSERVO));
     bool ok = xSemaphoreTake(s_read_done, pdMS_TO_TICKS(400)) == pdTRUE;
-    if (ok) memcpy(out, s_rd, sizeof s_rd);
+    if (ok) for (int i = 0; i < NSERVO; i++) {
+        // a servo that didn't answer, or reports 0 (the controller's "couldn't read"), keeps its last known spot
+        bool bad = s_rd[i] == UNREAD || s_rd[i] == 0;
+        out[i] = bad ? s_last[i] : s_rd[i];
+        if (bad) ESP_LOGD(TAG, "servo %d read failed, keeping %d", i + 1, s_last[i]);
+    }
     xSemaphoreGive(s_txn);
     return ok;
 }
@@ -119,7 +165,7 @@ void arm_torque(bool on)
 void arm_hold(void)
 {
     uint16_t p[NSERVO];
-    if (!arm_read(p)) memcpy(p, s_last, sizeof p);
+    if (s_torque || !arm_read(p)) memcpy(p, s_last, sizeof p);   // powered: commanded = actual; limp: read where the hand left it
     arm_move(p, 80);
 }
 

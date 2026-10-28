@@ -192,3 +192,10 @@ select { font: inherit; color: inherit; background: #111; border: 1px solid #353
 .bs-label { left: 18px; } .bs-val { right: 18px; font-variant-numeric: tabular-nums; }
 .joints h2 .seg { display: inline-flex; gap: 4px; margin-left: auto; }
 .joints h2 .seg button { padding: 6px 12px; } .joints h2 .seg button.on { background: var(--brass); color: #000; }
+.bs-off { position: absolute; top: 0; bottom: 0; pointer-events: none;
+  background: repeating-linear-gradient(45deg, rgba(160,30,40,.45) 0 8px, rgba(0,0,0,.35) 8px 16px); }
+.limrow { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+.limrow small { opacity: .7; margin-left: 6px; }
+.limctl { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 6px; margin-top: 6px; }
+.limctl input { width: 100%; min-width: 0; }
+.limctl .primary { grid-column: 1 / -1; }
