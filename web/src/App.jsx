@@ -6,6 +6,7 @@ import Vision from './panels/Vision.jsx'
 import Jog from './panels/Jog.jsx'
 import Teach from './panels/Teach.jsx'
 import Settings from './panels/Settings.jsx'
+import Firmware from './panels/Firmware.jsx'
 
 const POLL_MS = 250
 
@@ -42,6 +43,7 @@ export default function App() {
         <Jog s={s} run={run} />
         <Teach s={s} run={run} />
         <Settings run={run} />
+        <Firmware s={s} />
       </main>
       <button className="stop" onClick={() => run(api.cmd('stop'))}>STOP</button>
       {toast && <div className="toast">{toast}</div>}

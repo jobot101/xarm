@@ -11,6 +11,7 @@ const st = {
   calib: [{ px: 20, py: 20 }, { px: 140, py: 20 }, { px: 80, py: 100 }],
   voice: { ok: true, last: 'pick up the red' },
   net: { ip: '127.0.0.1', mode: 'sta' },
+  fw: { version: 'mock-1', partition: 'ota_0' },
 }
 const cfg = { home: [500, 500, 500, 500, 500, 500], drop: [500, 500, 500, 500, 500, 800],
   lift: [0, 0, 0, 0, -120, 0], grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'] }
@@ -19,7 +20,7 @@ createServer((req, res) => {
   let b = ''
   req.on('data', d => (b += d))
   req.on('end', () => {
-    const body = b ? JSON.parse(b) : {}
+    const body = b && req.url !== '/api/ota' ? JSON.parse(b) : {}   // OTA body is the raw .bin, not json
     const send = (o) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
     st.cam.slots[0].x = 80 + Math.round(5 * Math.sin(Date.now() / 700))
     switch (`${req.method} ${req.url}`) {
@@ -32,6 +33,7 @@ createServer((req, res) => {
         if (body.what === 'calib_add') { st.calib.push({ px: st.cam.slots[0].x, py: 60 }); st.marked = false }
         if (body.what === 'calib_clear') st.calib = []
         return send({ ok: true, msg: body.what })
+      case 'POST /api/ota': setTimeout(() => (st.fw.version = `mock-${Date.now() % 10000}`), 1500); return send({ ok: true, msg: 'updated — rebooting' })
       case 'GET /api/config': return send(cfg)
       case 'POST /api/config': Object.assign(cfg, body); st.cam.slots.forEach((s, i) => (s.name = cfg.slot_name[i])); return send({ ok: true, msg: 'saved' })
     }

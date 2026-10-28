@@ -3,6 +3,7 @@
 #include "nvs_flash.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_ota_ops.h"
 #include "driver/i2c_master.h"
 #include "sdkconfig.h"
 #include "arm.h"
@@ -39,6 +40,7 @@ void app_main(void)
     cam_init(bus);
     pick_init();
     net_start();
-    web_start();
+    // the web UI is up: this build is good. A build that can't serve it rolls back on the next reboot
+    if (web_start()) esp_ota_mark_app_valid_cancel_rollback();
     voice_start(bus);      // last: loads models from flash, slowest
 }

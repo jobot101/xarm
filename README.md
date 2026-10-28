@@ -83,6 +83,7 @@ The React app uses this API. You can also script it with curl.
 | `POST /api/torque` | `{"on":false}` | Limp for hand-teaching |
 | `POST /api/teach` | `{"what":"home"\|"drop"\|"calib_mark"\|"calib_add"\|"calib_undo"\|"calib_clear"\|"test_lift"}` | |
 | `GET/POST /api/config` | Slot names, grip open/close, move/grip ms, lift[6] | Saved to NVS |
+| `POST /api/ota` | Raw `xarm-voice.bin` body | Writes the other app slot, reboots after 500 ms. `/api/state` `fw` shows the running version |
 
 ## Layout
 
@@ -95,6 +96,7 @@ firmware/main/
   router.c   text command → action. Voice and web both go through here
   voice.c    ES7210 mics → ESP-SR MultiNet
   web.c      HTTP + JSON API + embedded app
+  ota.c      firmware upload over WiFi (POST /api/ota), running version
   net.c      WiFi STA / fallback AP, mDNS
   store.c    persistent config
 firmware/test/   host unit tests for core.c

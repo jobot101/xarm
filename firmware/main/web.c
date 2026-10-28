@@ -7,6 +7,7 @@
 #include "arm.h"
 #include "cam.h"
 #include "net.h"
+#include "ota.h"
 #include "pick.h"
 #include "router.h"
 #include "store.h"
@@ -127,6 +128,12 @@ static esp_err_t h_state(httpd_req_t *r)
     cJSON *n = cJSON_AddObjectToObject(j, "net");
     cJSON_AddStringToObject(n, "ip", ip);
     cJSON_AddStringToObject(n, "mode", mode);
+
+    char ver[32], part[16];
+    ota_info(ver, sizeof ver, part, sizeof part);
+    cJSON *fw = cJSON_AddObjectToObject(j, "fw");
+    cJSON_AddStringToObject(fw, "version", ver);
+    cJSON_AddStringToObject(fw, "partition", part);
     return send_json(r, j);
 }
 
@@ -268,14 +275,15 @@ static esp_err_t h_app(httpd_req_t *r)
     return httpd_resp_send(r, (const char *)app_start, app_end - app_start);
 }
 
-void web_start(void)
+bool web_start(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
     c.max_uri_handlers = 12;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
+    c.recv_wait_timeout = 15;                 // OTA uploads: a 1 MB .bin over WiFi needs more than the 5 s default
     httpd_handle_t h;
-    if (httpd_start(&h, &c) != ESP_OK) { ESP_LOGE(TAG, "httpd start failed"); return; }
+    if (httpd_start(&h, &c) != ESP_OK) { ESP_LOGE(TAG, "httpd start failed"); return false; }
     const httpd_uri_t routes[] = {
         {"/api/state",  HTTP_GET,  h_state},
         {"/api/cmd",    HTTP_POST, h_cmd},
@@ -284,8 +292,10 @@ void web_start(void)
         {"/api/teach",  HTTP_POST, h_teach},
         {"/api/config", HTTP_GET,  h_cfg_get},
         {"/api/config", HTTP_POST, h_cfg_post},
+        {"/api/ota",    HTTP_POST, ota_handle},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);
     ESP_LOGI(TAG, "web up on :80");
+    return true;
 }

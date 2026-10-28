@@ -46,6 +46,7 @@ button.danger { color: var(--bad); }
 .say { display: flex; gap: 8px; margin-top: 12px; }
 input { background: #111; border: 1px solid #353535; border-radius: 8px; padding: 9px 10px; min-width: 0; }
 .say input { flex: 1; }
+progress { display: block; width: 100%; margin-top: 10px; accent-color: var(--brass); }
 
 .stop { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 10;
   width: min(420px, calc(100% - 32px)); padding: 16px; font-size: 18px; font-weight: 900; letter-spacing: 3px;
