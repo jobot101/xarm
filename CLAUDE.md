@@ -44,6 +44,12 @@ The first flash happens from the phone over USB-C using **`flasher/`**, a one-ta
 
 **Ragamuffin Hall theme:** rose-window LED ring in stained-glass jewels, bell and organ sounds (`fx.c`), and oak/brass/jewel UI. Keep new features in that voice.
 
+**Camera firmware (done):** `cam/xarm_color` is Hiwonder's color sketch (originals in `cam/hiwonder`, fetched by `fetch-cam.yml`), patched with:
+- the two arm colors set in `colors.h` (0 red, 1 yellow, 2 green, 3 blue, 4 purple), on regs 0x00/0x01, plus all five colors on 0x10–0x14;
+- a fix for their max-area bug.
+
+The CI `camera` job builds it with arduino-esp32 2.0.17 (bundled esp-dl), 4 MB flash, huge_app, for both quad and octal PSRAM. The flasher's **Camera** button handles it. HSV thresholds live in `color_detection.cpp`.
+
 **4. Hardware bring-up:** work through the unverified list below with the owner.
 
 The phone gets its files from the `latest` release.
@@ -71,8 +77,8 @@ git push                              # CI builds + publishes release "latest"
 ## Unverified: check on hardware
 
 1. **esp-sr / esp_codec_dev API and sdkconfig names.** `voice.c` follows xiaozhi-esp32 (esp-sr 2.4.7). Check that `CONFIG_SR_MN_EN_MULTINET7_QUANT` and friends exist under menuconfig → ESP Speech Recognition, and that the `model` partition gets flashed.
-2. **Vision module data format.** The Hiwonder docs disagree: MicroPython reads 8 bytes as int16 LE x,y,w,h, while Arduino reads 4 bytes. `core.c` assumes 8 × int16. Confirm with `cam.raw` in `/api/state` while moving a target.
-3. **Color-mode resolution.** The docs say "160*140", probably 160×120. The UI auto-grows its frame, and calibration doesn't care.
+2. ~~Vision module data format~~ **Resolved from Hiwonder's source:** 4 × uint8 x,y,w,h on a 240×240 frame.
+3. **Camera PSRAM type.** The flasher picks the octal or quad build from the chip features. Check on first flash that the cam boots (Boot log).
 4. **Mic channel.** `voice.c` uses ES7210 TDM slot 0 at 16 kHz, gain 30 dB (Kconfig). If recognition is deaf, try another slot or a higher gain.
 5. **Gripper direction and lift sign.** Defaults are open 200 / close 650 and shoulder lift −120. Users fix these in Settings.
 6. **Controller TX logic level** (3.3 V expected), and that the vision module doesn't pull SDA/SCL up to 5 V.
