@@ -15,6 +15,7 @@
 #include "freertos/task.h"
 #include "net.h"
 #include "pick.h"
+#include "fx.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "update";
@@ -73,6 +74,7 @@ static void install(const char *ver)
     esp_https_ota_config_t oc = { .http_config = &hc };
     pick_stop();
     status("installing %s…", ver);
+    fx_state("updating");
     esp_err_t e = esp_https_ota(&oc);              // writes the idle slot + sets it to boot
     if (e == ESP_OK) {
         nvs_str("tried", (char *)ver, 0, true);     // one attempt per version: a build that rolls back isn't retried
@@ -81,6 +83,7 @@ static void install(const char *ver)
         esp_restart();
     }
     status("install of %s failed: %s", ver, esp_err_to_name(e));
+    fx_event(FX_ERROR);
 }
 
 static void task(void *arg)

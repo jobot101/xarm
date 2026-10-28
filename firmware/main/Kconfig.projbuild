@@ -44,4 +44,8 @@ menu "xArm Voice"
         int "Auto-update check interval, seconds"
         default 60
 
+    config XARM_VOLUME
+        int "Speaker volume 0-100 (robot sounds)"
+        default 70
+
 endmenu

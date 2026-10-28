@@ -5,6 +5,7 @@
 #include "arm.h"
 #include "cam.h"
 #include "store.h"
+#include "fx.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -19,7 +20,9 @@ static char s_state[16] = "idle", s_detail[64] = "";
 
 static void set(const char *st, const char *fmt, ...)
 {
+    bool changed = strcmp(s_state, st) != 0;
     strlcpy(s_state, st, sizeof s_state);
+    if (changed) fx_state(st);
     va_list ap; va_start(ap, fmt);
     vsnprintf(s_detail, sizeof s_detail, fmt, ap);
     va_end(ap);

@@ -3,3 +3,4 @@ dependencies:
   espressif/esp-sr: "==2.4.7"          # same pin as xiaozhi-esp32
   espressif/esp_codec_dev: "~1.6.2"
   espressif/mdns: "^1.8.0"
+  espressif/led_strip: "~3.0.1"

@@ -12,6 +12,8 @@
 #include "pick.h"
 #include "store.h"
 #include "update.h"
+#include "audio.h"
+#include "fx.h"
 #include "voice.h"
 #include "web.h"
 
@@ -37,6 +39,9 @@ void app_main(void)
     i2c_master_bus_handle_t bus;
     ESP_ERROR_CHECK(i2c_new_master_bus(&bc, &bus));
 
+    audio_init(bus);       // speaker + mics
+    fx_start();            // LED ring + robot sounds
+    fx_event(FX_BOOT);
     arm_init();
     cam_init(bus);
     pick_init();
