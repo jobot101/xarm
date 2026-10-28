@@ -49,16 +49,19 @@ static bool grip(uint16_t v)
     return wait_ms(g_cfg.grip_ms);
 }
 
+static float s_bw, s_bh;                      // size of the last located blob (px)
+
 bool pick_locate(int slot, float *px, float *py)
 {
-    float sx = 0, sy = 0; int hits = 0;
+    float sx = 0, sy = 0, sw = 0, sh = 0; int hits = 0;
     for (int i = 0; i < 6; i++) {             // 6 samples over ~0.6 s, need 4 hits
         box_t b;
-        if (cam_get(slot, &b)) { sx += b.x; sy += b.y; hits++; }
+        if (cam_get(slot, &b)) { sx += b.x; sy += b.y; sw += b.w; sh += b.h; hits++; }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     if (hits < 4) return false;
     *px = sx / hits; *py = sy / hits;
+    s_bw = sw / hits; s_bh = sh / hits;
     return true;
 }
 
@@ -97,32 +100,56 @@ static bool find(int slot, float *px, float *py, int *base_off)
 
 bool pick_look(void) { return look_at(0); }
 
-// find + grab one object of a color; ends hovering above where it was. false = not found / stopped
+// did the jaws stop on something? reads the real gripper position
+static bool holding_check(void)
+{
+    if (!g_pick2.grab_check) return true;
+    uint16_t now[NSERVO];
+    if (!arm_read(now)) return true;           // can't tell — assume it's fine
+    return !grip_missed(now[0], g_cfg.grip_close, g_cfg.grip_open, g_pick2.grab_margin);
+}
+
+// find + grab one object of a color; ends hovering above where it was. false = not found / missed / stopped
 static bool grab(int slot)
 {
     const char *name = g_cfg.slot_name[slot];
     if (g_cfg.n_calib < 3) { set("need_calib", "teach at least 3 calibration points"); return false; }
+    int tries = g_pick2.grab_check ? (g_pick2.grab_tries ? g_pick2.grab_tries : 1) : 1;
 
-    set("searching", "looking for %s", name);
-    float px, py;
-    int off;
-    if (!find(slot, &px, &py, &off)) { if (!s_abort) set("not_found", "can't see %s", name); return false; }
+    for (int t = 1; t <= tries; t++) {
+        set("searching", t == 1 ? "looking for %s" : "looking for %s again (try %d)", name, t);
+        float px, py;
+        int off;
+        if (!find(slot, &px, &py, &off)) { if (!s_abort) set("not_found", "can't see %s", name); return false; }
 
-    // calibration was taught from the look pose; turning the base just rotates the whole picture
-    uint16_t grasp[NSERVO], hover[NSERVO];
-    interp_pose(g_cfg.calib, g_cfg.n_calib, px, py, grasp);
-    grasp[5] = clamp_pos(grasp[5] + off);
-    for (int i = 0; i < NSERVO; i++) hover[i] = clamp_pos(grasp[i] + g_cfg.lift[i]);
-    grasp[0] = hover[0] = g_cfg.grip_open;
+        // calibration was taught from the look pose; turning the base just rotates the whole picture
+        uint16_t grasp[NSERVO], hover[NSERVO];
+        interp_pose(g_cfg.calib, g_cfg.n_calib, px, py, grasp);
+        grasp[5] = clamp_pos(grasp[5] + off);
+        // long object? turn the wrist so the jaws close across its narrow side
+        int twist = align_twist((int)s_bw, (int)s_bh, g_pick2.align_axis, g_pick2.align_turn);
+        grasp[1] = clamp_pos(grasp[1] + twist);
+        for (int i = 0; i < NSERVO; i++) hover[i] = clamp_pos(grasp[i] + g_cfg.lift[i]);
+        grasp[0] = hover[0] = g_cfg.grip_open;
 
-    set("moving", "%s at (%.0f,%.0f)", name, px, py);
-    if (!go(hover, g_cfg.move_ms)) return false;
-    if (!go(grasp, g_cfg.move_ms / 2)) return false;
-    set("grasping", "%s", name);
-    if (!grip(g_cfg.grip_close)) return false;
-    s_holding = true;
-    hover[0] = g_cfg.grip_close;
-    return go(hover, g_cfg.move_ms / 2);
+        set("moving", "%s at (%.0f,%.0f)%s", name, px, py, twist ? ", wrist turned" : "");
+        if (!go(hover, g_cfg.move_ms)) return false;
+        if (!go(grasp, g_cfg.move_ms / 2)) return false;
+        set("grasping", "%s", name);
+        if (!grip(g_cfg.grip_close)) return false;
+        if (holding_check()) {
+            s_holding = true;
+            hover[0] = g_cfg.grip_close;
+            return go(hover, g_cfg.move_ms / 2);
+        }
+        // missed: open, back off, look again
+        set("grasping", "missed %s — retrying", name);
+        fx_event(FX_ERROR);
+        if (!grip(g_cfg.grip_open)) return false;
+        if (!go(hover, g_cfg.move_ms / 2)) return false;
+    }
+    set("not_found", "couldn't get a grip on %s", name);
+    return false;
 }
 
 // carry to a pose, let go, back off upward
@@ -196,6 +223,33 @@ static void do_sort(void)
     }
     if (!go_home()) return;
     set(done ? "idle" : "not_found", done ? "sorted %d" : "nothing to sort", done);
+}
+
+// pick every visible object (either color, biggest first), small ones to bin 1, big ones to bin 2
+static void do_sort_size(void)
+{
+    if (s_holding) { set("holding", "drop what I'm holding first"); return; }
+    int done = 0;
+    for (int round = 0; round < 12; round++) {
+        int slot = -1;
+        float bestA = 0;
+        for (int k = 0; k < (g_cfg.cam_on_head ? 3 : 1); k++) {
+            if (g_cfg.cam_on_head && (k == 0 || g_cfg.scan[k]) && !look_at(g_cfg.scan[k])) return;
+            for (int s = 0; s < NSLOT; s++) {
+                float x, y;
+                if (pick_locate(s, &x, &y) && s_bw * s_bh > bestA) { bestA = s_bw * s_bh; slot = s; }
+            }
+            if (slot >= 0) break;
+        }
+        if (slot < 0) break;
+        if (!grab(slot)) { if (s_abort) return; break; }
+        int bin = size_bin((int)s_bw, (int)s_bh, g_pick2.size_split);
+        set("sorting", "%s → %s bin (%d done)", g_cfg.slot_name[slot], bin ? "big" : "small", done);
+        if (!release_at(g_cfg.bin[bin])) return;
+        done++;
+    }
+    if (!go_home()) return;
+    set(done ? "idle" : "not_found", done ? "sorted %d by size" : "nothing to sort", done);
 }
 
 // ---- tricks: small, safe moves around Home (base + wrist rotate + gripper, no big gravity loads)
@@ -358,6 +412,7 @@ static void task(void *arg)
         case OP_DROP:  do_drop(); break;
         case OP_GIVE:  do_give(); break;
         case OP_SORT:  do_sort(); break;
+        case OP_SORT_SIZE: do_sort_size(); break;
         case OP_WAVE:  do_wave(); break;
         case OP_BOW:   do_bow(); break;
         case OP_DANCE: do_dance(); break;

@@ -46,6 +46,7 @@ bool router_exec(const char *text, char *msg, size_t n)
         if (k >= 0) { kids_select(k); snprintf(msg, n, "hi %s!", kids_get(k)->name); return pick_run(OP_WAVE, 0, msg, n) || true; }
     }
     if (has(t, "give") || has(t, "hand it"))                        return pick_run(OP_GIVE, 0, msg, n);
+    if (has(t, "sort") && (has(t, "size") || has(t, "big") || has(t, "small"))) return pick_run(OP_SORT_SIZE, 0, msg, n);
     if (has(t, "sort") || has(t, "clean up") || has(t, "tidy"))     return pick_run(OP_SORT, 0, msg, n);
     if (has(t, "wave") || has(t, "hello") || has(t, "say hi"))      return pick_run(OP_WAVE, 0, msg, n);
     if (has(t, "bow"))                                              return pick_run(OP_BOW, 0, msg, n);
@@ -75,6 +76,7 @@ int router_phrases(char out[][48], int max)
     ADD("drop it");
     ADD("give it to me");
     ADD("sort everything");
+    ADD("sort by size");
     ADD("wave hello");
     ADD("take a bow");
     ADD("dance");

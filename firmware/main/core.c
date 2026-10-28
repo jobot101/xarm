@@ -98,3 +98,18 @@ void interp_pose(const calib_pt_t *pts, int n, float px, float py, uint16_t out[
     }
     for (int j = 0; j < NSERVO; j++) out[j] = clamp_pos((int)lroundf(acc[j] / wsum));
 }
+
+int align_twist(int w, int h, int jaws_axis, int turn)
+{
+    bool long_x = w * 10 >= h * 14, long_y = h * 10 >= w * 14;
+    if ((jaws_axis == 1 && long_x) || (jaws_axis == 2 && long_y)) return turn;
+    return 0;
+}
+
+bool grip_missed(int actual, int grip_close, int grip_open, int margin)
+{
+    int dir = grip_close > grip_open ? 1 : -1;          // closing direction in servo counts
+    return (grip_close - actual) * dir < margin;        // stopped short of closed = something's in there
+}
+
+int size_bin(int w, int h, int split) { return w * h >= split; }

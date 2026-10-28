@@ -175,3 +175,6 @@ button.primary { background: var(--brass); }
 .check input { accent-color: var(--brass); }
 .nudge { display: grid; grid-template-columns: repeat(3, 64px); gap: 6px; justify-content: center; margin: 12px 0; }
 .nudge button { font-size: 20px; padding: 12px 0; }
+select { font: inherit; color: inherit; background: #111; border: 1px solid #353535; border-radius: 8px; padding: 9px 8px; width: 100%; }
+.check-field { justify-content: flex-end; }
+.check-field span { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; padding-bottom: 10px; }

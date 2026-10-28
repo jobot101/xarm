@@ -40,6 +40,26 @@ export default function Settings({ run }) {
           ))}
         </div>
       )}
+      <h3>Smarter picking</h3>
+      {c.pick2 && (() => { const p2 = c.pick2, setP = (k, v) => set('pick2', { ...p2, [k]: v }); return (
+        <div className="fields">
+          <label className="field">Wrist auto-align (jaws in the calibrated grasp close…)
+            <select value={p2.align_axis} onChange={e => setP('align_axis', +e.target.value)}>
+              <option value={0}>off</option>
+              <option value={1}>left–right in the camera picture</option>
+              <option value={2}>top–bottom in the camera picture</option>
+            </select>
+          </label>
+          <label className="field">Wrist 90° turn (counts, − to flip)
+            <input type="number" value={p2.align_turn} onChange={e => setP('align_turn', +e.target.value)} /></label>
+          <label className="field check-field"><span><input type="checkbox" checked={!!p2.grab_check} onChange={e => setP('grab_check', e.target.checked)} /> Grab check + retry</span></label>
+          <label className="field">Tries
+            <input type="number" min="1" max="5" value={p2.grab_tries} onChange={e => setP('grab_tries', +e.target.value)} /></label>
+          <label className="field">Miss margin (counts short of closed)
+            <input type="number" value={p2.grab_margin} onChange={e => setP('grab_margin', +e.target.value)} /></label>
+          <label className="field">Size sort: big at area ≥ (px²)
+            <input type="number" value={p2.size_split} onChange={e => setP('size_split', +e.target.value)} /></label>
+        </div>) })()}
       <h3>Reach direction <small>what “Out” adds per step on the drive pad</small></h3>
       <div className="fields six">
         {JOINTS.map((j, i) => (

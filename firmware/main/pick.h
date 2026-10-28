@@ -5,7 +5,7 @@
 
 typedef enum { OP_PICK, OP_HOME, OP_DROP, OP_OPEN, OP_CLOSE,
                OP_GIVE, OP_SORT, OP_WAVE, OP_BOW, OP_DANCE, OP_BELL, OP_PLAY,   // OP_PLAY: slot = move index
-               OP_HELPER, OP_NUDGE, OP_STACK } op_t;                            // OP_NUDGE: slot = nudge_t
+               OP_HELPER, OP_NUDGE, OP_STACK, OP_SORT_SIZE } op_t;                            // OP_NUDGE: slot = nudge_t
 
 typedef enum { NUDGE_LEFT, NUDGE_RIGHT, NUDGE_UP, NUDGE_DOWN, NUDGE_TURN_L, NUDGE_TURN_R,
                NUDGE_TILT_UP, NUDGE_TILT_DOWN } nudge_t;

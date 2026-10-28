@@ -29,7 +29,7 @@ export default function Vision({ s }) {
       <div className="legend">
         {slots.map((b, i) => (
           <span key={i} style={{ color: COLORS[i] }}>
-            ■ {b.name}: {b.seen ? `${b.x}, ${b.y}` : 'not seen'}
+            ■ {b.name}: {b.seen ? `${b.x}, ${b.y} · ${b.w}×${b.h}` : 'not seen'}
           </span>
         ))}
       </div>

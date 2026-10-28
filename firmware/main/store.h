@@ -31,6 +31,18 @@ extern cfg_t g_cfg;
 extern int16_t g_reach[NSERVO];
 void store_reach_save(void);
 
+// smarter picking settings — also outside cfg_t so adding them didn't reset anyone's setup
+typedef struct {
+    uint8_t  align_axis;     // wrist auto-align: 0 off, 1 jaws close across image X, 2 across image Y
+    int16_t  align_turn;     // wrist-rotate counts for a 90° turn (LX servos: ~375)
+    uint8_t  grab_check;     // 1 = verify the grip, retry on a miss
+    int16_t  grab_margin;    // counts short of fully closed that still means "holding something"
+    uint8_t  grab_tries;
+    int16_t  size_split;     // sort by size: blob area px^2 at/above which it's "big"
+} pick2_t;
+extern pick2_t g_pick2;
+void store_pick2_save(void);
+
 void store_load(void);   // loads or fills defaults
 void store_save(void);
 void store_lock(void);

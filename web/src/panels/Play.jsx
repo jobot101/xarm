@@ -37,7 +37,8 @@ export default function Play({ s, online, run }) {
           <button disabled={!online || busy} onClick={() => say(`pick up the ${names[1]}`)}><i className="sw sapphire" />Pick {names[1]}</button>
           <button disabled={!online || busy} className={s?.holding ? 'hl' : ''} onClick={() => say('give it to me')}>Give to me</button>
           <button disabled={!online || busy} className={s?.holding ? 'hl' : ''} onClick={() => say('drop it')}>Drop</button>
-          <button disabled={!online || busy} onClick={() => say('sort everything')}>Sort all</button>
+          <button disabled={!online || busy} onClick={() => say('sort everything')}>Sort by color</button>
+          <button disabled={!online || busy} onClick={() => say('sort by size')}>Sort by size</button>
           <button disabled={!online || busy} onClick={() => say('build a tower')}>Stack</button>
           <button disabled={!online || busy} onClick={() => say('hold this')}>Hold this</button>
           <button disabled={!online || busy} onClick={() => say('go home')}>Home</button>

@@ -8,6 +8,7 @@
 #define MAGIC 0x58415234u     // bump when cfg_t layout changes -> defaults reload
 static const char *TAG = "store";
 cfg_t g_cfg;
+pick2_t g_pick2 = { .align_axis = 1, .align_turn = 375, .grab_check = 1, .grab_margin = 40, .grab_tries = 3, .size_split = 900 };
 int16_t g_reach[NSERVO] = {0, 0, 0, -90, 90, 0};   // elbow out, shoulder forward. flip in Settings if backwards
 static SemaphoreHandle_t s_mx;
 
@@ -48,7 +49,12 @@ void store_load(void)
         esp_err_t e = nvs_get_blob(h, "cfg", &g_cfg, &len);
         nvs_close(h);
         nvs_handle_t r; size_t rl = sizeof g_reach;
-        if (nvs_open("xarm", NVS_READONLY, &r) == ESP_OK) { nvs_get_blob(r, "reach", g_reach, &rl); nvs_close(r); }
+        if (nvs_open("xarm", NVS_READONLY, &r) == ESP_OK) {
+            nvs_get_blob(r, "reach", g_reach, &rl);
+            pick2_t p2; size_t pl = sizeof p2;
+            if (nvs_get_blob(r, "pick2", &p2, &pl) == ESP_OK && pl == sizeof p2) g_pick2 = p2;
+            nvs_close(r);
+        }
         if (e == ESP_OK && len == sizeof g_cfg && g_cfg.magic == MAGIC) {
             ESP_LOGI(TAG, "loaded, %d calib pts", g_cfg.n_calib);
             return;
@@ -75,6 +81,16 @@ void store_reach_save(void)
     nvs_handle_t h;
     if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) {
         nvs_set_blob(h, "reach", g_reach, sizeof g_reach);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
+void store_pick2_save(void)
+{
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_blob(h, "pick2", &g_pick2, sizeof g_pick2);
         nvs_commit(h);
         nvs_close(h);
     }

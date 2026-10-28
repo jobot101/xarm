@@ -68,6 +68,17 @@ int main(void)
     interp_pose(c, 2, 25, 0, out);  assert(out[5] == 120);   // w 1/625 vs 1/5625 -> 0.9*100+0.1*300
     printf("ok   interp\n");
 
+    // wrist align: jaws close across X, object 40x10 (long in X) -> turn; 10x40 -> no turn; square -> no turn
+    assert(align_twist(40, 10, 1, 375) == 375 && align_twist(10, 40, 1, 375) == 0 && align_twist(20, 20, 1, 375) == 0);
+    assert(align_twist(10, 40, 2, -375) == -375 && align_twist(40, 10, 0, 375) == 0);
+    printf("ok   align\n");
+    // grab check: open 200, close 650. empty hand reaches ~640 -> missed; block stops it at 520 -> held
+    assert(grip_missed(640, 650, 200, 40) && !grip_missed(520, 650, 200, 40));
+    assert(grip_missed(205, 200, 650, 40) && !grip_missed(330, 200, 650, 40));   // reversed gripper direction
+    printf("ok   grab check\n");
+    assert(size_bin(20, 20, 900) == 0 && size_bin(40, 30, 900) == 1);
+    printf("ok   size bin\n");
+
     puts("all passed");
     return 0;
 }

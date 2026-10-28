@@ -50,3 +50,13 @@ typedef struct { int16_t px, py; uint16_t pos[NSERVO]; } calib_pt_t;
 void interp_pose(const calib_pt_t *pts, int n, float px, float py, uint16_t out[NSERVO]);
 
 uint16_t clamp_pos(int v);
+
+// ---- smarter picking ----
+// wrist auto-align: jaws_axis = how the jaws close in the calibrated grasp, as seen by the camera
+// (0 off, 1 across image X, 2 across image Y). Returns the wrist-rotate delta: `turn` when the object is
+// long (>= 1.4x) along the axis the jaws would squeeze, else 0.
+int  align_twist(int w, int h, int jaws_axis, int turn);
+// grab check: true if the gripper closed to within `margin` of fully closed — nothing in the hand
+bool grip_missed(int actual, int grip_close, int grip_open, int margin);
+// size sort: 0 = small, 1 = big (blob box area vs split, px^2)
+int  size_bin(int w, int h, int split);

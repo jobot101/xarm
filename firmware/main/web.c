@@ -410,6 +410,13 @@ static esp_err_t h_cfg_get(httpd_req_t *r)
     cJSON *j = cJSON_CreateObject();
     cJSON_AddItemToObject(j, "home", u16arr(g_cfg.home, NSERVO));
     cJSON_AddItemToObject(j, "drop", u16arr(g_cfg.drop, NSERVO));
+    cJSON *p2 = cJSON_AddObjectToObject(j, "pick2");
+    cJSON_AddNumberToObject(p2, "align_axis", g_pick2.align_axis);
+    cJSON_AddNumberToObject(p2, "align_turn", g_pick2.align_turn);
+    cJSON_AddBoolToObject(p2, "grab_check", g_pick2.grab_check);
+    cJSON_AddNumberToObject(p2, "grab_margin", g_pick2.grab_margin);
+    cJSON_AddNumberToObject(p2, "grab_tries", g_pick2.grab_tries);
+    cJSON_AddNumberToObject(p2, "size_split", g_pick2.size_split);
     cJSON *rc = cJSON_AddArrayToObject(j, "reach");
     for (int i = 0; i < NSERVO; i++) cJSON_AddItemToArray(rc, cJSON_CreateNumber(g_reach[i]));
     cJSON *l = cJSON_AddArrayToObject(j, "lift");
@@ -436,6 +443,17 @@ static esp_err_t h_cfg_post(httpd_req_t *r)
     read_arr(b, "drop", g_cfg.drop, false);
     read_arr(b, "lift", g_cfg.lift, true);
     if (cJSON_IsArray(cJSON_GetObjectItem(b, "reach"))) { read_arr(b, "reach", g_reach, true); store_reach_save(); }
+    cJSON *q = cJSON_GetObjectItem(b, "pick2");
+    if (cJSON_IsObject(q)) {
+        g_pick2.align_axis  = (uint8_t)num(q, "align_axis", g_pick2.align_axis);
+        g_pick2.align_turn  = (int16_t)num(q, "align_turn", g_pick2.align_turn);
+        cJSON *gc = cJSON_GetObjectItem(q, "grab_check");
+        if (cJSON_IsBool(gc)) g_pick2.grab_check = cJSON_IsTrue(gc);
+        g_pick2.grab_margin = (int16_t)num(q, "grab_margin", g_pick2.grab_margin);
+        g_pick2.grab_tries  = (uint8_t)num(q, "grab_tries", g_pick2.grab_tries);
+        g_pick2.size_split  = (int16_t)num(q, "size_split", g_pick2.size_split);
+        store_pick2_save();
+    }
     g_cfg.grip_open  = clamp_pos(num(b, "grip_open", g_cfg.grip_open));
     g_cfg.grip_close = clamp_pos(num(b, "grip_close", g_cfg.grip_close));
     g_cfg.move_ms    = (uint16_t)num(b, "move_ms", g_cfg.move_ms);
