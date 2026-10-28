@@ -9,6 +9,7 @@
 #include "fx.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "esp_codec_dev.h"
 #include "esp_mn_iface.h"
 #include "esp_mn_models.h"
@@ -98,7 +99,12 @@ static void task(void *arg)
         s_level = peak < 0 ? 0 : peak > 100 ? 100 : (int)peak;
 
         esp_mn_state_t st = s_mn->detect(s_mnd, buf);
-        if (st == ESP_MN_STATE_DETECTED) {
+        // the board's own bells/organ/voice come back through the mic and fake commands (often "stop",
+        // which kills whatever trick is running) — ignore anything heard while the speaker plays + 400 ms
+        bool self = esp_timer_get_time() < audio_play_end_us() + 400000;
+        if (st == ESP_MN_STATE_DETECTED && self) {
+            s_mn->clean(s_mnd);
+        } else if (st == ESP_MN_STATE_DETECTED) {
             esp_mn_results_t *r = s_mn->get_results(s_mnd);
             int id = r->command_id[0];
             if (id >= 1 && id <= MAX_PHRASES) {

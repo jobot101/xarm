@@ -22,16 +22,16 @@ export default function Voice({ s, run }) {
       <p className="hint">Mic level {lv}. Quiet room ≈ 10–30, talking at arm's length should jump past 40.</p>
       <p>Last heard: <b>{v.last || '—'}</b>{v.prob ? ` (${v.prob}%)` : ''}</p>
       {gain !== null && <>
-        <label>Mic gain {gain} dB
+        <label className="vslide">Mic gain <b>{gain} dB</b>
           <input type="range" min="0" max="42" step="3" value={gain}
             onChange={e => setGain(+e.target.value)} onPointerUp={() => save(gain, thresh)} onKeyUp={() => save(gain, thresh)} />
         </label>
-        <label>Sensitivity — threshold {thresh}% (lower hears more, but more false triggers)
+        <label className="vslide">Threshold <b>{thresh}%</b> <small>lower = hears more, more false triggers</small>
           <input type="range" min="5" max="60" step="1" value={thresh}
             onChange={e => setThresh(+e.target.value)} onPointerUp={() => save(gain, thresh)} onKeyUp={() => save(gain, thresh)} />
         </label>
       </>}
-      <p className="hint">Try: “stop”, “go home”, “wave hello”, “pick up the red”. Speak plainly, about 1 m away.</p>
+      <p className="hint">Good start: gain 30–33 dB, threshold 15–20%. Try “dance robot”, “wave hello”, “go home”, “stop”. Speak plainly, about 1 m away.</p>
     </section>
   )
 }

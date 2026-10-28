@@ -1,6 +1,7 @@
 // Ported from xiaozhi-esp32 codecs/box_audio_codec.cc + boards/waveshare/esp32-s3-audio-board.
 #include "audio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "driver/i2s_std.h"
 #include "driver/i2s_tdm.h"
 #include "esp_codec_dev_defaults.h"
@@ -92,8 +93,12 @@ bool audio_init(i2c_master_bus_handle_t bus)
 
 esp_codec_dev_handle_t audio_in(void) { return s_in; }
 
+static volatile int64_t s_play_end_us;
+int64_t audio_play_end_us(void) { return s_play_end_us; }
+
 bool audio_play(const int16_t *pcm, size_t samples)
 {
+    s_play_end_us = esp_timer_get_time() + (int64_t)samples * 1000000 / AUDIO_RATE;
     return s_out && esp_codec_dev_write(s_out, (void *)pcm, samples * sizeof(int16_t)) == ESP_CODEC_DEV_OK;
 }
 

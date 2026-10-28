@@ -210,3 +210,7 @@ input, select, textarea { font-size: 16px; }                                    
 .hall { padding-top: env(safe-area-inset-top); }
 .toast { bottom: calc(88px + env(safe-area-inset-bottom)); }
 .rose-btn, .bigslider, .pad-btn { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+.vslide { display: block; margin: 14px 0; }
+.vslide small { display: block; color: var(--dim); font-size: 13px; }
+.vslide input[type=range] { display: block; width: 100%; height: 36px; margin-top: 6px; accent-color: var(--brass); }

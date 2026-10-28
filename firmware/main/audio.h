@@ -13,3 +13,4 @@ bool audio_init(i2c_master_bus_handle_t bus);   // codecs + speaker amp
 esp_codec_dev_handle_t audio_in(void);           // mic device (NULL if init failed)
 bool audio_play(const int16_t *pcm, size_t samples);   // mono 16 kHz, blocking
 void audio_volume(int pct);
+int64_t audio_play_end_us(void);                  // esp_timer time the speaker goes quiet (voice ignores itself until then)
