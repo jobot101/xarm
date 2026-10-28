@@ -1,0 +1,92 @@
+# Builds the firmware in the cloud on every push to main and publishes the flash files
+# as the "latest" release, so a phone only ever downloads .bin files — it never compiles.
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: build web app (embedded into firmware)
+        working-directory: web
+        run: npm ci && npm run build
+
+      - name: host tests
+        working-directory: firmware/test
+        run: cc -I../main test_core.c ../main/core.c -lm -o t && ./t
+
+      - name: build firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1
+          target: esp32s3
+          path: firmware
+
+      - name: collect flash files
+        run: |
+          sudo chown -R "$USER" firmware/build
+          B=firmware/build
+          mkdir -p release
+          cp $B/bootloader/bootloader.bin release/
+          cp $B/partition_table/partition-table.bin release/
+          cp $B/ota_data_initial.bin release/
+          cp $B/xarm-voice.bin release/
+          cp $B/srmodels/srmodels.bin release/
+          # offsets straight from the build, so they can't drift
+          python3 - <<'EOF'
+          import json, os
+          B = "firmware/build"
+          fa = json.load(open(f"{B}/flasher_args.json"))
+          rows = sorted((int(off, 16), os.path.basename(p)) for off, p in fa["flash_files"].items())
+          if not any(n == "srmodels.bin" for _, n in rows):       # esp-sr may flash it via its own target
+              rows.append((0x810000, "srmodels.bin"))            # = "model" offset in partitions.csv
+              rows.sort()
+          with open("release/OFFSETS.txt", "w") as f:
+              f.write("Flash with https://espressif.github.io/esptool-js/  (add each file at its offset)\n\n")
+              for off, name in rows:
+                  f.write(f"0x{off:06x}  {name}\n")
+          json.dump({
+              "name": "xarm-voice", "version": os.environ.get("GITHUB_SHA", "dev")[:7],
+              "new_install_prompt_erase": True,
+              "builds": [{"chipFamily": "ESP32-S3",
+                          "parts": [{"path": n, "offset": o} for o, n in rows]}],
+          }, open("release/manifest.json", "w"), indent=2)
+          print(open("release/OFFSETS.txt").read())
+          EOF
+          ls -la release
+
+      - name: replace previous "latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete latest --cleanup-tag -y || true
+
+      - name: publish "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest build
+          prerelease: true
+          make_latest: true
+          files: release/*
+          body: |
+            Built from ${{ github.sha }}.
+            First flash (USB-C): add files at the offsets in OFFSETS.txt on https://espressif.github.io/esptool-js/
+            Updates (WiFi): http://xarm.local → Firmware → upload xarm-voice.bin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release/

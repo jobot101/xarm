@@ -1,0 +1,103 @@
+#include "core.h"
+#include <math.h>
+
+#define LO(v) ((uint8_t)((v) & 0xFF))
+#define HI(v) ((uint8_t)(((v) >> 8) & 0xFF))
+
+uint16_t clamp_pos(int v) { return v < POS_MIN ? POS_MIN : v > POS_MAX ? POS_MAX : (uint16_t)v; }
+
+size_t xf_move(uint8_t *o, const uint8_t *ids, const uint16_t *pos, int n, uint16_t ms)
+{
+    size_t i = 0;
+    o[i++] = 0x55; o[i++] = 0x55;
+    o[i++] = (uint8_t)(n * 3 + 5);
+    o[i++] = XCMD_SERVO_MOVE;
+    o[i++] = (uint8_t)n;
+    o[i++] = LO(ms); o[i++] = HI(ms);
+    for (int k = 0; k < n; k++) {
+        uint16_t p = clamp_pos(pos[k]);
+        o[i++] = ids[k]; o[i++] = LO(p); o[i++] = HI(p);
+    }
+    return i;
+}
+
+size_t xf_ids(uint8_t *o, uint8_t cmd, const uint8_t *ids, int n)
+{
+    size_t i = 0;
+    o[i++] = 0x55; o[i++] = 0x55;
+    o[i++] = (uint8_t)(n + 3);
+    o[i++] = cmd;
+    o[i++] = (uint8_t)n;
+    for (int k = 0; k < n; k++) o[i++] = ids[k];
+    return i;
+}
+
+size_t xf_simple(uint8_t *o, uint8_t cmd)
+{
+    o[0] = 0x55; o[1] = 0x55; o[2] = 2; o[3] = cmd;
+    return 4;
+}
+
+size_t xf_action(uint8_t *o, uint8_t group, uint16_t times)
+{
+    o[0] = 0x55; o[1] = 0x55; o[2] = 5; o[3] = XCMD_ACTION_RUN;
+    o[4] = group; o[5] = LO(times); o[6] = HI(times);
+    return 7;
+}
+
+bool xp_feed(xparser_t *p, uint8_t b)
+{
+    switch (p->st) {
+    case 0: if (b == 0x55) p->st = 1; break;
+    case 1: p->st = (b == 0x55) ? 2 : 0; break;
+    case 2:                                   // LEN
+        if (b < 2 || b - 2 > (int)sizeof p->p) { p->st = (b == 0x55) ? 1 : 0; break; }
+        p->need = b - 2; p->got = 0; p->st = 3; break;
+    case 3:                                   // CMD
+        p->cmd = b;
+        if (p->need == 0) { p->np = 0; p->st = 0; return true; }
+        p->st = 4; break;
+    case 4:
+        p->p[p->got++] = b;
+        if (p->got >= p->need) { p->np = p->got; p->st = 0; return true; }
+        break;
+    }
+    return false;
+}
+
+int xp_positions(const xparser_t *p, uint16_t pos[NSERVO])
+{
+    if (p->cmd != XCMD_POS_READ || p->np < 1) return 0;
+    int n = p->p[0], got = 0;
+    for (int k = 0; k < n && 1 + k * 3 + 2 < p->np; k++) {
+        uint8_t id = p->p[1 + k * 3];
+        int v = p->p[2 + k * 3] | (p->p[3 + k * 3] << 8);
+        if (id >= 1 && id <= NSERVO) { pos[id - 1] = clamp_pos(v); got++; }
+    }
+    return got;
+}
+
+bool cam_decode(const uint8_t r[8], box_t *b)
+{
+    b->x = (int16_t)(r[0] | (r[1] << 8));
+    b->y = (int16_t)(r[2] | (r[3] << 8));
+    b->w = (int16_t)(r[4] | (r[5] << 8));
+    b->h = (int16_t)(r[6] | (r[7] << 8));
+    return b->w > 0 && b->h > 0;
+}
+
+void interp_pose(const calib_pt_t *pts, int n, float px, float py, uint16_t out[NSERVO])
+{
+    float acc[NSERVO] = {0}, wsum = 0;
+    for (int i = 0; i < n; i++) {
+        float dx = px - pts[i].px, dy = py - pts[i].py, d2 = dx * dx + dy * dy;
+        if (d2 < 1.0f) {                              // on a taught point: use it exactly
+            for (int j = 0; j < NSERVO; j++) out[j] = pts[i].pos[j];
+            return;
+        }
+        float w = 1.0f / d2;                          // IDW, power 2
+        wsum += w;
+        for (int j = 0; j < NSERVO; j++) acc[j] += w * pts[i].pos[j];
+    }
+    for (int j = 0; j < NSERVO; j++) out[j] = clamp_pos((int)lroundf(acc[j] / wsum));
+}

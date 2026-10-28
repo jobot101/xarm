@@ -1,0 +1,39 @@
+menu "xArm Voice"
+
+    config XARM_WIFI_SSID
+        string "WiFi SSID (blank = AP mode only)"
+        default ""
+
+    config XARM_WIFI_PASS
+        string "WiFi password"
+        default ""
+
+    config XARM_AP_PASS
+        string "Fallback AP password (8+ chars, blank = open)"
+        default "ragamuffin"
+
+    config XARM_UART_TX
+        int "UART TX -> xArm controller RX"
+        default 5
+
+    config XARM_UART_RX
+        int "UART RX <- xArm controller TX"
+        default 6
+
+    config XARM_I2C_SDA
+        int "I2C SDA (onboard bus, shared with codecs + header)"
+        default 11
+
+    config XARM_I2C_SCL
+        int "I2C SCL"
+        default 10
+
+    config XARM_MIC_GAIN_DB
+        int "Mic gain dB"
+        default 30
+
+    config XARM_VOICE_THRESHOLD
+        int "MultiNet detect threshold (percent, lower = more sensitive)"
+        default 20
+
+endmenu

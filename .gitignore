@@ -1,0 +1,9 @@
+web/node_modules/
+web/dist/
+firmware/build/
+firmware/managed_components/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/dependencies.lock
+firmware/test/t
+release/

@@ -1,0 +1,8 @@
+# 16 MB flash. Two app slots for OTA from the phone. "model" holds ESP-SR speech models.
+# name,   type, subtype, offset,   size
+nvs,      data, nvs,     0x9000,   0x4000,
+otadata,  data, ota,     0xd000,   0x2000,
+phy_init, data, phy,     0xf000,   0x1000,
+ota_0,    app,  ota_0,   0x10000,  4M,
+ota_1,    app,  ota_1,   0x410000, 4M,
+model,    data, spiffs,  0x810000, 6M,
