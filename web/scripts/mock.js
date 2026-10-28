@@ -5,10 +5,10 @@ import { createServer } from 'node:http'
 const st = {
   state: 'idle', detail: '', busy: false, holding: false, marked: false,
   arm: { pos: [500, 500, 500, 500, 500, 500], torque: true, link: true, battery_mv: 7480 },
-  cam: { ok: true, raw: '50 00 3C 00 14 00 12 00 | 00 00 00 00 00 00 00 00', slots: [
+  cam: { ok: true, raw: '50 3C 14 12 | 00 00 00 00', slots: [
     { name: 'red', seen: true, x: 80, y: 60, w: 20, h: 18 },
     { name: 'blue', seen: false, x: 0, y: 0, w: 0, h: 0 } ] },
-  calib: [{ px: 20, py: 20 }, { px: 140, py: 20 }, { px: 80, py: 100 }],
+  calib: [{ px: 30, py: 30 }, { px: 210, py: 30 }, { px: 120, py: 200 }],
   voice: { ok: true, last: 'pick up the red' },
   moves: { recording: false, frames: 0, list: [{ i: 0, name: 'robot' }] },
   kids: { cur: -1, list: [{ i: 0, name: 'sam', emoji: '🦖', jewel: 1, visits: 3, best_bells: 5, best_tower: 4 }] },

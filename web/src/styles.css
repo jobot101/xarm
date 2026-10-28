@@ -58,7 +58,7 @@ progress { display: block; width: 100%; margin-top: 10px; accent-color: var(--br
   background: #2a2a2a; border: 1px solid var(--brass); padding: 10px 14px; border-radius: 10px; font-size: 14px; }
 
 /* camera */
-.cam { width: 100%; aspect-ratio: 4 / 3; display: block; border-radius: 8px; }
+.cam { width: 100%; aspect-ratio: 1; display: block; border-radius: 8px; }
 .cam-bg { fill: #0b0b0b; }
 .cam text { font-size: 7px; }
 .calpt circle { fill: var(--brass); }

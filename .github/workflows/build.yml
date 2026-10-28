@@ -5,6 +5,7 @@ name: build
 on:
   push:
     branches: [main]
+    paths-ignore: [cam/hiwonder/**, .github/workflows/fetch-cam.yml]
   workflow_dispatch:
 
 permissions:
@@ -105,14 +106,69 @@ jobs:
           name: release
           path: release/
 
-      # phone flasher page with this build's files baked in -> https://jobot101.github.io/xarm/
+  # vision module (Hiwonder ESP32-S3 cam): their color sketch, patched (cam/xarm_color), built for both
+  # PSRAM types — the phone flasher reads the chip and picks the matching one
+  camera:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: install esp32 core 2.0.17 (bundles esp-dl's color detector)
+        run: |
+          URL=https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core update-index --additional-urls $URL
+          arduino-cli core install esp32:esp32@2.0.17 --additional-urls $URL
+      - name: compile
+        run: |
+          set -o pipefail
+          for v in qspi:enabled opi:opi; do
+            name=${v%%:*}; ps=${v#*:}
+            arduino-cli compile --fqbn "esp32:esp32:esp32s3:PSRAM=$ps,FlashSize=4M,PartitionScheme=huge_app,FlashMode=qio" \
+              --export-binaries --output-dir out/$name cam/xarm_color 2>&1 | tee -a cam.log
+          done
+      - name: report compile errors
+        if: failure()
+        run: grep -E "error:|Error" cam.log | head -30 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done
+      - name: package
+        run: |
+          B0=$(find ~/.arduino15 -name boot_app0.bin | head -1)
+          for name in qspi opi; do
+            d=camera/$name; mkdir -p $d
+            cp out/$name/xarm_color.ino.bootloader.bin $d/bootloader.bin
+            cp out/$name/xarm_color.ino.partitions.bin $d/partitions.bin
+            cp "$B0" $d/boot_app0.bin
+            cp out/$name/xarm_color.ino.bin $d/camera.bin
+            cat > $d/manifest.json <<JSON
+          {"name":"xarm camera ($name PSRAM)","version":"${GITHUB_SHA::7}","builds":[{"chipFamily":"ESP32-S3","parts":[
+            {"path":"bootloader.bin","offset":0},{"path":"partitions.bin","offset":32768},
+            {"path":"boot_app0.bin","offset":57344},{"path":"camera.bin","offset":65536}]}]}
+          JSON
+          done
+          ls -la camera/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: camera
+          path: camera/
+
+  # phone flasher page with both boards' files baked in -> https://jobot101.github.io/xarm/
+  pages:
+    needs: [firmware, camera]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with: { name: release, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: camera, path: camera }
       - name: build flasher page
         working-directory: flasher
         run: |
           npm ci && npm run build
-          mkdir -p dist/fw && cp ../release/* dist/fw/
-
-      - name: publish flasher to gh-pages
+          mkdir -p dist/fw dist/cam && cp ../release/* dist/fw/ && cp -r ../camera/* dist/cam/
+      - name: publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

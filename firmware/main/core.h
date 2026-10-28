@@ -37,9 +37,12 @@ bool xp_feed(xparser_t *p, uint8_t b);
 int xp_positions(const xparser_t *p, uint16_t pos[NSERVO]);
 
 // ---- Hiwonder ESP32-S3 vision module, color mode ----
-// I2C 0x52, reg 0x00 = color slot 0, reg 0x01 = slot 1. 8 bytes: int16 LE x,y,w,h (center + size, px)
+// I2C 0x52, reg 0x00 = color slot 0, reg 0x01 = slot 1. 4 bytes: uint8 x,y,w,h (center + size, px,
+// 240x240 frame) — per Hiwonder's sketch source (cam/hiwonder), which settles the docs' 4-vs-8-byte conflict
 typedef struct { int16_t x, y, w, h; } box_t;
-bool cam_decode(const uint8_t raw[8], box_t *b);   // true if a blob is present
+#define CAM_BYTES 4
+#define CAM_FRAME 240
+bool cam_decode(const uint8_t raw[CAM_BYTES], box_t *b);   // true if a blob is present
 
 // ---- pixel -> joint pose interpolation ----
 typedef struct { int16_t px, py; uint16_t pos[NSERVO]; } calib_pt_t;

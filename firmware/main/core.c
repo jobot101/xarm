@@ -77,12 +77,9 @@ int xp_positions(const xparser_t *p, uint16_t pos[NSERVO])
     return got;
 }
 
-bool cam_decode(const uint8_t r[8], box_t *b)
+bool cam_decode(const uint8_t r[CAM_BYTES], box_t *b)
 {
-    b->x = (int16_t)(r[0] | (r[1] << 8));
-    b->y = (int16_t)(r[2] | (r[3] << 8));
-    b->w = (int16_t)(r[4] | (r[5] << 8));
-    b->h = (int16_t)(r[6] | (r[7] << 8));
+    b->x = r[0]; b->y = r[1]; b->w = r[2]; b->h = r[3];
     return b->w > 0 && b->h > 0;
 }
 

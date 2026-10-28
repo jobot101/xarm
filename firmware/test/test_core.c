@@ -56,9 +56,9 @@ int main(void)
     assert(frames == 2);
     printf("ok   parse battery + action stop\n");
 
-    box_t b; uint8_t raw[8] = {80,0, 60,0, 20,0, 18,0};
-    assert(cam_decode(raw, &b) && b.x == 80 && b.y == 60 && b.w == 20);
-    memset(raw, 0, 8); assert(!cam_decode(raw, &b));
+    box_t b; uint8_t raw[CAM_BYTES] = {200, 60, 20, 18};      // uint8 x,y,w,h on a 240x240 frame
+    assert(cam_decode(raw, &b) && b.x == 200 && b.y == 60 && b.w == 20 && b.h == 18);
+    memset(raw, 0, CAM_BYTES); assert(!cam_decode(raw, &b));
     printf("ok   cam decode\n");
 
     calib_pt_t c[2] = {{0, 0, {100,100,100,100,100,100}}, {100, 0, {300,300,300,300,300,300}}};

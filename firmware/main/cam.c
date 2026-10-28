@@ -10,7 +10,7 @@ static const char *TAG = "cam";
 static i2c_master_dev_handle_t s_dev;
 static box_t s_box[2];
 static bool s_seen[2];
-static uint8_t s_raw[2][8];
+static uint8_t s_raw[2][CAM_BYTES];
 static volatile bool s_ok;
 
 static void task(void *arg)
@@ -18,9 +18,9 @@ static void task(void *arg)
     for (;;) {
         bool ok = true;
         for (int slot = 0; slot < 2; slot++) {
-            uint8_t reg = (uint8_t)slot, raw[8];
-            if (i2c_master_transmit_receive(s_dev, &reg, 1, raw, 8, 50) != ESP_OK) { ok = false; continue; }
-            memcpy(s_raw[slot], raw, 8);
+            uint8_t reg = (uint8_t)slot, raw[CAM_BYTES];
+            if (i2c_master_transmit_receive(s_dev, &reg, 1, raw, CAM_BYTES, 50) != ESP_OK) { ok = false; continue; }
+            memcpy(s_raw[slot], raw, CAM_BYTES);
             box_t b;
             s_seen[slot] = cam_decode(raw, &b);
             s_box[slot] = b;
@@ -57,7 +57,7 @@ void cam_raw_hex(char *out, size_t n)
 {
     size_t k = 0;
     for (int s = 0; s < 2; s++)
-        for (int i = 0; i < 8 && k + 4 < n; i++)
-            k += snprintf(out + k, n - k, "%02X%s", s_raw[s][i], i == 7 && s == 0 ? " | " : " ");
+        for (int i = 0; i < CAM_BYTES && k + 4 < n; i++)
+            k += snprintf(out + k, n - k, "%02X%s", s_raw[s][i], i == CAM_BYTES - 1 && s == 0 ? " | " : " ");
     if (k) out[k - 1] = 0;
 }

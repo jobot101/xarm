@@ -4,9 +4,9 @@ const COLORS = ['#ff5a4e', '#4ea4ff']
 export default function Vision({ s }) {
   const slots = s?.cam?.slots || []
   const calib = s?.calib || []
-  // module color mode is ~160x120; grow the frame if it reports bigger coords
-  const W = Math.max(160, ...slots.map(b => b.x + b.w / 2), ...calib.map(c => c.px))
-  const H = Math.max(120, ...slots.map(b => b.y + b.h / 2), ...calib.map(c => c.py))
+  // Hiwonder color sketch runs a 240x240 frame (uint8 coords)
+  const W = Math.max(240, ...slots.map(b => b.x + b.w / 2), ...calib.map(c => c.px))
+  const H = Math.max(240, ...slots.map(b => b.y + b.h / 2), ...calib.map(c => c.py))
 
   return (
     <section className="card">
