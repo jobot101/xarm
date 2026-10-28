@@ -11,6 +11,7 @@ import Settings from './panels/Settings.jsx'
 import Firmware from './panels/Firmware.jsx'
 import Network from './panels/Network.jsx'
 import Helper from './panels/Helper.jsx'
+import Voice from './panels/Voice.jsx'
 
 const POLL_MS = 250
 const HOLD_MS = 3000          // hold the rose window this long to open the Workshop (keeps little hands in Play)
@@ -77,6 +78,7 @@ export default function App() {
           <Status s={s} online={online} />
           <main className="grid">
             <Commands s={s} run={run} />
+            <Voice s={s} run={run} />
             <Vision s={s} />
             <Jog s={s} run={run} />
             <Helper s={s} run={run} />

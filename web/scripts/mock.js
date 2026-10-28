@@ -9,7 +9,7 @@ const st = {
     { name: 'red', seen: true, x: 80, y: 60, w: 20, h: 18 },
     { name: 'blue', seen: false, x: 0, y: 0, w: 0, h: 0 } ] },
   calib: [{ px: 30, py: 30 }, { px: 210, py: 30 }, { px: 120, py: 200 }],
-  voice: { ok: true, last: 'pick up the red' },
+  voice: { ok: true, last: 'pick up the red', status: 'listening — 24 phrases', level: 12, prob: 0, gain: 30, thresh: 20 },
   moves: { recording: false, frames: 0, list: [{ i: 0, name: 'robot' }] },
   kids: { cur: -1, list: [{ i: 0, name: 'sam', emoji: '🦖', jewel: 1, visits: 3, best_bells: 5, best_tower: 4 }] },
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
@@ -56,6 +56,7 @@ createServer((req, res) => {
         return send({ ok: true, msg: body.action === 'save' ? `saved "${body.name}"` : 'ok' })
       }
       case 'POST /api/drive': if (body.base) st.arm.pos[5] = Math.max(0, Math.min(1000, st.arm.pos[5] + body.base * body.step)); return send({ ok: true, msg: 'ok' })
+      case 'POST /api/voice': if (body.gain >= 0) st.voice.gain = body.gain; if (body.thresh >= 5) st.voice.thresh = body.thresh; return send({ ok: true, msg: 'voice tuned' })
       case 'POST /api/fx': return send({ ok: true, msg: 'ok' })
       case 'POST /api/kids': {
         const k = st.kids

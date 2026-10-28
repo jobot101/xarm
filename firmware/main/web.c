@@ -158,6 +158,15 @@ static esp_err_t h_state(httpd_req_t *r)
     cJSON_AddBoolToObject(v, "ok", voice_ok());
     voice_last(buf, sizeof buf);
     cJSON_AddStringToObject(v, "last", buf);
+    {
+        char vs[64]; int lv, g, th; float pr;
+        voice_diag(vs, sizeof vs, &lv, &pr, &g, &th);
+        cJSON_AddStringToObject(v, "status", vs);
+        cJSON_AddNumberToObject(v, "level", lv);
+        cJSON_AddNumberToObject(v, "prob", (int)(pr * 100));
+        cJSON_AddNumberToObject(v, "gain", g);
+        cJSON_AddNumberToObject(v, "thresh", th);
+    }
 
     net_info(ip, sizeof ip, &mode);
     cJSON *n = cJSON_AddObjectToObject(j, "net");
@@ -275,6 +284,15 @@ static esp_err_t h_fx(httpd_req_t *r)
     else if (cJSON_IsString(e)) fx_event(!strcmp(e->valuestring, "sad") ? FX_ERROR : FX_CHEER);
     cJSON_Delete(b);
     return reply(r, true, "ok");
+}
+
+// ---------- POST /api/voice {"gain":0..42,"thresh":5..90} ----------
+static esp_err_t h_voice(httpd_req_t *r)
+{
+    cJSON *b = body(r);
+    voice_tune(num(b, "gain", -1), num(b, "thresh", -1));
+    cJSON_Delete(b);
+    return reply(r, true, "voice tuned");
 }
 
 // ---------- POST /api/cmd {"text":"pick up the red"} ----------
@@ -509,6 +527,7 @@ bool web_start(void)
         {"/api/moves",  HTTP_POST, h_moves},
         {"/api/fx",     HTTP_POST, h_fx},
         {"/api/kids",   HTTP_POST, h_kids},
+        {"/api/voice",  HTTP_POST, h_voice},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);
