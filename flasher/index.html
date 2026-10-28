@@ -4,20 +4,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121212" />
-  <title>xArm Flasher</title>
+  <title>Ragamuffin Flasher</title>
 </head>
 <body>
   <main class="app">
     <header>
-      <div class="brand">xArm<span>flasher</span></div>
+      <div class="brand">Ragamuffin<span>flasher</span></div>
       <div id="fw" class="fw">loading firmware…</div>
     </header>
 
+    <div class="boards">
+      <button class="board on" data-board="arm"><span>🦾</span>Arm brain<small>Waveshare, round</small></button>
+      <button class="board" data-board="cam"><span>👁️</span>Camera<small>Hiwonder module</small></button>
+    </div>
+
     <section class="card">
+      <div id="modes">
       <label class="mode"><input type="radio" name="mode" value="full" checked />
         <span><b>Full install</b><small>first time, or after changing partitions. Erases the board.</small></span></label>
       <label class="mode"><input type="radio" name="mode" value="app" />
         <span><b>App only</b><small>xarm-voice.bin at 0x10000. Keeps settings + calibration.</small></span></label>
+      </div>
       <button id="flash" class="big" disabled>Flash</button>
       <div class="bar"><div id="bar"></div></div>
       <div id="status" class="status">Plug the board into this phone with a USB-C data cable.</div>
