@@ -80,6 +80,8 @@ int router_phrases(char out[][48], int max)
     ADD("wave hello");
     ADD("take a bow");
     ADD("dance");
+    ADD("dance robot");
+    ADD("robot dance");
     ADD("ring the bell");
     ADD("open hand");
     ADD("close hand");
