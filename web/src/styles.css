@@ -180,3 +180,15 @@ select { font: inherit; color: inherit; background: #111; border: 1px solid #353
 .check-field span { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; padding-bottom: 10px; }
 
 .meter { background: rgba(0,0,0,.25); border-radius: 7px; margin: 6px 0; }
+
+/* massive low-sensitivity sliders */
+.bigslider { position: relative; height: 76px; margin: 10px 0; border-radius: 18px; overflow: hidden;
+  background: rgba(0,0,0,.35); border: 2px solid var(--brass); touch-action: none; user-select: none; cursor: ew-resize; }
+.bigslider.dis { opacity: .4; cursor: default; }
+.bigslider.on { box-shadow: 0 0 0 3px var(--brass); }
+.bs-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, rgba(184,134,11,.35), rgba(184,134,11,.75)); transition: width 80ms; }
+.bigslider.on .bs-fill { transition: none; }
+.bs-label, .bs-val { position: absolute; top: 50%; transform: translateY(-50%); font-size: 1.35rem; font-weight: 700; pointer-events: none; }
+.bs-label { left: 18px; } .bs-val { right: 18px; font-variant-numeric: tabular-nums; }
+.joints h2 .seg { display: inline-flex; gap: 4px; margin-left: auto; }
+.joints h2 .seg button { padding: 6px 12px; } .joints h2 .seg button.on { background: var(--brass); color: #000; }

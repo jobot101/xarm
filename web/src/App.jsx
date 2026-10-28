@@ -4,8 +4,7 @@ import RoseWindow from './RoseWindow.jsx'
 import Play from './panels/Play.jsx'
 import Status from './panels/Status.jsx'
 import Commands from './panels/Commands.jsx'
-import Vision from './panels/Vision.jsx'
-import Jog from './panels/Jog.jsx'
+import Joints from './panels/Joints.jsx'
 import Teach from './panels/Teach.jsx'
 import Settings from './panels/Settings.jsx'
 import Firmware from './panels/Firmware.jsx'
@@ -79,8 +78,7 @@ export default function App() {
           <main className="grid">
             <Commands s={s} run={run} />
             <Voice s={s} run={run} />
-            <Vision s={s} />
-            <Jog s={s} run={run} />
+            <Joints s={s} run={run} title="Jog" torqueBtn />
             <Helper s={s} run={run} />
             <Teach s={s} run={run} />
             <Settings run={run} />
