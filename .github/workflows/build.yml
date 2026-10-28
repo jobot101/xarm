@@ -37,6 +37,17 @@ jobs:
           esp_idf_version: v5.5.1
           target: esp32s3
           path: firmware
+          command: "idf.py build 2>&1 | tee build.log; exit ${PIPESTATUS[0]}"
+
+      # compile errors as annotations, readable through the REST API (check-runs/<id>/annotations)
+      - name: report compile errors
+        if: failure()
+        run: |
+          grep -E "error:|undefined reference|FAILED:|CMake Error" firmware/build.log | head -40 | while IFS= read -r l; do
+            echo "::error::${l//%/%25}"
+          done
+          grep -E "error:|undefined reference|CMake Error" -A3 firmware/build.log | head -120 > err.txt || true
+          { echo '```'; cat err.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: collect flash files
         run: |
