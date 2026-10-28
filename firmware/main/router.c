@@ -5,6 +5,7 @@
 #include "moves.h"
 #include "pick.h"
 #include "store.h"
+#include "kids.h"
 
 static bool starts(const char *s, const char *p) { return strncmp(s, p, strlen(p)) == 0; }
 static bool has(const char *s, const char *w) { return strstr(s, w) != NULL; }
@@ -26,6 +27,24 @@ bool router_exec(const char *text, char *msg, size_t n)
 
     // order matters: specific phrases before generic words
     if (has(t, "stop") || has(t, "freeze"))                         { pick_stop(); snprintf(msg, n, "stopped"); return true; }
+    // third hand
+    if (has(t, "hold this") || has(t, "help me") || has(t, "third hand"))  return pick_run(OP_HELPER, 0, msg, n);
+    if (has(t, "hold it") || has(t, "grip") || has(t, "grab it") || has(t, "squeeze")) return pick_run(OP_CLOSE, 0, msg, n);
+    if (has(t, "let go") || has(t, "release"))                      return pick_run(OP_OPEN, 0, msg, n);
+    if (has(t, "little") || has(t, "nudge") || starts(t, "move") || has(t, "tilt") || has(t, "turn")) {
+        int d = has(t, "tilt") ? (has(t, "down") ? NUDGE_TILT_DOWN : NUDGE_TILT_UP)
+              : has(t, "turn") ? (has(t, "right") ? NUDGE_TURN_R : NUDGE_TURN_L)
+              : has(t, "left") ? NUDGE_LEFT : has(t, "right") ? NUDGE_RIGHT
+              : has(t, "up") || has(t, "higher") ? NUDGE_UP : has(t, "down") || has(t, "lower") ? NUDGE_DOWN : -1;
+        if (d >= 0) return pick_run(OP_NUDGE, d, msg, n);
+    }
+    // stacking challenge
+    if (has(t, "tower") || has(t, "stack"))                         return pick_run(OP_STACK, 0, msg, n);
+    // who's playing: "hi i'm sam", "it's sam"
+    if (has(t, "i'm ") || has(t, "i am ") || has(t, "it's ") || has(t, "my name")) {
+        int k = kids_find(t);
+        if (k >= 0) { kids_select(k); snprintf(msg, n, "hi %s!", kids_get(k)->name); return pick_run(OP_WAVE, 0, msg, n) || true; }
+    }
     if (has(t, "give") || has(t, "hand it"))                        return pick_run(OP_GIVE, 0, msg, n);
     if (has(t, "sort") || has(t, "clean up") || has(t, "tidy"))     return pick_run(OP_SORT, 0, msg, n);
     if (has(t, "wave") || has(t, "hello") || has(t, "say hi"))      return pick_run(OP_WAVE, 0, msg, n);
@@ -33,7 +52,7 @@ bool router_exec(const char *text, char *msg, size_t n)
     if (has(t, "dance") || has(t, "boogie"))                        return pick_run(OP_DANCE, 0, msg, n);
     if (has(t, "bell") || has(t, "ring"))                           return pick_run(OP_BELL, 0, msg, n);
     if (has(t, "home"))                                             return pick_run(OP_HOME, 0, msg, n);
-    if (has(t, "drop") || has(t, "put it down") || has(t, "let go")) return pick_run(OP_DROP, 0, msg, n);
+    if (has(t, "drop") || has(t, "put it down"))                    return pick_run(OP_DROP, 0, msg, n);
     if (has(t, "open"))                                             return pick_run(OP_OPEN, 0, msg, n);
     if (has(t, "close"))                                            return pick_run(OP_CLOSE, 0, msg, n);
     if (starts(t, "pick") || starts(t, "grab") || starts(t, "get") || starts(t, "fetch")) {
@@ -62,6 +81,15 @@ int router_phrases(char out[][48], int max)
     ADD("ring the bell");
     ADD("open hand");
     ADD("close hand");
+    ADD("hold this");
+    ADD("hold it");
+    ADD("let go");
+    ADD("a little left");
+    ADD("a little right");
+    ADD("a little up");
+    ADD("a little down");
+    ADD("build a tower");
+    for (int i = 0; i < KIDS_MAX; i++) if (kids_get(i)) ADD("hi i'm %s", kids_get(i)->name);
     for (int i = 0; i < NSLOT; i++) {
         if (!g_cfg.slot_name[i][0]) continue;
         ADD("pick up the %s", g_cfg.slot_name[i]);

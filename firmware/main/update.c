@@ -112,6 +112,16 @@ static void task(void *arg)
     }
 }
 
+bool update_new_version(void)
+{
+    const char *running = esp_app_get_description()->version;
+    char last[33];
+    nvs_str("lastver", last, sizeof last, false);
+    if (!strcmp(last, running)) return false;
+    nvs_str("lastver", (char *)running, 0, true);
+    return true;
+}
+
 void update_start(void)
 {
     char a[4];

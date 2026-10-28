@@ -17,7 +17,7 @@
 #include "sdkconfig.h"
 
 #define RATE 16000
-#define MAX_PHRASES 40
+#define MAX_PHRASES 64
 
 static const char *TAG = "voice";
 static esp_codec_dev_handle_t s_in;

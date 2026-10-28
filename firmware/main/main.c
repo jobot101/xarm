@@ -15,6 +15,7 @@
 #include "audio.h"
 #include "fx.h"
 #include "moves.h"
+#include "kids.h"
 #include "voice.h"
 #include "web.h"
 
@@ -28,6 +29,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     store_load();
     moves_init();          // recorded tricks live in the "store" partition
+    kids_init();           // who's playing + their best scores
 
     // one shared bus: ES7210 0x40, ES8311 0x18, TCA9555 0x20, RTC 0x51, vision module 0x52
     i2c_master_bus_config_t bc = {
@@ -43,7 +45,7 @@ void app_main(void)
 
     audio_init(bus);       // speaker + mics
     fx_start();            // LED ring + robot sounds
-    fx_event(FX_BOOT);
+    fx_event(update_new_version() ? FX_UPDATED : FX_BOOT);   // fresh firmware: fanfare + "Ready to rumble!"
     arm_init();
     cam_init(bus);
     pick_init();

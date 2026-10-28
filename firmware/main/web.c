@@ -11,6 +11,7 @@
 #include "ota.h"
 #include "update.h"
 #include "moves.h"
+#include "kids.h"
 #include "fx.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -118,6 +119,22 @@ static esp_err_t h_state(httpd_req_t *r)
     }
 
     cJSON_AddBoolToObject(j, "marked", s_mark_ok);
+    cJSON *kd = cJSON_AddObjectToObject(j, "kids");
+    cJSON_AddNumberToObject(kd, "cur", kids_current());
+    cJSON *kl = cJSON_AddArrayToObject(kd, "list");
+    for (int i = 0; i < KIDS_MAX; i++) {
+        const kid_t *k = kids_get(i);
+        if (!k) continue;
+        cJSON *o = cJSON_CreateObject();
+        cJSON_AddNumberToObject(o, "i", i);
+        cJSON_AddStringToObject(o, "name", k->name);
+        cJSON_AddStringToObject(o, "emoji", k->emoji);
+        cJSON_AddNumberToObject(o, "jewel", k->jewel);
+        cJSON_AddNumberToObject(o, "visits", k->visits);
+        cJSON_AddNumberToObject(o, "best_bells", k->best_bells);
+        cJSON_AddNumberToObject(o, "best_tower", k->best_tower);
+        cJSON_AddItemToArray(kl, o);
+    }
     cJSON *mv = cJSON_AddObjectToObject(j, "moves");
     int frames = 0;
     cJSON_AddBoolToObject(mv, "recording", moves_recording(&frames));
@@ -220,6 +237,34 @@ static esp_err_t h_moves(httpd_req_t *r)
     return reply(r, ok, msg);
 }
 
+// ---------- POST /api/kids {"action":"add",name,emoji,jewel} | {"action":"select"|"remove", i} | {"action":"score", game, score} ----------
+static esp_err_t h_kids(httpd_req_t *r)
+{
+    cJSON *b = body(r);
+    cJSON *a = cJSON_GetObjectItem(b, "action");
+    const char *act = cJSON_IsString(a) ? a->valuestring : "";
+    char msg[48] = "ok";
+    bool ok = true;
+    if (!strcmp(act, "add")) {
+        cJSON *nm = cJSON_GetObjectItem(b, "name"), *em = cJSON_GetObjectItem(b, "emoji");
+        int i = kids_add(cJSON_IsString(nm) ? nm->valuestring : "", cJSON_IsString(em) ? em->valuestring : "", num(b, "jewel", 0));
+        ok = i >= 0;
+        if (ok) { kids_select(i); voice_reload(); snprintf(msg, sizeof msg, "hi %s!", kids_get(i)->name); }
+        else strcpy(msg, "need a name (or the list is full)");
+    } else if (!strcmp(act, "select")) {
+        ok = kids_select(num(b, "i", -1));
+        if (ok) snprintf(msg, sizeof msg, "hi %s!", kids_get(kids_current())->name);
+    } else if (!strcmp(act, "remove")) {
+        ok = kids_remove(num(b, "i", -1));
+        if (ok) voice_reload();
+    } else if (!strcmp(act, "score")) {
+        cJSON *g = cJSON_GetObjectItem(b, "game");
+        kids_score(cJSON_IsString(g) ? g->valuestring : "", num(b, "score", -1));
+    } else { ok = false; strcpy(msg, "unknown action"); }
+    cJSON_Delete(b);
+    return reply(r, ok, msg);
+}
+
 // ---------- POST /api/fx {"show":0..3} (game: light + note) | {"event":"sad"|"happy"} ----------
 static esp_err_t h_fx(httpd_req_t *r)
 {
@@ -299,6 +344,10 @@ static esp_err_t h_teach(httpd_req_t *r)
         return reply(r, false, "no reply from arm");
     } else if (!strcmp(what, "home")) {
         memcpy(g_cfg.home, p, sizeof p); strcpy(msg, "home saved");
+    } else if (!strcmp(what, "helper")) {
+        memcpy(g_cfg.helper, p, sizeof p); strcpy(msg, "helper spot saved");
+    } else if (!strcmp(what, "tower")) {
+        memcpy(g_cfg.tower, p, sizeof p); strcpy(msg, "tower spot saved (first block's set-down pose)");
     } else if (!strcmp(what, "look")) {
         memcpy(g_cfg.look, p, sizeof p); strcpy(msg, "look pose saved — redo calibration from here");
     } else if (!strcmp(what, "give")) {
@@ -343,6 +392,7 @@ static esp_err_t h_cfg_get(httpd_req_t *r)
     cJSON_AddNumberToObject(j, "move_ms", g_cfg.move_ms);
     cJSON_AddNumberToObject(j, "grip_ms", g_cfg.grip_ms);
     cJSON_AddBoolToObject(j, "cam_on_head", g_cfg.cam_on_head);
+    cJSON_AddNumberToObject(j, "stack_pct", g_cfg.stack_pct);
     cJSON *sc = cJSON_AddArrayToObject(j, "scan");
     for (int i = 0; i < 3; i++) cJSON_AddItemToArray(sc, cJSON_CreateNumber(g_cfg.scan[i]));
     cJSON *n = cJSON_AddArrayToObject(j, "slot_name");
@@ -362,6 +412,7 @@ static esp_err_t h_cfg_post(httpd_req_t *r)
     g_cfg.grip_close = clamp_pos(num(b, "grip_close", g_cfg.grip_close));
     g_cfg.move_ms    = (uint16_t)num(b, "move_ms", g_cfg.move_ms);
     g_cfg.grip_ms    = (uint16_t)num(b, "grip_ms", g_cfg.grip_ms);
+    g_cfg.stack_pct = (int16_t)num(b, "stack_pct", g_cfg.stack_pct);
     cJSON *hd = cJSON_GetObjectItem(b, "cam_on_head");
     if (cJSON_IsBool(hd)) g_cfg.cam_on_head = cJSON_IsTrue(hd);
     cJSON *sc = cJSON_GetObjectItem(b, "scan");
@@ -391,7 +442,7 @@ static esp_err_t h_app(httpd_req_t *r)
 bool web_start(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 20;
+    c.max_uri_handlers = 24;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
     c.recv_wait_timeout = 15;                 // OTA uploads: a 1 MB .bin over WiFi needs more than the 5 s default
@@ -410,6 +461,7 @@ bool web_start(void)
         {"/api/update", HTTP_POST, h_update},
         {"/api/moves",  HTTP_POST, h_moves},
         {"/api/fx",     HTTP_POST, h_fx},
+        {"/api/kids",   HTTP_POST, h_kids},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);

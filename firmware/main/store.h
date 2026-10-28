@@ -15,6 +15,9 @@ typedef struct {
     uint16_t look[NSERVO];    // head cam: pose the arm takes to look down at the mat (calibration is taught from here)
     int16_t  scan[3];         // head cam: base offsets to look around (center, left, right)
     uint8_t  cam_on_head;     // 1 = camera rides on the wrist, 0 = fixed overhead
+    uint16_t helper[NSERVO];  // third hand: where "hold this" presents the open gripper
+    uint16_t tower[NSERVO];   // stacking: pose that sets the FIRST block down on the tower spot
+    int16_t  stack_pct;       // stacking: each level adds this % of the lift offset (block height)
     int16_t  lift[NSERVO];    // added to a grasp pose to get the hover/approach pose
     uint16_t grip_open, grip_close;
     uint16_t move_ms, grip_ms;

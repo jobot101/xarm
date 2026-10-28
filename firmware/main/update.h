@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+bool update_new_version(void);          // true once on the first boot of a new build (USB or OTA)
 void update_start(void);                 // background task; needs net_online()
 void update_check_now(void);             // wake the task for an immediate check
 void update_set_auto(bool on);           // persisted

@@ -7,6 +7,7 @@
 #include "store.h"
 #include "fx.h"
 #include "moves.h"
+#include "kids.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -259,6 +260,78 @@ static void do_bell(void)
     set("idle", "rang the bell");
 }
 
+// ---- third hand: present the open gripper at the helper spot; then grip / nudge / let go by voice
+static void do_helper(void)
+{
+    set("helping", "put it in my hand, then say \"hold it\"");
+    uint16_t p[NSERVO];
+    pose(p, g_cfg.helper, 0, hand());
+    if (!go(p, g_cfg.move_ms)) return;
+    if (!s_holding && !grip(g_cfg.grip_open)) return;
+    set("helping", s_holding ? "holding it — nudge me, or say \"let go\"" : "ready — say \"hold it\"");
+}
+
+// small step from wherever the arm is now. joint space: base, lift vector, wrist rotate, wrist tilt
+static void do_nudge(int dir)
+{
+    uint16_t p[NSERVO];
+    arm_last(p);
+    switch (dir) {
+    case NUDGE_LEFT:      p[5] = clamp_pos(p[5] + 25); break;
+    case NUDGE_RIGHT:     p[5] = clamp_pos(p[5] - 25); break;
+    case NUDGE_UP:        for (int i = 1; i < NSERVO; i++) p[i] = clamp_pos(p[i] + g_cfg.lift[i] / 4); break;
+    case NUDGE_DOWN:      for (int i = 1; i < NSERVO; i++) p[i] = clamp_pos(p[i] - g_cfg.lift[i] / 4); break;
+    case NUDGE_TURN_L:    p[1] = clamp_pos(p[1] + 40); break;
+    case NUDGE_TURN_R:    p[1] = clamp_pos(p[1] - 40); break;
+    case NUDGE_TILT_UP:   p[2] = clamp_pos(p[2] + 30); break;
+    case NUDGE_TILT_DOWN: p[2] = clamp_pos(p[2] - 30); break;
+    }
+    go(p, 180);
+}
+
+// ---- stacking challenge: keep grabbing blocks (center look only — keep the tower off to the side,
+// out of that view) and set each one a level higher on the tower spot. Score = blocks placed.
+static void do_stack(void)
+{
+    if (s_holding) { set("holding", "drop what I'm holding first"); return; }
+    if (g_cfg.n_calib < 3) { set("need_calib", "teach at least 3 calibration points"); return; }
+    int level = 0;
+    for (; level < 10; level++) {
+        int slot = -1, off = 0;
+        float px = 0, py = 0;
+        if (g_cfg.cam_on_head && !look_at(g_cfg.scan[0])) return;
+        for (int s = 0; s < NSLOT && slot < 0; s++) if (pick_locate(s, &px, &py)) slot = s;
+        if (slot < 0) break;
+        set("stacking", "%d high — getting the next block", level);
+        uint16_t grasp[NSERVO], hover[NSERVO];
+        interp_pose(g_cfg.calib, g_cfg.n_calib, px, py, grasp);
+        grasp[5] = clamp_pos(grasp[5] + off);
+        for (int i = 0; i < NSERVO; i++) hover[i] = clamp_pos(grasp[i] + g_cfg.lift[i]);
+        grasp[0] = hover[0] = g_cfg.grip_open;
+        if (!go(hover, g_cfg.move_ms) || !go(grasp, g_cfg.move_ms / 2)) return;
+        set("grasping", "block %d", level + 1);
+        if (!grip(g_cfg.grip_close)) return;
+        s_holding = true;
+        hover[0] = g_cfg.grip_close;
+        if (!go(hover, g_cfg.move_ms / 2)) return;
+        // place: tower pose raised by level * block height, slow and gentle on the way down
+        set("stacking", "placing block %d", level + 1);
+        float k = level * g_cfg.stack_pct / 100.0f;
+        uint16_t above[NSERVO], place[NSERVO];
+        pose(above, g_cfg.tower, k + 1.0f, g_cfg.grip_close);
+        pose(place, g_cfg.tower, k, g_cfg.grip_close);
+        if (!go(above, g_cfg.move_ms) || !go(place, g_cfg.move_ms)) return;
+        if (!grip(g_cfg.grip_open)) return;
+        s_holding = false;
+        place[0] = above[0] = g_cfg.grip_open;
+        if (!go(above, g_cfg.move_ms / 2)) return;
+    }
+    if (!go_home()) return;
+    kids_score("tower", level);
+    set(level ? "idle" : "not_found", level ? "tower of %d!" : "no blocks to stack", level);
+    if (level) fx_event(FX_CHEER);
+}
+
 // replay a recorded move: glide to its start, then stream frames at the record rate
 static void do_play(int idx)
 {
@@ -290,6 +363,9 @@ static void task(void *arg)
         case OP_DANCE: do_dance(); break;
         case OP_BELL:  do_bell(); break;
         case OP_PLAY:  do_play(j.slot); break;
+        case OP_HELPER: do_helper(); break;
+        case OP_STACK: do_stack(); break;
+        case OP_NUDGE: do_nudge(j.slot); break;
         case OP_HOME: {
             uint16_t p[NSERVO]; memcpy(p, g_cfg.home, sizeof p);
             p[0] = s_holding ? g_cfg.grip_close : g_cfg.grip_open;
@@ -298,7 +374,7 @@ static void task(void *arg)
             break;
         }
         case OP_OPEN:  set("moving", "open"); if (grip(g_cfg.grip_open)) { s_holding = false; set("idle", "hand open"); } break;
-        case OP_CLOSE: set("moving", "close"); if (grip(g_cfg.grip_close)) set("idle", "hand closed"); break;
+        case OP_CLOSE: set("moving", "close"); if (grip(g_cfg.grip_close)) { s_holding = true; set("holding", "hand closed"); } break;
         }
         if (s_abort) set("stopped", "stopped");
         s_busy = false;

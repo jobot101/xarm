@@ -27,7 +27,8 @@ static const rgb_t JEWEL[4] = {RUBY, SAPPHIRE, EMERALD, GOLD};
 enum { ORGAN, BELL };
 typedef struct { uint8_t voice; uint16_t f, ms; uint8_t vol; } note_t;
 typedef enum { S_BOOT, S_HEARD, S_THINK, S_MOVE, S_GRAB, S_HAPPY, S_DONE, S_SAD, S_STOP,
-               S_STRIKE, S_CHEER, S_WAVE, S_BOW, S_DANCE, S_CHIRP, S_SHOW0, S_COUNT = S_SHOW0 + 4 } snd_t;
+               S_STRIKE, S_CHEER, S_WAVE, S_BOW, S_DANCE, S_CHIRP, S_FANFARE, S_RUMBLE, S_GREET,
+               S_SHOW0, S_COUNT = S_SHOW0 + 4 } snd_t;
 
 #define C4 262
 #define D4 294
@@ -57,15 +58,22 @@ static const struct { const note_t *n; int len; } SOUNDS[S_COUNT] = {
     [S_BOW]    = { N({BELL,G5,350,50},{BELL,C5,800,55}), 2 },
     [S_DANCE]  = { N({ORGAN,C5,160,40},{ORGAN,E5,160,40},{ORGAN,G5,160,40},{ORGAN,E5,160,40},
                      {ORGAN,A5,160,40},{ORGAN,G5,160,40},{ORGAN,E5,160,40},{BELL,C5,500,50}), 8 },
+    [S_FANFARE] = { N({ORGAN,G4,130,55},{ORGAN,C5,130,55},{ORGAN,E5,130,55},{ORGAN,G5,380,60},
+                      {ORGAN,E5,130,55},{ORGAN,G5,500,60},{BELL,C6,900,70}), 7 },
     [S_SHOW0]     = { N({BELL,C5,420,60}), 1 },
     [S_SHOW0 + 1] = { N({BELL,E5,420,60}), 1 },
     [S_SHOW0 + 2] = { N({BELL,G5,420,60}), 1 },
     [S_SHOW0 + 3] = { N({BELL,C6,420,60}), 1 },
     [S_THINK] = { NULL, 0 },   // random organ noodling, generated on the fly
     [S_CHIRP] = { NULL, 0 },   // soft blip while working
+    [S_RUMBLE] = { NULL, 0 },  // recorded robot voice: "Ready to rumble!" (tools/make_voice.py)
+    [S_GREET] = { NULL, 0 },   // per-kid jingle, built from s_greet_seed
 };
 
 static QueueHandle_t s_sq;
+static volatile unsigned s_greet_seed;
+extern const uint8_t rumble_start[] asm("_binary_voice_rumble_pcm_start");
+extern const uint8_t rumble_end[]   asm("_binary_voice_rumble_pcm_end");
 
 // church-bell partials (hum, prime, tierce, quint, nominal, ...) with per-partial decay
 static const float BP_RATIO[6] = {0.5f, 1.0f, 1.19f, 1.5f, 2.0f, 2.66f};
@@ -116,6 +124,12 @@ static void sound_task(void *arg)
         if (s == S_THINK) {
             for (int i = 0; i < 6; i++) r[i] = (note_t){ORGAN, PENTA[rnd(0, 5)], 90, 28};
             synth(r, 6);
+        } else if (s == S_RUMBLE) {
+            audio_play((const int16_t *)rumble_start, (rumble_end - rumble_start) / 2);
+        } else if (s == S_GREET) {
+            unsigned h = s_greet_seed;
+            for (int i = 0; i < 3; i++) { r[i] = (note_t){BELL, PENTA[h % 6], (uint16_t)(i == 2 ? 700 : 240), 55}; h /= 6; }
+            synth(r, 3);
         } else if (s == S_CHIRP) {
             r[0] = (note_t){ORGAN, PENTA[rnd(0, 5)], 60, 14};
             synth(r, 1);
@@ -209,13 +223,14 @@ void fx_state(const char *st)
     led_mode_t was = s_mode;
     s_working = false;
     if      (is(st, "searching"))                                   { s_mode = L_THINK;  play(S_THINK); s_working = true; }
-    else if (is(st, "moving") || is(st, "dropping") || is(st, "sorting") || is(st, "giving"))
+    else if (is(st, "moving") || is(st, "dropping") || is(st, "sorting") || is(st, "giving") || is(st, "stacking"))
                                                                     { s_mode = L_WORK;   play(S_MOVE);  s_working = true; }
     else if (is(st, "grasping"))                                    { s_mode = L_WORK;   play(S_GRAB);  s_working = true; }
     else if (is(st, "holding"))                                     { s_mode = L_HOLD;   play(S_HAPPY); }
     else if (is(st, "waving"))                                      { s_mode = L_PARTY;  play(S_WAVE); }
     else if (is(st, "bowing"))                                      { s_mode = L_PARTY;  play(S_BOW); }
     else if (is(st, "dancing"))                                     { s_mode = L_PARTY;  play(S_DANCE); play(S_DANCE); }
+    else if (is(st, "helping"))                                     { s_mode = L_HOLD; }
     else if (is(st, "ringing") || is(st, "playing"))                { s_mode = L_PARTY;  s_working = is(st, "playing"); }
     else if (is(st, "not_found") || is(st, "need_calib"))           { s_mode = L_WARN;   play(S_SAD); }
     else if (is(st, "stopped"))                                     { s_mode = L_STOP;   play(S_STOP); }
@@ -231,6 +246,7 @@ void fx_event(fx_event_t e)
     case FX_ERROR: s_mode = L_WARN; play(S_SAD); break;
     case FX_BELL:  play(S_STRIKE); break;
     case FX_CHEER: s_mode = L_PARTY; play(S_CHEER); break;
+    case FX_UPDATED: s_mode = L_PARTY; play(S_FANFARE); play(S_RUMBLE); break;
     }
 }
 
@@ -239,4 +255,12 @@ void fx_show(int j)
     s_show = j & 3;
     s_show_t = 14;            // ~0.45 s
     play((snd_t)(S_SHOW0 + (j & 3)));
+}
+
+void fx_greet(int jewel, unsigned seed)
+{
+    s_greet_seed = seed;
+    s_show = jewel & 3;
+    s_show_t = 60;            // ~2 s in their color
+    play(S_GREET);
 }
