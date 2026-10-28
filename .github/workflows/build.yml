@@ -28,6 +28,9 @@ jobs:
         working-directory: firmware/test
         run: cc -I../main test_core.c ../main/core.c -lm -o t && ./t
 
+      - name: stamp version (board compares this to manifest.json to auto-update)
+        run: echo "${GITHUB_SHA::7}" > firmware/version.txt
+
       - name: build firmware
         uses: espressif/esp-idf-ci-action@v1
         with:

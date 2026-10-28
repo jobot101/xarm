@@ -80,3 +80,6 @@ code { word-break: break-all; }
 .fields.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); min-width: 0; }
 .field input { width: 100%; }
+.autoup { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+.autoup input { accent-color: var(--brass); }
+input[type=file] { width: 100%; }

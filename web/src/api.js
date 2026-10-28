@@ -17,6 +17,8 @@ export const api = {
   teach:  (what)        => call('/api/teach', { what }),
   getConfig: ()         => call('/api/config'),
   setConfig: (cfg)      => call('/api/config', cfg),
+  wifi:   (ssid, pass)  => call('/api/wifi', { ssid, pass }),
+  update: (body)        => call('/api/update', body),   // {check:true} | {auto:bool}
 }
 
 // servo index 0..5 = bus id 1..6 on the xArm 1S

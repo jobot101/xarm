@@ -8,6 +8,10 @@
 #include "cam.h"
 #include "net.h"
 #include "ota.h"
+#include "update.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "pick.h"
 #include "router.h"
 #include "store.h"
@@ -128,13 +132,48 @@ static esp_err_t h_state(httpd_req_t *r)
     cJSON *n = cJSON_AddObjectToObject(j, "net");
     cJSON_AddStringToObject(n, "ip", ip);
     cJSON_AddStringToObject(n, "mode", mode);
+    char ssid[33];
+    net_ssid(ssid, sizeof ssid);
+    cJSON_AddStringToObject(n, "ssid", ssid);
+    cJSON_AddBoolToObject(n, "online", net_online());
 
     char ver[32], part[16];
     ota_info(ver, sizeof ver, part, sizeof part);
     cJSON *fw = cJSON_AddObjectToObject(j, "fw");
     cJSON_AddStringToObject(fw, "version", ver);
     cJSON_AddStringToObject(fw, "partition", part);
+    char latest[16], ust[64];
+    update_status(latest, sizeof latest, ust, sizeof ust);
+    cJSON_AddStringToObject(fw, "latest", latest);
+    cJSON_AddStringToObject(fw, "update", ust);
+    cJSON_AddBoolToObject(fw, "auto", update_auto());
     return send_json(r, j);
+}
+
+// ---------- POST /api/wifi {"ssid":"..","pass":".."} -> saved, reboot to join ----------
+static void reboot_task(void *arg) { vTaskDelay(pdMS_TO_TICKS(800)); esp_restart(); }
+
+static esp_err_t h_wifi(httpd_req_t *r)
+{
+    cJSON *b = body(r);
+    cJSON *ss = cJSON_GetObjectItem(b, "ssid"), *pw = cJSON_GetObjectItem(b, "pass");
+    bool ok = cJSON_IsString(ss) && ss->valuestring[0] && strlen(ss->valuestring) < 33
+              && net_set_wifi(ss->valuestring, cJSON_IsString(pw) ? pw->valuestring : "");
+    cJSON_Delete(b);
+    if (!ok) return reply(r, false, "need a network name");
+    xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+    return reply(r, true, "saved — rebooting onto your WiFi. find it at http://xarm.local");
+}
+
+// ---------- POST /api/update {"auto":true|false} and/or {"check":true} ----------
+static esp_err_t h_update(httpd_req_t *r)
+{
+    cJSON *b = body(r);
+    cJSON *a = cJSON_GetObjectItem(b, "auto");
+    if (cJSON_IsBool(a)) update_set_auto(cJSON_IsTrue(a));
+    else update_check_now();
+    cJSON_Delete(b);
+    return reply(r, true, cJSON_IsBool(a) ? (update_auto() ? "auto-update on" : "auto-update off") : "checking…");
 }
 
 // ---------- POST /api/cmd {"text":"pick up the red"} ----------
@@ -278,7 +317,7 @@ static esp_err_t h_app(httpd_req_t *r)
 bool web_start(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 12;
+    c.max_uri_handlers = 16;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
     c.recv_wait_timeout = 15;                 // OTA uploads: a 1 MB .bin over WiFi needs more than the 5 s default
@@ -293,6 +332,8 @@ bool web_start(void)
         {"/api/config", HTTP_GET,  h_cfg_get},
         {"/api/config", HTTP_POST, h_cfg_post},
         {"/api/ota",    HTTP_POST, ota_handle},
+        {"/api/wifi",   HTTP_POST, h_wifi},
+        {"/api/update", HTTP_POST, h_update},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);

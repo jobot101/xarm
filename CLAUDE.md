@@ -36,6 +36,8 @@ The first flash happens from the phone over USB-C using **`flasher/`**, a one-ta
 - Web app: a **Firmware** panel with the current version, a `.bin` file picker, an upload progress bar (XHR `upload.onprogress`; fetch has no upload progress), then "rebooting…" and a poll of `/api/state` until it answers with the new version. Add a matching handler to `scripts/mock.js`.
 - The web app is embedded in the firmware, so one `.bin` updates both the UI and the firmware.
 
+**Auto-update loop (done):** with home WiFi set (web app → WiFi), `update.c` polls `https://jobot101.github.io/xarm/fw/manifest.json` every 60 s. When the `version` there (the short commit SHA; CI stamps the same value into `firmware/version.txt` → `PROJECT_VER`) differs from the running build, it installs `xarm-voice.bin` over HTTPS and reboots. Each version is tried once, so a build that rolls back isn't reflashed in a loop. **So shipping a change is just: push to `main`.** About 3 min of CI plus up to 1 min for the board's check. Don't break this path. If a change needs `srmodels.bin` or the partition table reflashed, say so, because the phone flasher has to do those.
+
 **4. Hardware bring-up:** work through the unverified list below with the owner.
 
 The phone gets its files from the `latest` release.

@@ -36,4 +36,12 @@ menu "xArm Voice"
         int "MultiNet detect threshold (percent, lower = more sensitive)"
         default 20
 
+    config XARM_UPDATE_URL
+        string "Auto-update base URL (manifest.json + xarm-voice.bin, trailing slash)"
+        default "https://jobot101.github.io/xarm/fw/"
+
+    config XARM_UPDATE_EVERY_S
+        int "Auto-update check interval, seconds"
+        default 60
+
 endmenu

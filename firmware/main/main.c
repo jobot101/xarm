@@ -11,6 +11,7 @@
 #include "net.h"
 #include "pick.h"
 #include "store.h"
+#include "update.h"
 #include "voice.h"
 #include "web.h"
 
@@ -42,5 +43,6 @@ void app_main(void)
     net_start();
     // the web UI is up: this build is good. A build that can't serve it rolls back on the next reboot
     if (web_start()) esp_ota_mark_app_valid_cancel_rollback();
+    update_start();        // watches GitHub Pages for new builds
     voice_start(bus);      // last: loads models from flash, slowest
 }

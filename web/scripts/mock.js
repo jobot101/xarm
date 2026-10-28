@@ -10,8 +10,8 @@ const st = {
     { name: 'blue', seen: false, x: 0, y: 0, w: 0, h: 0 } ] },
   calib: [{ px: 20, py: 20 }, { px: 140, py: 20 }, { px: 80, py: 100 }],
   voice: { ok: true, last: 'pick up the red' },
-  net: { ip: '127.0.0.1', mode: 'sta' },
-  fw: { version: 'mock-1', partition: 'ota_0' },
+  net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
+  fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true },
 }
 const cfg = { home: [500, 500, 500, 500, 500, 500], drop: [500, 500, 500, 500, 500, 800],
   lift: [0, 0, 0, 0, -120, 0], grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'] }
@@ -34,6 +34,10 @@ createServer((req, res) => {
         if (body.what === 'calib_clear') st.calib = []
         return send({ ok: true, msg: body.what })
       case 'POST /api/ota': setTimeout(() => (st.fw.version = `mock-${Date.now() % 10000}`), 1500); return send({ ok: true, msg: 'updated — rebooting' })
+      case 'POST /api/wifi': st.net.ssid = body.ssid; return send({ ok: true, msg: 'saved — rebooting onto your WiFi' })
+      case 'POST /api/update':
+        if (typeof body.auto === 'boolean') { st.fw.auto = body.auto; return send({ ok: true, msg: body.auto ? 'auto-update on' : 'auto-update off' }) }
+        st.fw.update = 'checking…'; setTimeout(() => (st.fw.update = `up to date (${st.fw.version})`), 1000); return send({ ok: true, msg: 'checking…' })
       case 'GET /api/config': return send(cfg)
       case 'POST /api/config': Object.assign(cfg, body); st.cam.slots.forEach((s, i) => (s.name = cfg.slot_name[i])); return send({ ok: true, msg: 'saved' })
     }

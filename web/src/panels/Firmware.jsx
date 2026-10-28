@@ -14,7 +14,7 @@ async function waitForNew(old) {
 }
 
 // over-the-air update: POST the raw .bin to /api/ota (XHR for upload progress), then wait for the reboot
-export default function Firmware({ s }) {
+export default function Firmware({ s, run }) {
   const [file, setFile] = useState(null)
   const [pct, setPct] = useState(null)      // upload progress, null when not uploading
   const [msg, setMsg] = useState('')
@@ -46,6 +46,12 @@ export default function Firmware({ s }) {
   return (
     <section className="card">
       <h2>Firmware <small>running {cur || '—'}{s?.fw?.partition ? ` · slot ${s.fw.partition}` : ''}</small></h2>
+      <div className="autoup">
+        <label><input type="checkbox" checked={!!s?.fw?.auto} onChange={e => run(api.update({ auto: e.target.checked }))} /> Auto-update from GitHub</label>
+        <button onClick={() => run(api.update({ check: true }))}>Check now</button>
+      </div>
+      <p className="hint">{s?.fw?.update || '—'}{s?.fw?.latest && s.fw.latest !== cur ? ` · latest ${s.fw.latest}` : ''}</p>
+      <h3>Manual upload</h3>
       <input type="file" accept=".bin" disabled={busy} onChange={e => setFile(e.target.files[0] || null)} />
       {pct !== null && <progress value={pct} max="100" />}
       <div className="btns">
