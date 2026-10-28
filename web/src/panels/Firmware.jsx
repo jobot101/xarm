@@ -52,7 +52,7 @@ export default function Firmware({ s, run }) {
       </div>
       <p className="hint">{s?.fw?.update || '—'}{s?.fw?.latest && s.fw.latest !== cur ? ` · latest ${s.fw.latest}` : ''}</p>
       <h3>Manual upload</h3>
-      <input type="file" accept=".bin" disabled={busy} onChange={e => setFile(e.target.files[0] || null)} />
+      <input type="file" disabled={busy} onChange={e => setFile(e.target.files[0] || null)} />
       {pct !== null && <progress value={pct} max="100" />}
       <div className="btns">
         <button className="primary" disabled={!file || busy} onClick={flash}>Upload &amp; update</button>

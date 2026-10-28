@@ -60,7 +60,7 @@ export default function App() {
   return (
     <div className={`app mode-${mode}`}>
       <header className="hall">
-        <button className="rose-btn" onPointerDown={holdStart} onPointerUp={holdEnd} onPointerLeave={holdEnd}
+        <button className="rose-btn" onPointerDown={holdStart} onPointerUp={holdEnd} onPointerLeave={holdEnd} onPointerCancel={holdEnd}
           onContextMenu={e => e.preventDefault()} aria-label="Ragamuffin Hall">
           <RoseWindow size={52} spin={!!s?.busy} progress={hold} />
         </button>
