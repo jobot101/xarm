@@ -18,6 +18,8 @@ export default function Teach({ s, run }) {
         <button onClick={() => t('bin0')}>🧺 {names[0]} bin</button>
         <button onClick={() => t('bin1')}>🧺 {names[1]} bin</button>
         <button onClick={() => t('look')}>👁️ Look (head cam)</button>
+        <button onClick={() => t('helper')}>🤝 Helper spot</button>
+        <button onClick={() => t('tower')}>🧱 Tower (1st block down)</button>
       </div>
 
       <h3>Calibrate camera → arm <small>{n} point{n === 1 ? '' : 's'} {n < 3 ? '(need 3+)' : ''}</small></h3>

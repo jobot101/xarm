@@ -27,6 +27,7 @@ export default function Settings({ run }) {
         {numIn('grip_close', 'Gripper closed')}
         {numIn('move_ms', 'Move time ms')}
         {numIn('grip_ms', 'Grip time ms')}
+        {numIn('stack_pct', 'Tower: block height (% of lift)')}
       </div>
       <h3>Camera</h3>
       <label className="check"><input type="checkbox" checked={!!c.cam_on_head} onChange={e => set('cam_on_head', e.target.checked)} /> Camera rides on the arm's head (uses the Look pose)</label>

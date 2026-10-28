@@ -10,6 +10,7 @@ import Teach from './panels/Teach.jsx'
 import Settings from './panels/Settings.jsx'
 import Firmware from './panels/Firmware.jsx'
 import Network from './panels/Network.jsx'
+import Helper from './panels/Helper.jsx'
 
 const POLL_MS = 250
 const HOLD_MS = 3000          // hold the rose window this long to open the Workshop (keeps little hands in Play)
@@ -78,6 +79,7 @@ export default function App() {
             <Commands s={s} run={run} />
             <Vision s={s} />
             <Jog s={s} run={run} />
+            <Helper s={s} run={run} />
             <Teach s={s} run={run} />
             <Settings run={run} />
             <Firmware s={s} run={run} />

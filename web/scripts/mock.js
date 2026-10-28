@@ -11,11 +11,12 @@ const st = {
   calib: [{ px: 20, py: 20 }, { px: 140, py: 20 }, { px: 80, py: 100 }],
   voice: { ok: true, last: 'pick up the red' },
   moves: { recording: false, frames: 0, list: [{ i: 0, name: 'robot' }] },
+  kids: { cur: -1, list: [{ i: 0, name: 'sam', emoji: '🦖', jewel: 1, visits: 3, best_bells: 5, best_tower: 4 }] },
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
   fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true },
 }
 const cfg = { home: [500, 500, 500, 500, 500, 500], drop: [500, 500, 500, 500, 500, 800],
-  lift: [0, 0, 0, 0, -120, 0], grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'], cam_on_head: true, scan: [0, -200, 200] }
+  lift: [0, 0, 0, 0, -120, 0], grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'], cam_on_head: true, scan: [0, -200, 200], stack_pct: 30 }
 
 createServer((req, res) => {
   let b = ''
@@ -27,7 +28,7 @@ createServer((req, res) => {
     switch (`${req.method} ${req.url}`) {
       case 'GET /api/state': return send(st)
       case 'POST /api/cmd': {
-        const t = body.text, map = { 'dance': 'dancing', 'wave hello': 'waving', 'take a bow': 'bowing', 'ring the bell': 'ringing', 'sort everything': 'sorting', 'give it to me': 'giving' }
+        const t = body.text, map = { 'build a tower': 'stacking', 'hold this': 'helping', 'dance': 'dancing', 'wave hello': 'waving', 'take a bow': 'bowing', 'ring the bell': 'ringing', 'sort everything': 'sorting', 'give it to me': 'giving' }
         if (t === 'stop') { st.state = 'stopped'; st.busy = false; return send({ ok: true, msg: 'stopped' }) }
         st.state = map[t] || (t.startsWith('pick') ? 'searching' : 'moving'); st.busy = true; st.detail = t
         setTimeout(() => { st.busy = false; st.state = t.startsWith('pick') ? 'holding' : 'idle'; st.holding = t.startsWith('pick') }, 2500)
@@ -55,6 +56,14 @@ createServer((req, res) => {
         return send({ ok: true, msg: body.action === 'save' ? `saved "${body.name}"` : 'ok' })
       }
       case 'POST /api/fx': return send({ ok: true, msg: 'ok' })
+      case 'POST /api/kids': {
+        const k = st.kids
+        if (body.action === 'add') { const i = k.list.length; k.list.push({ i, name: body.name.toLowerCase(), emoji: body.emoji, jewel: body.jewel, visits: 1, best_bells: 0, best_tower: 0 }); k.cur = i; return send({ ok: true, msg: `hi ${body.name}!` }) }
+        if (body.action === 'select') { k.cur = body.i; k.list.find(x => x.i === body.i).visits++; return send({ ok: true, msg: 'hi!' }) }
+        if (body.action === 'remove') k.list = k.list.filter(x => x.i !== body.i)
+        if (body.action === 'score') { const me = k.list.find(x => x.i === k.cur); if (me && body.score > me.best_bells) me.best_bells = body.score }
+        return send({ ok: true, msg: 'ok' })
+      }
       case 'GET /api/config': return send(cfg)
       case 'POST /api/config': Object.assign(cfg, body); st.cam.slots.forEach((s, i) => (s.name = cfg.slot_name[i])); return send({ ok: true, msg: 'saved' })
     }

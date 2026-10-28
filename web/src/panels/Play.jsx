@@ -20,12 +20,17 @@ const SAY = {
   need_calib: ['🧑‍🔧', 'A grown-up needs to teach me first.'],
   stopped:    ['✋', 'Stopped!'],
   updating:   ['✨', 'Learning new tricks…'],
+  stacking:   ['🧱', 'Building a tower!'],
+  helping:    ['🤝', "I'll hold it for you!"],
 }
 const JEWEL = ['ruby', 'sapphire', 'emerald', 'gold']
 
 export default function Play({ s, online, run }) {
   const st = online ? s?.state || 'idle' : 'offline'
-  const [icon, line] = online ? SAY[st] || ['🤖', st] : ['😴', "I'm asleep — is my power on?"]
+  const kid = (s?.kids?.list || []).find(k => k.i === s?.kids?.cur)
+  let [icon, line] = online ? SAY[st] || ['🤖', st] : ['😴', "I'm asleep — is my power on?"]
+  if (online && kid && st === 'idle') { icon = kid.emoji; line = `Hi ${cap(kid.name)}! What should I do?` }
+  if (online && st === 'idle' && /tower of/.test(s?.detail || '')) line = `${cap(s.detail)} 🎉`
   const busy = !!s?.busy
   const names = s?.cam?.slots?.map(x => x.name) || ['red', 'blue']
   const say = t => run(api.cmd(t))
@@ -40,6 +45,7 @@ export default function Play({ s, online, run }) {
     { k: 'bow',   icon: '🙇', label: 'Take a bow',      act: () => say('take a bow') },
     { k: 'dance', icon: '💃', label: 'Dance',           act: () => say('dance') },
     { k: 'bell',  icon: '🔔', label: 'Ring the bell',   cls: 'gold',     act: () => say('ring the bell') },
+    { k: 'tower', icon: '🧱', label: 'Build a tower',   cls: 'amethyst', act: () => say('build a tower') },
     { k: 'home',  icon: '🏠', label: 'Go home',         act: () => say('go home') },
   ]
 
@@ -50,6 +56,8 @@ export default function Play({ s, online, run }) {
         <span>{line}</span>
       </div>
 
+      <WhoIsPlaying s={s} online={online} run={run} />
+
       <div className="tiles">
         {TILES.map(t => (
           <button key={t.k} className={`tile ${t.cls || ''}`} disabled={!online || busy} onClick={t.act}>
@@ -59,7 +67,7 @@ export default function Play({ s, online, run }) {
       </div>
 
       <MyMoves s={s} online={online} busy={busy} run={run} />
-      <Simon online={online} busy={busy} />
+      <Simon online={online} busy={busy} kid={kid} />
       <p className="hint center">You can also just talk to me: “pick up the {names[0]}”, “dance”, “stop”.</p>
     </div>
   )
@@ -121,7 +129,7 @@ function MyMoves({ s, online, busy, run }) {
 // ---------------------------------------------------------------- Copy the Bells (Simon Says)
 const wait = ms => new Promise(r => setTimeout(r, ms))
 
-function Simon({ online, busy }) {
+function Simon({ online, busy, kid }) {
   const [seq, setSeq] = useState([])
   const [pos, setPos] = useState(0)
   const [phase, setPhase] = useState('off')    // off | show | you | lost
@@ -149,6 +157,7 @@ function Simon({ online, busy }) {
     if (j !== seq[pos]) {
       setPhase('lost'); api.fx({ event: 'sad' }).catch(() => {})
       const score = seq.length - 1
+      if (kid) api.kids('score', { game: 'bells', score }).catch(() => {})
       if (score > best) { setBest(score); try { localStorage.setItem('simonBest', score) } catch {} }
       return
     }
@@ -163,7 +172,7 @@ function Simon({ online, busy }) {
 
   return (
     <section className="card">
-      <h2>🔔 Copy the Bells <small>best {best}</small></h2>
+      <h2>🔔 Copy the Bells <small>{kid ? `${cap(kid.name)}'s best ${kid.best_bells}` : `best ${best}`}</small></h2>
       <p className="simon-msg">{msg}{phase === 'you' || phase === 'show' ? ` · round ${seq.length}` : ''}</p>
       <div className="simon">
         {JEWEL.map((c, j) => (
@@ -178,3 +187,62 @@ function Simon({ online, busy }) {
 }
 
 function rnd() { return Math.floor(Math.random() * 4) }
+function cap(t) { return t ? t[0].toUpperCase() + t.slice(1) : t }
+
+// ---------------------------------------------------------------- who's playing (name + memory)
+const EMOJI = ['🦊', '🐸', '🦖', '🐱', '🐶', '🦄', '🐙', '🚀', '🌟', '🎸', '⚽', '🌈']
+
+function WhoIsPlaying({ s, online, run }) {
+  const kids = s?.kids?.list || []
+  const cur = s?.kids?.cur
+  const me = kids.find(k => k.i === cur)
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [emoji, setEmoji] = useState(EMOJI[0])
+  const [jewel, setJewel] = useState(0)
+
+  const add = async () => {
+    await run(api.kids('add', { name: name.trim(), emoji, jewel }))
+    setAdding(false); setName('')
+  }
+
+  return (
+    <section className="card who">
+      <h2>Who's playing?</h2>
+      <div className="kids">
+        {kids.map(k => (
+          <button key={k.i} className={`kid j${k.jewel} ${k.i === cur ? 'on' : ''}`} disabled={!online}
+            onClick={() => run(api.kids('select', { i: k.i }))}>
+            <span className="kid-emoji">{k.emoji}</span>{cap(k.name)}
+          </button>
+        ))}
+        {!adding && kids.length < 12 && (
+          <button className="kid add" disabled={!online} onClick={() => setAdding(true)}><span className="kid-emoji">＋</span>Add me</button>
+        )}
+      </div>
+      {me && !adding && (
+        <p className="kid-stats">{me.emoji} {cap(me.name)} · 🔔 best {me.best_bells} · 🧱 best {me.best_tower} · visit #{me.visits}</p>
+      )}
+      {adding && (
+        <div className="recorder">
+          <p>What's your name?</p>
+          <input className="big-input" value={name} maxLength={15} autoFocus placeholder="your name"
+            onChange={e => setName(e.target.value.replace(/[^a-zA-Z ]/g, ''))} />
+          <p>Pick your picture:</p>
+          <div className="emoji-pick">
+            {EMOJI.map(e => <button key={e} className={e === emoji ? 'on' : ''} onClick={() => setEmoji(e)}>{e}</button>)}
+          </div>
+          <p>Pick your color:</p>
+          <div className="jewel-pick">
+            {JEWEL.map((c, j) => <button key={c} className={`pad ${c} ${j === jewel ? 'lit' : ''}`} onClick={() => setJewel(j)} aria-label={c} />)}
+          </div>
+          <div className="btns">
+            <button className="big-btn gold" disabled={!name.trim()} onClick={add}>That's me!</button>
+            <button onClick={() => setAdding(false)}>Cancel</button>
+          </div>
+          <p className="hint">Next time just say “hi, I'm {name.trim().toLowerCase() || '…'}”.</p>
+        </div>
+      )}
+    </section>
+  )
+}

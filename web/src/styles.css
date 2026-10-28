@@ -149,3 +149,22 @@ button.primary { background: var(--brass); }
 .check { display: flex; gap: 8px; align-items: center; font-size: 14px; margin-bottom: 10px; }
 .check input { accent-color: var(--brass); }
 .stop { background: var(--ruby); border: 2px solid #ff8a8a; font-family: Georgia, serif; }
+
+/* who's playing */
+.kids { display: flex; flex-wrap: wrap; gap: 10px; }
+.kid { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; padding: 8px 10px; border-radius: 16px;
+  font-weight: 800; font-size: 15px; background: #2f2117; border: 3px solid var(--line); }
+.kid-emoji { font-size: 30px; line-height: 1.1; }
+.kid.j0 { border-color: var(--ruby); } .kid.j1 { border-color: var(--sapphire); }
+.kid.j2 { border-color: var(--emerald); } .kid.j3 { border-color: var(--gold); }
+.kid.on { box-shadow: 0 0 0 3px #fff3; transform: scale(1.05); background: #3a2a1b; }
+.kid.add { border-style: dashed; color: var(--gold); }
+.kid-stats { margin: 10px 0 0; color: var(--dim); font-size: 14px; }
+.emoji-pick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 12px; }
+.emoji-pick button { font-size: 26px; padding: 6px 0; border-radius: 10px; }
+.emoji-pick button.on { border-color: var(--gold); background: #3a2a1b; }
+.jewel-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.jewel-pick .pad { aspect-ratio: 1.4; }
+.tile.amethyst { background: var(--amethyst); border-color: #9150bd; }
+.nudge { display: grid; grid-template-columns: repeat(3, 64px); gap: 6px; justify-content: center; margin: 12px 0; }
+.nudge button { font-size: 20px; padding: 12px 0; }

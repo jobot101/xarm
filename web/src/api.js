@@ -20,6 +20,7 @@ export const api = {
   wifi:   (ssid, pass)  => call('/api/wifi', { ssid, pass }),
   update: (body)        => call('/api/update', body),   // {check:true} | {auto:bool}
   moves:  (action, extra = {}) => call('/api/moves', { action, ...extra }),   // record | save {name} | cancel | play {i} | delete {i}
+  kids:   (action, extra = {}) => call('/api/kids', { action, ...extra }),     // add {name,emoji,jewel} | select {i} | remove {i} | score {game,score}
   fx:     (body)        => call('/api/fx', body),        // {show:0..3} | {event:'sad'|'happy'}
 }
 
