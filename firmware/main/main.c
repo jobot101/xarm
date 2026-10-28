@@ -14,6 +14,7 @@
 #include "update.h"
 #include "audio.h"
 #include "fx.h"
+#include "moves.h"
 #include "voice.h"
 #include "web.h"
 
@@ -26,6 +27,7 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     store_load();
+    moves_init();          // recorded tricks live in the "store" partition
 
     // one shared bus: ES7210 0x40, ES8311 0x18, TCA9555 0x20, RTC 0x51, vision module 0x52
     i2c_master_bus_config_t bc = {

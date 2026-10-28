@@ -5,7 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
-#define MAGIC 0x58415231u     // bump when cfg_t layout changes -> defaults reload
+#define MAGIC 0x58415232u     // bump when cfg_t layout changes -> defaults reload
 static const char *TAG = "store";
 cfg_t g_cfg;
 static SemaphoreHandle_t s_mx;
@@ -19,6 +19,10 @@ static void defaults(cfg_t *c)
     c->magic = MAGIC;
     for (int i = 0; i < NSERVO; i++) { c->home[i] = 500; c->drop[i] = 500; }
     c->drop[5] = 800;                 // base swung to one side
+    memcpy(c->give, c->home, sizeof c->give);
+    memcpy(c->bell, c->home, sizeof c->bell);
+    memcpy(c->bin[0], c->home, sizeof c->bin[0]); c->bin[0][5] = 250;   // red bin left
+    memcpy(c->bin[1], c->home, sizeof c->bin[1]); c->bin[1][5] = 750;   // blue bin right
     c->lift[4] = -120;                // shoulder (id5). flip sign in the app if hover dives instead of lifts
     c->grip_open = 200;               // id1 gripper. verify open/close direction with jog
     c->grip_close = 650;

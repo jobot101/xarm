@@ -9,6 +9,9 @@ typedef struct {
     uint32_t magic;
     uint16_t home[NSERVO];    // safe carry pose
     uint16_t drop[NSERVO];    // where "drop it" puts things
+    uint16_t give[NSERVO];    // hand-off pose: "give it to me"
+    uint16_t bell[NSERVO];    // striking pose for "ring the bell"
+    uint16_t bin[2][NSERVO];  // per-color drop poses for "sort"
     int16_t  lift[NSERVO];    // added to a grasp pose to get the hover/approach pose
     uint16_t grip_open, grip_close;
     uint16_t move_ms, grip_ms;

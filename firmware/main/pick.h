@@ -1,9 +1,10 @@
-// pick.h — motion sequences (pick / home / drop). One sequence at a time; stop preempts.
+// pick.h — motion sequences (pick / drop / give / sort / tricks / recorded moves). One sequence at a time; stop preempts.
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef enum { OP_PICK, OP_HOME, OP_DROP, OP_OPEN, OP_CLOSE } op_t;
+typedef enum { OP_PICK, OP_HOME, OP_DROP, OP_OPEN, OP_CLOSE,
+               OP_GIVE, OP_SORT, OP_WAVE, OP_BOW, OP_DANCE, OP_BELL, OP_PLAY } op_t;   // OP_PLAY: slot = move index
 
 void pick_init(void);
 bool pick_run(op_t op, int slot, char *msg, size_t n);   // false + msg if busy/invalid

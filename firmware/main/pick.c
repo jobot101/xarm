@@ -6,6 +6,7 @@
 #include "cam.h"
 #include "store.h"
 #include "fx.h"
+#include "moves.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -60,15 +61,24 @@ bool pick_locate(int slot, float *px, float *py)
     return true;
 }
 
-static void do_pick(int slot)
+// pose = base pose with the gripper set; lift_k scales the approach offset (0 = none)
+static void pose(uint16_t out[NSERVO], const uint16_t base[NSERVO], float lift_k, uint16_t grip_v)
+{
+    for (int i = 0; i < NSERVO; i++) out[i] = clamp_pos(base[i] + (int)(lift_k * g_cfg.lift[i]));
+    out[0] = grip_v;
+}
+
+static uint16_t hand(void) { return s_holding ? g_cfg.grip_close : g_cfg.grip_open; }
+
+// find + grab one object of a color; ends hovering above where it was. false = not found / stopped
+static bool grab(int slot)
 {
     const char *name = g_cfg.slot_name[slot];
-    if (s_holding) { set("holding", "already holding something — drop it first"); return; }
-    if (g_cfg.n_calib < 3) { set("need_calib", "teach at least 3 calibration points"); return; }
+    if (g_cfg.n_calib < 3) { set("need_calib", "teach at least 3 calibration points"); return false; }
 
     set("searching", "looking for %s", name);
     float px, py;
-    if (!pick_locate(slot, &px, &py)) { set("not_found", "can't see %s", name); return; }
+    if (!pick_locate(slot, &px, &py)) { set("not_found", "can't see %s", name); return false; }
 
     uint16_t grasp[NSERVO], hover[NSERVO];
     interp_pose(g_cfg.calib, g_cfg.n_calib, px, py, grasp);
@@ -76,33 +86,159 @@ static void do_pick(int slot)
     grasp[0] = hover[0] = g_cfg.grip_open;
 
     set("moving", "%s at (%.0f,%.0f)", name, px, py);
-    if (!go(hover, g_cfg.move_ms)) return;
-    if (!go(grasp, g_cfg.move_ms / 2)) return;
+    if (!go(hover, g_cfg.move_ms)) return false;
+    if (!go(grasp, g_cfg.move_ms / 2)) return false;
     set("grasping", "%s", name);
-    if (!grip(g_cfg.grip_close)) return;
-    hover[0] = g_cfg.grip_close;
-    if (!go(hover, g_cfg.move_ms / 2)) return;
-    uint16_t carry[NSERVO];
-    memcpy(carry, g_cfg.home, sizeof carry);
-    carry[0] = g_cfg.grip_close;
-    if (!go(carry, g_cfg.move_ms)) return;
+    if (!grip(g_cfg.grip_close)) return false;
     s_holding = true;
-    set("holding", "%s", name);
+    hover[0] = g_cfg.grip_close;
+    return go(hover, g_cfg.move_ms / 2);
+}
+
+// carry to a pose, let go, back off upward
+static bool release_at(const uint16_t target[NSERVO])
+{
+    uint16_t p[NSERVO];
+    pose(p, target, 1.0f, g_cfg.grip_close);
+    if (!go(p, g_cfg.move_ms)) return false;
+    pose(p, target, 0.0f, g_cfg.grip_close);
+    if (!go(p, g_cfg.move_ms / 2)) return false;
+    if (!grip(g_cfg.grip_open)) return false;
+    s_holding = false;
+    pose(p, target, 1.0f, g_cfg.grip_open);
+    return go(p, g_cfg.move_ms / 2);
+}
+
+static bool go_home(void) { uint16_t p[NSERVO]; pose(p, g_cfg.home, 0, hand()); return go(p, g_cfg.move_ms); }
+
+static void do_pick(int slot)
+{
+    if (s_holding) { set("holding", "already holding something — drop it first"); return; }
+    if (!grab(slot)) return;
+    if (!go_home()) return;
+    set("holding", "%s", g_cfg.slot_name[slot]);
 }
 
 static void do_drop(void)
 {
-    uint16_t p[NSERVO];
-    memcpy(p, g_cfg.drop, sizeof p);
-    p[0] = g_cfg.grip_close;
     set("dropping", "to drop pose");
+    uint16_t p[NSERVO];
+    pose(p, g_cfg.drop, 0, g_cfg.grip_close);
     if (!go(p, g_cfg.move_ms)) return;
     if (!grip(g_cfg.grip_open)) return;
     s_holding = false;
-    memcpy(p, g_cfg.home, sizeof p);
-    p[0] = g_cfg.grip_open;
-    if (!go(p, g_cfg.move_ms)) return;
+    if (!go_home()) return;
     set("idle", "dropped");
+}
+
+// bring it to the hand-off spot, wait a beat for a hand, let go
+static void do_give(void)
+{
+    if (!s_holding) { set("idle", "nothing to give — grab something first"); return; }
+    set("giving", "here you go");
+    uint16_t p[NSERVO];
+    pose(p, g_cfg.give, 0, g_cfg.grip_close);
+    if (!go(p, g_cfg.move_ms)) return;
+    if (!wait_ms(700)) return;
+    if (!grip(g_cfg.grip_open)) return;
+    s_holding = false;
+    if (!wait_ms(500) || !go_home()) return;
+    set("idle", "handed over");
+}
+
+// pick every visible object, each color into its own bin, until the mat is clear
+static void do_sort(void)
+{
+    if (s_holding) { set("holding", "drop what I'm holding first"); return; }
+    int done = 0;
+    for (int round = 0; round < 12; round++) {
+        int slot = -1;
+        for (int s = 0; s < NSLOT && slot < 0; s++) { box_t b; if (cam_get(s, &b)) slot = s; }
+        if (slot < 0) break;
+        set("sorting", "%s → bin %d (%d done)", g_cfg.slot_name[slot], slot + 1, done);
+        if (!grab(slot)) { if (s_abort) return; break; }
+        set("sorting", "%s → bin %d", g_cfg.slot_name[slot], slot + 1);
+        if (!release_at(g_cfg.bin[slot])) return;
+        done++;
+    }
+    if (!go_home()) return;
+    set(done ? "idle" : "not_found", done ? "sorted %d" : "nothing to sort", done);
+}
+
+// ---- tricks: small, safe moves around Home (base + wrist rotate + gripper, no big gravity loads)
+static bool beat(uint16_t p[NSERVO], int ms) { return go(p, ms); }
+
+static void do_wave(void)
+{
+    set("waving", "hello!");
+    uint16_t p[NSERVO];
+    pose(p, g_cfg.home, 0.6f, g_cfg.grip_open);              // a bit raised
+    if (!go(p, g_cfg.move_ms)) return;
+    for (int i = 0; i < 4; i++) {
+        p[1] = clamp_pos(g_cfg.home[1] + (i % 2 ? -170 : 170));  // wrist rotate
+        p[0] = i % 2 ? g_cfg.grip_open : g_cfg.grip_close;        // hand opens and closes
+        if (!beat(p, 260)) return;
+    }
+    if (!go_home()) return;
+    set("idle", "waved");
+}
+
+static void do_bow(void)
+{
+    set("bowing", "thank you!");
+    uint16_t p[NSERVO];
+    pose(p, g_cfg.home, -0.8f, hand());                      // opposite of lift = lean forward/down
+    if (!go(p, 900)) return;
+    if (!wait_ms(500)) return;
+    if (!go_home()) return;
+    set(s_holding ? "holding" : "idle", "bowed");
+}
+
+static void do_dance(void)
+{
+    set("dancing", "♪");
+    uint16_t p[NSERVO];
+    static const int8_t base[8] = {1, -1, 1, -1, 2, -2, 0, 0}, wrist[8] = {1, 1, -1, -1, 1, -1, 1, 0};
+    for (int i = 0; i < 8; i++) {
+        pose(p, g_cfg.home, (i % 2) ? 0.5f : 0.2f, (i % 2) ? g_cfg.grip_close : g_cfg.grip_open);
+        p[5] = clamp_pos(g_cfg.home[5] + 90 * base[i]);
+        p[1] = clamp_pos(g_cfg.home[1] + 140 * wrist[i]);
+        if (!beat(p, 330)) return;
+    }
+    if (!go_home()) return;
+    set("idle", "danced");
+}
+
+// hover over the bell, strike 3 times
+static void do_bell(void)
+{
+    set("ringing", "ding!");
+    uint16_t up[NSERVO], hit[NSERVO];
+    pose(up, g_cfg.bell, 0.5f, g_cfg.grip_close);
+    pose(hit, g_cfg.bell, 0.0f, g_cfg.grip_close);
+    if (!go(up, g_cfg.move_ms)) return;
+    for (int i = 0; i < 3; i++) {
+        if (!go(hit, 110)) return;
+        fx_event(FX_BELL);
+        if (!go(up, 220)) return;
+        if (!wait_ms(250)) return;
+    }
+    if (!go_home()) return;
+    set("idle", "rang the bell");
+}
+
+// replay a recorded move: glide to its start, then stream frames at the record rate
+static void do_play(int idx)
+{
+    static uint16_t f[MOVE_FRAMES][NSERVO];
+    int n = moves_load(idx, f, MOVE_FRAMES);
+    if (n < 2) { set("idle", "that move is empty"); return; }
+    set("playing", "%s", moves_name(idx));
+    if (!go(f[0], g_cfg.move_ms)) return;
+    for (int i = 1; i < n; i++) if (!go(f[i], 1000 / MOVE_HZ - 120)) return;   // wait_ms adds 120 settle
+    if (!go_home()) return;
+    s_holding = false;
+    set("idle", "played %s", moves_name(idx));
 }
 
 static void task(void *arg)
@@ -115,6 +251,13 @@ static void task(void *arg)
         switch (j.op) {
         case OP_PICK:  do_pick(j.slot); break;
         case OP_DROP:  do_drop(); break;
+        case OP_GIVE:  do_give(); break;
+        case OP_SORT:  do_sort(); break;
+        case OP_WAVE:  do_wave(); break;
+        case OP_BOW:   do_bow(); break;
+        case OP_DANCE: do_dance(); break;
+        case OP_BELL:  do_bell(); break;
+        case OP_PLAY:  do_play(j.slot); break;
         case OP_HOME: {
             uint16_t p[NSERVO]; memcpy(p, g_cfg.home, sizeof p);
             p[0] = s_holding ? g_cfg.grip_close : g_cfg.grip_open;

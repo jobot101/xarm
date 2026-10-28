@@ -1,4 +1,5 @@
 #include "web.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include "esp_http_server.h"
@@ -9,6 +10,8 @@
 #include "net.h"
 #include "ota.h"
 #include "update.h"
+#include "moves.h"
+#include "fx.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -115,6 +118,17 @@ static esp_err_t h_state(httpd_req_t *r)
     }
 
     cJSON_AddBoolToObject(j, "marked", s_mark_ok);
+    cJSON *mv = cJSON_AddObjectToObject(j, "moves");
+    int frames = 0;
+    cJSON_AddBoolToObject(mv, "recording", moves_recording(&frames));
+    cJSON_AddNumberToObject(mv, "frames", frames);
+    cJSON *ml = cJSON_AddArrayToObject(mv, "list");
+    for (int i = 0; i < MOVE_MAX; i++) if (moves_name(i)[0]) {
+        cJSON *o = cJSON_CreateObject();
+        cJSON_AddNumberToObject(o, "i", i);
+        cJSON_AddStringToObject(o, "name", moves_name(i));
+        cJSON_AddItemToArray(ml, o);
+    }
     cJSON *cal = cJSON_AddArrayToObject(j, "calib");
     for (int i = 0; i < g_cfg.n_calib; i++) {
         cJSON *o = cJSON_CreateObject();
@@ -174,6 +188,48 @@ static esp_err_t h_update(httpd_req_t *r)
     else update_check_now();
     cJSON_Delete(b);
     return reply(r, true, cJSON_IsBool(a) ? (update_auto() ? "auto-update on" : "auto-update off") : "checking…");
+}
+
+// ---------- POST /api/moves {"action":"record"|"save"|"cancel"|"play"|"delete", "name":"..", "i":n} ----------
+static esp_err_t h_moves(httpd_req_t *r)
+{
+    cJSON *b = body(r);
+    cJSON *a = cJSON_GetObjectItem(b, "action"), *nm = cJSON_GetObjectItem(b, "name");
+    int i = num(b, "i", -1);
+    const char *act = cJSON_IsString(a) ? a->valuestring : "";
+    char msg[64] = "ok";
+    bool ok = true;
+    if (!strcmp(act, "record")) {
+        ok = !pick_busy() && moves_record_start();
+        strcpy(msg, ok ? "recording — move the arm by hand" : "busy");
+    } else if (!strcmp(act, "save")) {
+        char name[16] = "";
+        if (cJSON_IsString(nm)) for (int k = 0; nm->valuestring[k] && k < 15; k++) name[k] = (char)tolower((unsigned char)nm->valuestring[k]);
+        ok = moves_record_save(name);
+        snprintf(msg, sizeof msg, ok ? "saved \"%s\"" : "couldn't save (too short, no name, or full)", name);
+        if (ok) voice_reload();
+    } else if (!strcmp(act, "cancel")) {
+        moves_record_cancel(); strcpy(msg, "cancelled");
+    } else if (!strcmp(act, "play")) {
+        ok = pick_run(OP_PLAY, i, msg, sizeof msg);
+    } else if (!strcmp(act, "delete")) {
+        ok = moves_delete(i); strcpy(msg, ok ? "deleted" : "no such move");
+        if (ok) voice_reload();
+    } else { ok = false; strcpy(msg, "unknown action"); }
+    cJSON_Delete(b);
+    return reply(r, ok, msg);
+}
+
+// ---------- POST /api/fx {"show":0..3} (game: light + note) | {"event":"sad"|"happy"} ----------
+static esp_err_t h_fx(httpd_req_t *r)
+{
+    cJSON *b = body(r);
+    int show = num(b, "show", -1);
+    cJSON *e = cJSON_GetObjectItem(b, "event");
+    if (show >= 0) fx_show(show);
+    else if (cJSON_IsString(e)) fx_event(!strcmp(e->valuestring, "sad") ? FX_ERROR : FX_CHEER);
+    cJSON_Delete(b);
+    return reply(r, true, "ok");
 }
 
 // ---------- POST /api/cmd {"text":"pick up the red"} ----------
@@ -242,6 +298,13 @@ static esp_err_t h_teach(httpd_req_t *r)
         return reply(r, false, "no reply from arm");
     } else if (!strcmp(what, "home")) {
         memcpy(g_cfg.home, p, sizeof p); strcpy(msg, "home saved");
+    } else if (!strcmp(what, "give")) {
+        memcpy(g_cfg.give, p, sizeof p); strcpy(msg, "hand-off spot saved");
+    } else if (!strcmp(what, "bell")) {
+        memcpy(g_cfg.bell, p, sizeof p); strcpy(msg, "bell spot saved");
+    } else if (!strcmp(what, "bin0") || !strcmp(what, "bin1")) {
+        int b = what[3] - '0';
+        memcpy(g_cfg.bin[b], p, sizeof p); snprintf(msg, sizeof msg, "%s bin saved", g_cfg.slot_name[b]);
     } else if (!strcmp(what, "drop")) {
         memcpy(g_cfg.drop, p, sizeof p); strcpy(msg, "drop saved");
     } else if (!strcmp(what, "test_lift")) {
@@ -317,7 +380,7 @@ static esp_err_t h_app(httpd_req_t *r)
 bool web_start(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 16;
+    c.max_uri_handlers = 20;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
     c.recv_wait_timeout = 15;                 // OTA uploads: a 1 MB .bin over WiFi needs more than the 5 s default
@@ -334,6 +397,8 @@ bool web_start(void)
         {"/api/ota",    HTTP_POST, ota_handle},
         {"/api/wifi",   HTTP_POST, h_wifi},
         {"/api/update", HTTP_POST, h_update},
+        {"/api/moves",  HTTP_POST, h_moves},
+        {"/api/fx",     HTTP_POST, h_fx},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);
