@@ -283,7 +283,8 @@ static esp_err_t h_teach(httpd_req_t *r)
     bool ok = true;
 
     if (!strcmp(what, "calib_mark")) {
-        // step 1: object on the mat, arm clear of the camera view. remember where the camera sees it
+        // step 1: object on the mat. fixed cam: arm out of view. head cam: arm goes to the look pose first
+        if (g_cfg.cam_on_head) pick_look();
         s_mark_ok = pick_locate(0, &s_mark_x, &s_mark_y) || pick_locate(1, &s_mark_x, &s_mark_y);
         if (!s_mark_ok) return reply(r, false, "camera can't see a target");
         snprintf(msg, sizeof msg, "marked (%.0f,%.0f) — now jog to grasp pose, then Save point", s_mark_x, s_mark_y);
@@ -298,6 +299,8 @@ static esp_err_t h_teach(httpd_req_t *r)
         return reply(r, false, "no reply from arm");
     } else if (!strcmp(what, "home")) {
         memcpy(g_cfg.home, p, sizeof p); strcpy(msg, "home saved");
+    } else if (!strcmp(what, "look")) {
+        memcpy(g_cfg.look, p, sizeof p); strcpy(msg, "look pose saved — redo calibration from here");
     } else if (!strcmp(what, "give")) {
         memcpy(g_cfg.give, p, sizeof p); strcpy(msg, "hand-off spot saved");
     } else if (!strcmp(what, "bell")) {
@@ -339,6 +342,9 @@ static esp_err_t h_cfg_get(httpd_req_t *r)
     cJSON_AddNumberToObject(j, "grip_close", g_cfg.grip_close);
     cJSON_AddNumberToObject(j, "move_ms", g_cfg.move_ms);
     cJSON_AddNumberToObject(j, "grip_ms", g_cfg.grip_ms);
+    cJSON_AddBoolToObject(j, "cam_on_head", g_cfg.cam_on_head);
+    cJSON *sc = cJSON_AddArrayToObject(j, "scan");
+    for (int i = 0; i < 3; i++) cJSON_AddItemToArray(sc, cJSON_CreateNumber(g_cfg.scan[i]));
     cJSON *n = cJSON_AddArrayToObject(j, "slot_name");
     for (int i = 0; i < NSLOT; i++) cJSON_AddItemToArray(n, cJSON_CreateString(g_cfg.slot_name[i]));
     return send_json(r, j);
@@ -356,6 +362,11 @@ static esp_err_t h_cfg_post(httpd_req_t *r)
     g_cfg.grip_close = clamp_pos(num(b, "grip_close", g_cfg.grip_close));
     g_cfg.move_ms    = (uint16_t)num(b, "move_ms", g_cfg.move_ms);
     g_cfg.grip_ms    = (uint16_t)num(b, "grip_ms", g_cfg.grip_ms);
+    cJSON *hd = cJSON_GetObjectItem(b, "cam_on_head");
+    if (cJSON_IsBool(hd)) g_cfg.cam_on_head = cJSON_IsTrue(hd);
+    cJSON *sc = cJSON_GetObjectItem(b, "scan");
+    if (cJSON_IsArray(sc) && cJSON_GetArraySize(sc) == 3)
+        for (int i = 0; i < 3; i++) g_cfg.scan[i] = (int16_t)cJSON_GetArrayItem(sc, i)->valueint;
     cJSON *n = cJSON_GetObjectItem(b, "slot_name");
     bool names = cJSON_IsArray(n) && cJSON_GetArraySize(n) == NSLOT;
     for (int i = 0; names && i < NSLOT; i++) {

@@ -28,6 +28,17 @@ export default function Settings({ run }) {
         {numIn('move_ms', 'Move time ms')}
         {numIn('grip_ms', 'Grip time ms')}
       </div>
+      <h3>Camera</h3>
+      <label className="check"><input type="checkbox" checked={!!c.cam_on_head} onChange={e => set('cam_on_head', e.target.checked)} /> Camera rides on the arm's head (uses the Look pose)</label>
+      {c.cam_on_head && (
+        <div className="fields six">
+          {['Center', 'Look left', 'Look right'].map((l, i) => (
+            <label className="field" key={i}>{l} (base Δ)
+              <input type="number" value={c.scan?.[i] ?? 0} onChange={e => setIdx('scan', i, +e.target.value)} />
+            </label>
+          ))}
+        </div>
+      )}
       <h3>Lift offset <small>added to grasp pose for the approach</small></h3>
       <div className="fields six">
         {JOINTS.map((j, i) => (

@@ -19,6 +19,8 @@ export const api = {
   setConfig: (cfg)      => call('/api/config', cfg),
   wifi:   (ssid, pass)  => call('/api/wifi', { ssid, pass }),
   update: (body)        => call('/api/update', body),   // {check:true} | {auto:bool}
+  moves:  (action, extra = {}) => call('/api/moves', { action, ...extra }),   // record | save {name} | cancel | play {i} | delete {i}
+  fx:     (body)        => call('/api/fx', body),        // {show:0..3} | {event:'sad'|'happy'}
 }
 
 // servo index 0..5 = bus id 1..6 on the xArm 1S

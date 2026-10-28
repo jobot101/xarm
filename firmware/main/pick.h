@@ -13,3 +13,4 @@ bool pick_busy(void);
 bool pick_holding(void);
 void pick_status(char *state, size_t ns, char *detail, size_t nd);
 bool pick_locate(int slot, float *px, float *py);        // averaged blob center, false if not seen
+bool pick_look(void);                                   // head cam: move to the look pose (blocking)

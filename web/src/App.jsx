@@ -1,5 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from './api.js'
+import RoseWindow from './RoseWindow.jsx'
+import Play from './panels/Play.jsx'
 import Status from './panels/Status.jsx'
 import Commands from './panels/Commands.jsx'
 import Vision from './panels/Vision.jsx'
@@ -10,11 +12,15 @@ import Firmware from './panels/Firmware.jsx'
 import Network from './panels/Network.jsx'
 
 const POLL_MS = 250
+const HOLD_MS = 3000          // hold the rose window this long to open the Workshop (keeps little hands in Play)
 
 export default function App() {
   const [s, setS] = useState(null)        // latest /api/state
   const [online, setOnline] = useState(false)
   const [toast, setToast] = useState('')
+  const [mode, setMode] = useState(() => { try { return localStorage.getItem('mode') || 'play' } catch { return 'play' } })
+  const [hold, setHold] = useState(0)
+  const holdTimer = useRef(null)
 
   useEffect(() => {
     let live = true
@@ -29,24 +35,57 @@ export default function App() {
 
   // every action goes through here so replies show up in one place
   const run = useCallback(async (p) => {
-    try { const r = await p; if (r?.msg) setToast(r.msg) }
+    try { const r = await p; if (r?.msg && r.msg !== 'ok') setToast(r.msg); return r }
     catch (e) { setToast(String(e.message || e)) }
   }, [])
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3500); return () => clearTimeout(t) }, [toast])
 
+  const switchMode = m => { setMode(m); try { localStorage.setItem('mode', m) } catch {} }
+
+  // press-and-hold the rose window: a white ring fills, then Workshop opens
+  const holdStart = () => {
+    const t0 = Date.now()
+    clearInterval(holdTimer.current)
+    holdTimer.current = setInterval(() => {
+      const p = (Date.now() - t0) / HOLD_MS
+      setHold(Math.min(p, 1))
+      if (p >= 1) { clearInterval(holdTimer.current); setHold(0); switchMode(mode === 'play' ? 'workshop' : 'play') }
+    }, 50)
+  }
+  const holdEnd = () => { clearInterval(holdTimer.current); setHold(0) }
+
   return (
-    <div className="app">
-      <Status s={s} online={online} />
-      <main className="grid">
-        <Commands s={s} run={run} />
-        <Vision s={s} />
-        <Jog s={s} run={run} />
-        <Teach s={s} run={run} />
-        <Settings run={run} />
-        <Firmware s={s} run={run} />
-        <Network s={s} run={run} />
-      </main>
+    <div className={`app mode-${mode}`}>
+      <header className="hall">
+        <button className="rose-btn" onPointerDown={holdStart} onPointerUp={holdEnd} onPointerLeave={holdEnd}
+          onContextMenu={e => e.preventDefault()} aria-label="Ragamuffin Hall">
+          <RoseWindow size={52} spin={!!s?.busy} progress={hold} />
+        </button>
+        <div className="hall-name">
+          <b>Ragamuffin Hall</b>
+          <small>{mode === 'play' ? 'the robot arm' : 'workshop'}</small>
+        </div>
+        {mode === 'workshop' && <button className="pill" onClick={() => switchMode('play')}>Back to play</button>}
+      </header>
+
+      {mode === 'play' ? (
+        <Play s={s} online={online} run={run} />
+      ) : (
+        <>
+          <Status s={s} online={online} />
+          <main className="grid">
+            <Commands s={s} run={run} />
+            <Vision s={s} />
+            <Jog s={s} run={run} />
+            <Teach s={s} run={run} />
+            <Settings run={run} />
+            <Firmware s={s} run={run} />
+            <Network s={s} run={run} />
+          </main>
+        </>
+      )}
+
       <button className="stop" onClick={() => run(api.cmd('stop'))}>STOP</button>
       {toast && <div className="toast">{toast}</div>}
     </div>

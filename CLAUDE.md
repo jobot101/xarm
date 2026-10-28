@@ -38,6 +38,12 @@ The first flash happens from the phone over USB-C using **`flasher/`**, a one-ta
 
 **Auto-update loop (done):** with home WiFi set (web app → WiFi), `update.c` polls `https://jobot101.github.io/xarm/fw/manifest.json` every 60 s. When the `version` there (the short commit SHA; CI stamps the same value into `firmware/version.txt` → `PROJECT_VER`) differs from the running build, it installs `xarm-voice.bin` over HTTPS and reboots. Each version is tried once, so a build that rolls back isn't reflashed in a loop. **So shipping a change is just: push to `main`.** About 3 min of CI plus up to 1 min for the board's check. Don't break this path. If a change needs `srmodels.bin` or the partition table reflashed, say so, because the phone flasher has to do those.
 
+**Play / Workshop (done):** the web app opens in **Play** mode for kids: big picture tiles, plain-words status, recording their own moves, and the Copy the Bells game. Hold the rose window for 3 s to reach **Workshop** (all the setup panels). Keep Play jargon-free. New tricks need a router phrase (voice), a Play tile, and an `OP_` in `pick.c`.
+
+**Head-mounted camera (done, default):** `cfg.cam_on_head`. Picks start from the taught **Look** pose, then sweep `scan[]` base offsets. Calibration is taught from Look, and a base offset just rotates the picture, so it gets added to the grasp base.
+
+**Ragamuffin Hall theme:** rose-window LED ring in stained-glass jewels, bell and organ sounds (`fx.c`), and oak/brass/jewel UI. Keep new features in that voice.
+
 **4. Hardware bring-up:** work through the unverified list below with the owner.
 
 The phone gets its files from the `latest` release.

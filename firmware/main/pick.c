@@ -70,6 +70,32 @@ static void pose(uint16_t out[NSERVO], const uint16_t base[NSERVO], float lift_k
 
 static uint16_t hand(void) { return s_holding ? g_cfg.grip_close : g_cfg.grip_open; }
 
+// head cam: go to the look pose (base shifted by off) and let the camera settle
+static bool look_at(int16_t off)
+{
+    uint16_t p[NSERVO];
+    pose(p, g_cfg.look, 0, hand());
+    p[5] = clamp_pos(p[5] + off);
+    if (!go(p, g_cfg.move_ms)) return false;
+    return wait_ms(350);
+}
+
+// where is it? fixed cam: just look. head cam: sweep the look pose across the base offsets.
+// *base_off = how far the base was turned when it was seen (added to the grasp pose)
+static bool find(int slot, float *px, float *py, int *base_off)
+{
+    *base_off = 0;
+    if (!g_cfg.cam_on_head) return pick_locate(slot, px, py);
+    for (int i = 0; i < 3; i++) {
+        if (i && !g_cfg.scan[i]) continue;
+        if (!look_at(g_cfg.scan[i])) return false;
+        if (pick_locate(slot, px, py)) { *base_off = g_cfg.scan[i]; return true; }
+    }
+    return false;
+}
+
+bool pick_look(void) { return look_at(0); }
+
 // find + grab one object of a color; ends hovering above where it was. false = not found / stopped
 static bool grab(int slot)
 {
@@ -78,10 +104,13 @@ static bool grab(int slot)
 
     set("searching", "looking for %s", name);
     float px, py;
-    if (!pick_locate(slot, &px, &py)) { set("not_found", "can't see %s", name); return false; }
+    int off;
+    if (!find(slot, &px, &py, &off)) { if (!s_abort) set("not_found", "can't see %s", name); return false; }
 
+    // calibration was taught from the look pose; turning the base just rotates the whole picture
     uint16_t grasp[NSERVO], hover[NSERVO];
     interp_pose(g_cfg.calib, g_cfg.n_calib, px, py, grasp);
+    grasp[5] = clamp_pos(grasp[5] + off);
     for (int i = 0; i < NSERVO; i++) hover[i] = clamp_pos(grasp[i] + g_cfg.lift[i]);
     grasp[0] = hover[0] = g_cfg.grip_open;
 
@@ -153,7 +182,10 @@ static void do_sort(void)
     int done = 0;
     for (int round = 0; round < 12; round++) {
         int slot = -1;
-        for (int s = 0; s < NSLOT && slot < 0; s++) { box_t b; if (cam_get(s, &b)) slot = s; }
+        for (int k = 0; k < (g_cfg.cam_on_head ? 3 : 1) && slot < 0; k++) {
+            if (g_cfg.cam_on_head && (k == 0 || g_cfg.scan[k]) && !look_at(g_cfg.scan[k])) return;
+            for (int s = 0; s < NSLOT && slot < 0; s++) { float x, y; if (pick_locate(s, &x, &y)) slot = s; }
+        }
         if (slot < 0) break;
         set("sorting", "%s → bin %d (%d done)", g_cfg.slot_name[slot], slot + 1, done);
         if (!grab(slot)) { if (s_abort) return; break; }
