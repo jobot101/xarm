@@ -111,15 +111,15 @@ static void fill(float r, float g, float b) { for (int i = 0; i < LED_N; i++) px
 static void led_task(void *arg)
 {
     int t = 0, since_chirp = 0;
-    const float BR = 0.79f, BG = 0.64f, BB = 0.29f;      // brass
+    const float BRASS_R = 0.79f, BRASS_G = 0.64f, BRASS_B = 0.29f;      // brass
     for (;; t++) {
         float breathe = 0.5f - 0.5f * cosf(t * 0.07f);    // ~3 s
         float pulse = 0.5f - 0.5f * cosf(t * 0.25f);
         switch (s_mode) {
-        case L_BOOT:   { float h = (float)(t % LED_N); for (int i = 0; i < LED_N; i++) { float k = (i == (int)h) ? 1 : 0.05f; px(i, BR * k, BG * k, BB * k); } if (t > 50) s_mode = L_IDLE; break; }
-        case L_IDLE:   fill(BR * (0.06f + 0.18f * breathe), BG * (0.06f + 0.18f * breathe), BB * (0.06f + 0.18f * breathe)); break;
+        case L_BOOT:   { float h = (float)(t % LED_N); for (int i = 0; i < LED_N; i++) { float k = (i == (int)h) ? 1 : 0.05f; px(i, BRASS_R * k, BRASS_G * k, BRASS_B * k); } if (t > 50) s_mode = L_IDLE; break; }
+        case L_IDLE:   fill(BRASS_R * (0.06f + 0.18f * breathe), BRASS_G * (0.06f + 0.18f * breathe), BRASS_B * (0.06f + 0.18f * breathe)); break;
         case L_THINK:  spinner(t, 0.1f, 0.7f, 1.0f, 3); break;
-        case L_WORK:   spinner(t, BR, BG, BB, 4); break;
+        case L_WORK:   spinner(t, BRASS_R, BRASS_G, BRASS_B, 4); break;
         case L_HOLD:   fill(0.1f, 0.55f + 0.3f * breathe, 0.25f); break;
         case L_WARN:   fill(1.0f * pulse, 0.55f * pulse, 0.0f); break;
         case L_STOP:   fill((t / 6) % 2 ? 1.0f : 0.15f, 0.0f, 0.0f); break;
