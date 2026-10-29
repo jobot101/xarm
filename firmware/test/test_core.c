@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 
 static void eq(const uint8_t *a, const uint8_t *b, size_t n, const char *what)
 {
@@ -78,6 +79,48 @@ int main(void)
     printf("ok   grab check\n");
     assert(size_bin(20, 20, 900) == 0 && size_bin(40, 30, 900) == 1);
     printf("ok   size bin\n");
+
+    // min-jerk: fixed ends, symmetric, monotonic
+    assert(ease_minjerk(0) == 0 && ease_minjerk(1) == 1 && fabsf(ease_minjerk(0.5f) - 0.5f) < 1e-6f);
+    for (int i = 1; i <= 100; i++) assert(ease_minjerk(i / 100.0f) >= ease_minjerk((i - 1) / 100.0f));
+    assert(ease_minjerk(0.02f) < 0.001f);              // gentle start
+    printf("ok   ease\n");
+
+    // follow: 0 -> 400 at 25 Hz, vmax 1000, amax 4000: lands exactly, never overshoots, accel limited
+    {
+        float pos = 0, vel = 0, prev = 0, dt = 0.04f; int t = 0; bool done = false;
+        for (; t < 200 && !done; t++) {
+            done = follow_step(&pos, &vel, 400, 1000, 4000, dt);
+            assert(pos <= 400.0f + 1e-3f && vel >= -1e-3f && vel <= 1000.0f + 1e-3f);
+            assert(fabsf(vel - prev) <= 4000 * dt + 1e-2f || done);
+            prev = vel;
+        }
+        assert(done && pos == 400 && vel == 0 && t < 30);   // ~0.7 s, not a crawl
+        // reversing mid-flight: target behind it -> slows, turns around, lands
+        pos = 0; vel = 800; done = false;
+        for (t = 0; t < 200 && !done; t++) done = follow_step(&pos, &vel, -50, 1000, 4000, dt);
+        assert(done && pos == -50);
+        // tiny step settles
+        pos = 100; vel = 0;
+        for (t = 0; t < 10 && !follow_step(&pos, &vel, 101, 1000, 4000, dt); t++) {}
+        assert(pos == 101);
+    }
+    printf("ok   follow\n");
+
+    // velocity: ramps up at amax, holds, ramps down to a stop
+    {
+        float pos = 0, vel = 0;
+        vel_step(&pos, &vel, 300, 4000, 0.04f); assert(fabsf(vel - 160) < 1e-3f);
+        vel_step(&pos, &vel, 300, 4000, 0.04f); assert(fabsf(vel - 300) < 1e-3f);
+        for (int i = 0; i < 5; i++) vel_step(&pos, &vel, 0, 4000, 0.04f);
+        assert(vel == 0 && pos > 0);
+    }
+    printf("ok   velocity\n");
+
+    // catmull: passes through p1 at 0 and p2 at 1, straight line stays straight
+    assert(catmull(0, 100, 200, 300, 0) == 100 && catmull(0, 100, 200, 300, 1) == 200);
+    assert(fabsf(catmull(0, 100, 200, 300, 0.5f) - 150) < 1e-3f);
+    printf("ok   catmull\n");
 
     puts("all passed");
     return 0;

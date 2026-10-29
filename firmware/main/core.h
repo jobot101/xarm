@@ -51,6 +51,17 @@ void interp_pose(const calib_pt_t *pts, int n, float px, float py, uint16_t out[
 
 uint16_t clamp_pos(int v);
 
+// ---- smooth motion (arm.c streams setpoints at a fixed rate; these compute one tick) ----
+// minimum-jerk ease: s in 0..1 -> 0..1, zero velocity and acceleration at both ends
+float ease_minjerk(float s);
+// chase `target` with velocity <= vmax and acceleration <= amax (units/s, units/s^2), braking so it
+// lands without overshoot. Updates *pos/*vel by dt seconds. Returns true once settled on target.
+bool follow_step(float *pos, float *vel, float target, float vmax, float amax, float dt);
+// ramp *vel toward vdes at <= amax, then integrate *pos
+void vel_step(float *pos, float *vel, float vdes, float amax, float dt);
+// Catmull-Rom point between p1 and p2 (t 0..1): smooth path through recorded frames
+float catmull(float p0, float p1, float p2, float p3, float t);
+
 // ---- smarter picking ----
 // wrist auto-align: jaws_axis = how the jaws close in the calibrated grasp, as seen by the camera
 // (0 off, 1 across image X, 2 across image Y). Returns the wrist-rotate delta: `turn` when the object is

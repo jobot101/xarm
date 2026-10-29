@@ -367,14 +367,18 @@ static esp_err_t h_jog(httpd_req_t *r)
     cJSON *pos = cJSON_GetObjectItem(b, "pos");
     int ms = num(b, "ms", 150);
     if (cJSON_IsArray(pos)) { uint16_t p[NSERVO]; arm_last(p); read_arr(b, "pos", p, false); arm_move(p, ms); }
-    else arm_move_one(num(b, "id", 0), clamp_pos(num(b, "pos", 500)), ms);
+    // one joint = a slider or nudge button: chase the newest value smoothly instead of a timed hop,
+    // so drag updates arriving unevenly over WiFi don't turn into stop-start motion
+    else { (void)ms; arm_follow_one(num(b, "id", 0), clamp_pos(num(b, "pos", 500))); }
     cJSON_Delete(b);
     return reply(r, true, "ok");
 }
 
 // ---------- POST /api/drive {"base":-1|0|1,"lift":..,"reach":..,"tilt":..,"twist":..,"grip":..,"step":n,"ms":n}
-// continuous hold-to-move: the app sends this ~every 100 ms while a direction is held.
-// base/twist/tilt/grip step joints directly; lift/reach move along the taught lift and reach vectors.
+// continuous hold-to-move: the app sends this ~every 100 ms while a direction is held, and all-zero on
+// release. It sets a velocity (step units per tick); the board's 25 Hz streamer ramps it smoothly, so
+// WiFi jitter between packets doesn't reach the servos. No packet for 300 ms = ramp down by itself.
+// base/twist/tilt/grip drive joints directly; lift/reach move along the taught lift and reach vectors.
 static esp_err_t h_drive(httpd_req_t *r)
 {
     if (pick_busy()) return reply(r, false, "busy");
@@ -383,17 +387,16 @@ static esp_err_t h_drive(httpd_req_t *r)
     int base = num(b, "base", 0), lift = num(b, "lift", 0), reach = num(b, "reach", 0);
     int tilt = num(b, "tilt", 0), twist = num(b, "twist", 0), grip = num(b, "grip", 0);
     cJSON_Delete(b);
-    uint16_t p[NSERVO];
-    arm_last(p);
-    int v[NSERVO];
+    float per_s = 1000.0f / (ms > 40 ? ms - 20 : 100);       // app sends ms = tick + 20
+    float v[NSERVO];
     for (int i = 0; i < NSERVO; i++)
-        v[i] = p[i] + (lift * g_cfg.lift[i] + reach * g_reach[i]) * step / 100;
+        v[i] = (lift * g_cfg.lift[i] + reach * g_reach[i]) * step / 100.0f;
     v[5] += base * step;
-    v[1] += twist * step * 3 / 2;
+    v[1] += twist * step * 3 / 2.0f;
     v[2] += tilt * step;
     v[0] += grip * step * 2 * (g_cfg.grip_close > g_cfg.grip_open ? 1 : -1);   // +1 = close
-    for (int i = 0; i < NSERVO; i++) p[i] = clamp_pos(v[i]);
-    arm_move(p, ms);
+    for (int i = 0; i < NSERVO; i++) v[i] *= per_s;
+    arm_drive(v, 300);
     return reply(r, true, "ok");
 }
 

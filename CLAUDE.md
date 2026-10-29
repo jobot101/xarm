@@ -68,6 +68,7 @@ git push                              # CI builds + publishes release "latest"
 
 - **One command vocabulary.** `router.c` turns text into actions. Voice phrases come from `router_phrases()`, and the web app posts plain text to `/api/cmd`. Add a command in the router once and both inputs get it. Don't add a voice-only or web-only action path.
 - **Pure logic goes in `core.c`** (protocol, parsing, math) with a test in `firmware/test`. No ESP-IDF includes there.
+- **Motion is streamed, never sent whole.** `arm.c` runs a 25 Hz task that walks each joint along a curve (min-jerk for `arm_move`, constant speed for `arm_move_lin` path segments, accel-limited chase for `arm_follow_one`, velocity for `arm_drive`) and sends each setpoint with a 60 ms move time, so servos never stop between frames. Don't write servo move frames anywhere else. `arm_hold()` brakes in place. The curve math lives in `core.c` (tested).
 - **`pick.c` owns motion sequences.** One job at a time (queue length 1). `pick_stop()` must stay callable from any task and preempt within ~20 ms. Every new wait inside a sequence goes through `wait_ms()`.
 - **Config lives in `cfg_t` (store.h).** If you change the struct layout, bump `MAGIC` in store.c, otherwise old NVS blobs load as garbage.
 - **One shared I2C bus** (`i2c_master` driver, created in main.c) carries the codecs, TCA9555, RTC and the cam. Don't call the legacy `driver/i2c.h` API, because mixing the two drivers aborts at boot.

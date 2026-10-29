@@ -1,4 +1,5 @@
 #include "pick.h"
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -41,12 +42,44 @@ static bool wait_ms(int ms)
     return !s_abort;
 }
 
+// exact wait, no settle margin (for chained path segments)
+static bool wait_raw(int ms)
+{
+    for (int t = 0; t < ms; t += 10) {
+        if (s_abort) return false;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    return !s_abort;
+}
+
 static bool go(const uint16_t p[NSERVO], int ms) { arm_move(p, ms); return wait_ms(ms); }
+
+// After closing, ease the command back to just past where the jaws actually stopped. Commanding the full
+// close against an object (or the jaws against each other) stalls the servo, and a stalled servo hunts:
+// that's the buzz/shake while holding. GRIP_PRELOAD keeps enough squeeze to hold.
+#define GRIP_PRELOAD 25
+static uint16_t s_grip_held;                  // gripper command while holding (0 = full close)
+static uint16_t held(void) { return s_grip_held ? s_grip_held : g_cfg.grip_close; }
+
+static void grip_settle(void)
+{
+    s_grip_held = 0;
+    uint16_t now[NSERVO];
+    if (!arm_read(now)) return;
+    int dir = g_cfg.grip_close > g_cfg.grip_open ? 1 : -1;
+    int want = now[0] + dir * GRIP_PRELOAD;
+    if ((g_cfg.grip_close - want) * dir > 0) {                    // only ever back off
+        s_grip_held = clamp_pos(want);
+        arm_move_one(1, s_grip_held, 120);
+    }
+}
 
 static bool grip(uint16_t v)
 {
     arm_move_one(1, v, g_cfg.grip_ms);
-    return wait_ms(g_cfg.grip_ms);
+    if (!wait_ms(g_cfg.grip_ms)) return false;
+    if (v == g_cfg.grip_close) grip_settle();
+    return true;
 }
 
 static float s_bw, s_bh;                      // size of the last located blob (px)
@@ -72,7 +105,7 @@ static void pose(uint16_t out[NSERVO], const uint16_t base[NSERVO], float lift_k
     out[0] = grip_v;
 }
 
-static uint16_t hand(void) { return s_holding ? g_cfg.grip_close : g_cfg.grip_open; }
+static uint16_t hand(void) { return s_holding ? held() : g_cfg.grip_open; }
 
 // head cam: go to the look pose (base shifted by off) and let the camera settle
 static bool look_at(int16_t off)
@@ -139,7 +172,7 @@ static bool grab(int slot)
         if (!grip(g_cfg.grip_close)) return false;
         if (holding_check()) {
             s_holding = true;
-            hover[0] = g_cfg.grip_close;
+            hover[0] = held();
             return go(hover, g_cfg.move_ms / 2);
         }
         // missed: open, back off, look again
@@ -156,9 +189,9 @@ static bool grab(int slot)
 static bool release_at(const uint16_t target[NSERVO])
 {
     uint16_t p[NSERVO];
-    pose(p, target, 1.0f, g_cfg.grip_close);
+    pose(p, target, 1.0f, held());
     if (!go(p, g_cfg.move_ms)) return false;
-    pose(p, target, 0.0f, g_cfg.grip_close);
+    pose(p, target, 0.0f, held());
     if (!go(p, g_cfg.move_ms / 2)) return false;
     if (!grip(g_cfg.grip_open)) return false;
     s_holding = false;
@@ -180,7 +213,7 @@ static void do_drop(void)
 {
     set("dropping", "to drop pose");
     uint16_t p[NSERVO];
-    pose(p, g_cfg.drop, 0, g_cfg.grip_close);
+    pose(p, g_cfg.drop, 0, held());
     if (!go(p, g_cfg.move_ms)) return;
     if (!grip(g_cfg.grip_open)) return;
     s_holding = false;
@@ -194,7 +227,7 @@ static void do_give(void)
     if (!s_holding) { set("idle", "nothing to give — grab something first"); return; }
     set("giving", "here you go");
     uint16_t p[NSERVO];
-    pose(p, g_cfg.give, 0, g_cfg.grip_close);
+    pose(p, g_cfg.give, 0, held());
     if (!go(p, g_cfg.move_ms)) return;
     if (!wait_ms(700)) return;
     if (!grip(g_cfg.grip_open)) return;
@@ -264,7 +297,7 @@ static void do_wave(void)
     for (int i = 0; i < 4; i++) {
         p[1] = clamp_pos(g_cfg.home[1] + (i % 2 ? -170 : 170));  // wrist rotate
         p[0] = i % 2 ? g_cfg.grip_open : g_cfg.grip_close;        // hand opens and closes
-        if (!beat(p, 260)) return;
+        if (!beat(p, 380)) return;          // 340-unit swing: faster than ~380 ms outruns the servo
     }
     if (!go_home()) return;
     set("idle", "waved");
@@ -366,14 +399,14 @@ static void do_stack(void)
         set("grasping", "block %d", level + 1);
         if (!grip(g_cfg.grip_close)) return;
         s_holding = true;
-        hover[0] = g_cfg.grip_close;
+        hover[0] = held();
         if (!go(hover, g_cfg.move_ms / 2)) return;
         // place: tower pose raised by level * block height, slow and gentle on the way down
         set("stacking", "placing block %d", level + 1);
         float k = level * g_cfg.stack_pct / 100.0f;
         uint16_t above[NSERVO], place[NSERVO];
-        pose(above, g_cfg.tower, k + 1.0f, g_cfg.grip_close);
-        pose(place, g_cfg.tower, k, g_cfg.grip_close);
+        pose(above, g_cfg.tower, k + 1.0f, held());
+        pose(place, g_cfg.tower, k, held());
         if (!go(above, g_cfg.move_ms) || !go(place, g_cfg.move_ms)) return;
         if (!grip(g_cfg.grip_open)) return;
         s_holding = false;
@@ -386,7 +419,8 @@ static void do_stack(void)
     if (level) fx_event(FX_CHEER);
 }
 
-// replay a recorded move: glide to its start, then stream frames at the record rate
+// replay a recorded move: glide to its start, then follow a smooth curve through the frames in real
+// time (Catmull-Rom, 4 constant-speed sub-steps per recorded frame — no stops between frames)
 static void do_play(int idx)
 {
     static uint16_t f[MOVE_FRAMES][NSERVO];
@@ -394,8 +428,18 @@ static void do_play(int idx)
     if (n < 2) { set("idle", "that move is empty"); return; }
     set("playing", "%s", moves_name(idx));
     if (!go(f[0], g_cfg.move_ms)) return;
-    for (int i = 1; i < n; i++) if (!go(f[i], 1000 / MOVE_HZ - 120)) return;   // wait_ms adds 120 settle
-    if (!go_home()) return;
+    const int sub = 4, seg_ms = 1000 / MOVE_HZ / sub;
+    for (int i = 0; i < n - 1; i++) {
+        const uint16_t *a = f[i ? i - 1 : 0], *b = f[i], *c = f[i + 1], *d = f[i + 2 < n ? i + 2 : n - 1];
+        for (int k = 1; k <= sub; k++) {
+            uint16_t p[NSERVO];
+            float t = (float)k / sub;
+            for (int j = 0; j < NSERVO; j++) p[j] = clamp_pos((int)lroundf(catmull(a[j], b[j], c[j], d[j], t)));
+            arm_move_lin(p, seg_ms);
+            if (!wait_raw(seg_ms)) return;
+        }
+    }
+    if (!wait_ms(0) || !go_home()) return;
     s_holding = false;
     set("idle", "played %s", moves_name(idx));
 }
@@ -423,7 +467,7 @@ static void task(void *arg)
         case OP_NUDGE: do_nudge(j.slot); break;
         case OP_HOME: {
             uint16_t p[NSERVO]; memcpy(p, g_cfg.home, sizeof p);
-            p[0] = s_holding ? g_cfg.grip_close : g_cfg.grip_open;
+            p[0] = s_holding ? held() : g_cfg.grip_open;
             set("moving", "home");
             if (go(p, g_cfg.move_ms)) set(s_holding ? "holding" : "idle", "home");
             break;

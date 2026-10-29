@@ -94,7 +94,12 @@ function Drive({ online, busy, run }) {
     timer.current = setInterval(send, TICK_MS)
     navigator.vibrate?.(8)
   }
-  const release = () => { held.current = null; clearInterval(timer.current) }
+  const release = () => {
+    const was = held.current
+    held.current = null
+    clearInterval(timer.current)
+    if (was) api.drive({ step: 0, ms: TICK_MS + 20 }).catch(() => {})   // all-zero = glide to a stop now
+  }
   useEffect(() => () => clearInterval(timer.current), [])
 
   // keyboard: arrows = base / up-down, W/S = reach, Q/E = twist, R/F = tilt, O/C = gripper

@@ -113,3 +113,40 @@ bool grip_missed(int actual, int grip_close, int grip_open, int margin)
 }
 
 int size_bin(int w, int h, int split) { return w * h >= split; }
+
+// ---- smooth motion ----
+float ease_minjerk(float s)
+{
+    if (s <= 0) return 0;
+    if (s >= 1) return 1;
+    return s * s * s * (10.0f + s * (-15.0f + 6.0f * s));
+}
+
+static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+bool follow_step(float *pos, float *vel, float target, float vmax, float amax, float dt)
+{
+    float e = target - *pos, dv = amax * dt;
+    if (fabsf(e) < 0.5f && fabsf(*vel) <= dv) { *pos = target; *vel = 0; return true; }
+    // fastest speed that can still brake to zero in the distance left (counting this tick's travel)
+    float room = fabsf(e) - fabsf(*vel) * dt * 0.5f;
+    float vb = sqrtf(2.0f * amax * (room > 0 ? room : 0));
+    float vdes = copysignf(vb < vmax ? vb : vmax, e);
+    *vel += clampf(vdes - *vel, -dv, dv);
+    *pos += *vel * dt;
+    if ((target - *pos) * e <= 0) { *pos = target; *vel = 0; return true; }   // crossed it: land
+    return false;
+}
+
+void vel_step(float *pos, float *vel, float vdes, float amax, float dt)
+{
+    float dv = amax * dt;
+    *vel += clampf(vdes - *vel, -dv, dv);
+    *pos += *vel * dt;
+}
+
+float catmull(float p0, float p1, float p2, float p3, float t)
+{
+    float t2 = t * t, t3 = t2 * t;
+    return 0.5f * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (3 * p1 - p0 - 3 * p2 + p3) * t3);
+}
