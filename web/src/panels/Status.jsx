@@ -5,7 +5,7 @@ export default function Status({ s, online }) {
       <div className="brand">xArm<span>voice</span></div>
       <div className={`state st-${s?.state || 'offline'}`}>
         <b>{online ? s?.state : 'offline'}</b>
-        <small>{online ? s?.detail : 'no reply from xarm.local'}</small>
+        <small>{online ? s?.detail : 'no reply from the arm'}</small>
       </div>
       <div className="lights">
         <Light ok={online && s?.arm?.link} label="arm" />

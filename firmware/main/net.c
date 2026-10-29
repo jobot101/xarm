@@ -15,7 +15,7 @@ static EventGroupHandle_t s_ev;
 static char s_ip[16] = "0.0.0.0";
 static char s_ssid[33], s_pass[65];
 static const char *s_mode = "none";
-static volatile bool s_ap, s_online;
+static volatile bool s_ap, s_online;     // s_ap: home WiFi gave up, backup network only
 
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -28,20 +28,28 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         esp_ip4addr_ntoa(&e->ip_info.ip, s_ip, sizeof s_ip);
         s_mode = "sta";
         s_online = true;
-        ESP_LOGI(TAG, "connected to %s: http://%s  http://xarm.local", s_ssid, s_ip);
+        ESP_LOGI(TAG, "connected to %s: http://%s  http://xarm  http://xarm.local  (backup: wifi 'xarm-voice' -> http://192.168.4.1)", s_ssid, s_ip);
         xEventGroupSetBits(s_ev, 1);
     }
 }
 
+// The board's own network "xarm-voice" (http://192.168.4.1). It stays up next to home WiFi, so any
+// phone — iPhone or Android — always has one address that works, no router or mDNS needed.
+static void ap_config(void)
+{
+    wifi_config_t ap = { .ap = { .ssid = "xarm-voice", .channel = 6, .max_connection = 4 } };
+    strlcpy((char *)ap.ap.password, CONFIG_XARM_AP_PASS, sizeof ap.ap.password);
+    ap.ap.authmode = strlen(CONFIG_XARM_AP_PASS) >= 8 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+    esp_wifi_set_config(WIFI_IF_AP, &ap);
+}
+
+// home WiFi failed: drop the station side (its retries would keep hopping the AP's channel)
 static void start_ap(void)
 {
     s_ap = true;
     esp_wifi_stop();
-    wifi_config_t ap = { .ap = { .ssid = "xarm-voice", .channel = 6, .max_connection = 4 } };
-    strlcpy((char *)ap.ap.password, CONFIG_XARM_AP_PASS, sizeof ap.ap.password);
-    ap.ap.authmode = strlen(CONFIG_XARM_AP_PASS) >= 8 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     esp_wifi_set_mode(WIFI_MODE_AP);
-    esp_wifi_set_config(WIFI_IF_AP, &ap);
+    ap_config();
     esp_wifi_start();
     strcpy(s_ip, "192.168.4.1");
     s_mode = "ap";
@@ -69,8 +77,11 @@ void net_start(void)
 {
     s_ev = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());
-    esp_netif_create_default_wifi_sta();
+    esp_netif_t *sta_if = esp_netif_create_default_wifi_sta();
     esp_netif_create_default_wifi_ap();
+    // DHCP hostname: most home routers then answer http://xarm (or xarm.lan / xarm.home) for every
+    // phone. That's the Android path, since Android often can't resolve xarm.local.
+    esp_netif_set_hostname(sta_if, "xarm");
     wifi_init_config_t ic = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&ic));
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL);
@@ -82,8 +93,9 @@ void net_start(void)
         wifi_config_t sta = {0};
         strlcpy((char *)sta.sta.ssid, s_ssid, sizeof sta.sta.ssid);
         strlcpy((char *)sta.sta.password, s_pass, sizeof sta.sta.password);
-        esp_wifi_set_mode(WIFI_MODE_STA);
+        esp_wifi_set_mode(WIFI_MODE_APSTA);       // home WiFi + the backup network at once
         esp_wifi_set_config(WIFI_IF_STA, &sta);
+        ap_config();
         esp_wifi_start();
         if (!(xEventGroupWaitBits(s_ev, 1, false, true, pdMS_TO_TICKS(15000)) & 1)) {
             ESP_LOGW(TAG, "couldn't join '%s'", s_ssid);
