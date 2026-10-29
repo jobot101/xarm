@@ -17,6 +17,7 @@ export default function Play({ s, online, run }) {
   const st = online ? s?.state || 'idle' : 'offline'
   const busy = !!s?.busy
   const names = s?.cam?.slots?.map(x => x.name) || ['red', 'blue']
+  const cam = !!s?.cam?.ok          // camera parts only show when one is plugged in
   const say = t => run(api.cmd(t))
   const kid = (s?.kids?.list || []).find(k => k.i === s?.kids?.cur)
 
@@ -36,13 +37,13 @@ export default function Play({ s, online, run }) {
       <section className="card">
         <h2>Actions</h2>
         <div className="acts">
-          <button disabled={!online || busy} onClick={() => say(`pick up the ${names[0]}`)}><i className="sw ruby" />Pick {names[0]}</button>
-          <button disabled={!online || busy} onClick={() => say(`pick up the ${names[1]}`)}><i className="sw sapphire" />Pick {names[1]}</button>
+          {cam && <button disabled={!online || busy} onClick={() => say(`pick up the ${names[0]}`)}><i className="sw ruby" />Pick {names[0]}</button>}
+          {cam && <button disabled={!online || busy} onClick={() => say(`pick up the ${names[1]}`)}><i className="sw sapphire" />Pick {names[1]}</button>}
           <button disabled={!online || busy} className={s?.holding ? 'hl' : ''} onClick={() => say('give it to me')}>Give to me</button>
           <button disabled={!online || busy} className={s?.holding ? 'hl' : ''} onClick={() => say('drop it')}>Drop</button>
-          <button disabled={!online || busy} onClick={() => say('sort everything')}>Sort by color</button>
-          <button disabled={!online || busy} onClick={() => say('sort by size')}>Sort by size</button>
-          <button disabled={!online || busy} onClick={() => say('build a tower')}>Stack</button>
+          {cam && <button disabled={!online || busy} onClick={() => say('sort everything')}>Sort by color</button>}
+          {cam && <button disabled={!online || busy} onClick={() => say('sort by size')}>Sort by size</button>}
+          {cam && <button disabled={!online || busy} onClick={() => say('build a tower')}>Stack</button>}
           <button disabled={!online || busy} onClick={() => say('hold this')}>Hold this</button>
           <button disabled={!online || busy} onClick={() => say('go home')}>Home</button>
         </div>

@@ -26,11 +26,11 @@ bool router_exec(const char *text, char *msg, size_t n)
     t[k] = 0;
 
     // order matters: specific phrases before generic words
-    if (has(t, "stop") || has(t, "freeze"))                         { pick_stop(); snprintf(msg, n, "stopped"); return true; }
+    if (has(t, "stop") || has(t, "freeze") || has(t, "halt") || has(t, "wait"))                         { pick_stop(); snprintf(msg, n, "stopped"); return true; }
     // third hand
     if (has(t, "hold this") || has(t, "help me") || has(t, "third hand"))  return pick_run(OP_HELPER, 0, msg, n);
     if (has(t, "hold it") || has(t, "grip") || has(t, "grab it") || has(t, "squeeze")) return pick_run(OP_CLOSE, 0, msg, n);
-    if (has(t, "let go") || has(t, "release"))                      return pick_run(OP_OPEN, 0, msg, n);
+    if (has(t, "let go") || has(t, "let it go") || has(t, "release") || has(t, "drop the"))                      return pick_run(OP_OPEN, 0, msg, n);
     if (has(t, "little") || has(t, "nudge") || starts(t, "move") || has(t, "tilt") || has(t, "turn")) {
         int d = has(t, "tilt") ? (has(t, "down") ? NUDGE_TILT_DOWN : NUDGE_TILT_UP)
               : has(t, "turn") ? (has(t, "right") ? NUDGE_TURN_R : NUDGE_TURN_L)
@@ -45,14 +45,14 @@ bool router_exec(const char *text, char *msg, size_t n)
         int k = kids_find(t);
         if (k >= 0) { kids_select(k); snprintf(msg, n, "hi %s!", kids_get(k)->name); return pick_run(OP_WAVE, 0, msg, n) || true; }
     }
-    if (has(t, "give") || has(t, "hand it"))                        return pick_run(OP_GIVE, 0, msg, n);
+    if (has(t, "give") || has(t, "hand it") || has(t, "bring it") || has(t, "come here"))                        return pick_run(OP_GIVE, 0, msg, n);
     if (has(t, "sort") && (has(t, "size") || has(t, "big") || has(t, "small"))) return pick_run(OP_SORT_SIZE, 0, msg, n);
     if (has(t, "sort") || has(t, "clean up") || has(t, "tidy"))     return pick_run(OP_SORT, 0, msg, n);
-    if (has(t, "wave") || has(t, "hello") || has(t, "say hi"))      return pick_run(OP_WAVE, 0, msg, n);
-    if (has(t, "bow"))                                              return pick_run(OP_BOW, 0, msg, n);
-    if (has(t, "dance") || has(t, "boogie"))                        return pick_run(OP_DANCE, 0, msg, n);
+    if (has(t, "wave") || has(t, "hello") || has(t, "say hi") || has(t, "goodbye") || has(t, "bye"))      return pick_run(OP_WAVE, 0, msg, n);
+    if (has(t, "bow") || has(t, "thank"))                                              return pick_run(OP_BOW, 0, msg, n);
+    if (has(t, "dance") || has(t, "boogie") || has(t, "party"))                        return pick_run(OP_DANCE, 0, msg, n);
     if (has(t, "bell") || has(t, "ring"))                           return pick_run(OP_BELL, 0, msg, n);
-    if (has(t, "home"))                                             return pick_run(OP_HOME, 0, msg, n);
+    if (has(t, "home") || has(t, "go back") || has(t, "rest") || has(t, "relax"))                                             return pick_run(OP_HOME, 0, msg, n);
     if (has(t, "drop") || has(t, "put it down"))                    return pick_run(OP_DROP, 0, msg, n);
     if (has(t, "open"))                                             return pick_run(OP_OPEN, 0, msg, n);
     if (has(t, "close"))                                            return pick_run(OP_CLOSE, 0, msg, n);
@@ -93,11 +93,56 @@ int router_phrases(char out[][48], int max)
     ADD("a little up");
     ADD("a little down");
     ADD("build a tower");
+    // more ways to say the same things (each must route through router_exec above)
+    ADD("freeze");
+    ADD("halt");
+    ADD("wait");
+    ADD("come home");
+    ADD("go back");
+    ADD("rest");
+    ADD("put it down");
+    ADD("hand it over");
+    ADD("bring it here");
+    ADD("come here");
+    ADD("clean up");
+    ADD("tidy up");
+    ADD("hello");
+    ADD("say hello");
+    ADD("hello robot");
+    ADD("goodbye");
+    ADD("thank you");
+    ADD("bow down");
+    ADD("lets dance");
+    ADD("party time");
+    ADD("boogie");
+    ADD("ring it");
+    ADD("open");
+    ADD("open up");
+    ADD("close");
+    ADD("grab it");
+    ADD("squeeze");
+    ADD("release");
+    ADD("let it go");
+    ADD("help me");
+    ADD("third hand");
+    ADD("stack them");
+    ADD("move left");
+    ADD("move right");
+    ADD("move up");
+    ADD("move down");
+    ADD("a little higher");
+    ADD("a little lower");
+    ADD("turn left");
+    ADD("turn right");
+    ADD("tilt up");
+    ADD("tilt down");
     for (int i = 0; i < KIDS_MAX; i++) if (kids_get(i)) ADD("hi i'm %s", kids_get(i)->name);
     for (int i = 0; i < NSLOT; i++) {
         if (!g_cfg.slot_name[i][0]) continue;
         ADD("pick up the %s", g_cfg.slot_name[i]);
         ADD("grab the %s", g_cfg.slot_name[i]);
+        ADD("get the %s", g_cfg.slot_name[i]);
+        ADD("fetch the %s", g_cfg.slot_name[i]);
     }
     for (int i = 0; i < MOVE_MAX; i++) if (moves_name(i)[0]) ADD("do the %s", moves_name(i));
 #undef ADD

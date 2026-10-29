@@ -320,6 +320,24 @@ static esp_err_t h_i2c(httpd_req_t *r)
     return e;
 }
 
+// ---------- GET /api/phrases -> ["stop","go home",...] — everything voice listens for ----------
+static esp_err_t h_phrases(httpd_req_t *r)
+{
+    enum { MAXP = 128 };
+    char (*ph)[48] = malloc(MAXP * 48);
+    if (!ph) return reply(r, false, "no memory");
+    int n = router_phrases(ph, MAXP);
+    cJSON *a = cJSON_CreateArray();
+    for (int i = 0; i < n; i++) cJSON_AddItemToArray(a, cJSON_CreateString(ph[i]));
+    free(ph);
+    char *txt = cJSON_PrintUnformatted(a);
+    cJSON_Delete(a);
+    httpd_resp_set_type(r, "application/json");
+    esp_err_t e = httpd_resp_sendstr(r, txt);
+    free(txt);
+    return e;
+}
+
 // ---------- POST /api/voice {"gain":0..42,"thresh":5..90} ----------
 static esp_err_t h_voice(httpd_req_t *r)
 {
@@ -565,6 +583,7 @@ bool web_start(void)
         {"/api/voice",  HTTP_POST, h_voice},
         {"/api/limits", HTTP_POST, h_limits},
         {"/api/i2c",    HTTP_GET,  h_i2c},
+        {"/api/phrases",HTTP_GET,  h_phrases},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);

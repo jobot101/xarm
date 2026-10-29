@@ -80,7 +80,7 @@ export default function App() {
           <main className="grid">
             <Commands s={s} run={run} />
             <Voice s={s} run={run} />
-            <Vision s={s} run={run} />
+            {s?.cam?.ok && <Vision s={s} run={run} />}
             <Joints s={s} run={run} title="Jog" torqueBtn />
             <Helper s={s} run={run} />
             <Limits s={s} run={run} />

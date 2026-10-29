@@ -8,6 +8,8 @@ export default function Voice({ s, run }) {
   const [thresh, setThresh] = useState(null)
   useEffect(() => { if (gain === null && v.gain !== undefined) { setGain(v.gain); setThresh(v.thresh) } }, [v.gain])
 
+  const [list, setList] = useState(null)
+  const showList = async () => { if (list) return setList(null); try { setList(await api.phrases()) } catch { setList([]) } }
   const lv = v.level ?? 0
   const save = (g, t) => run(api.voice({ gain: g, thresh: t }))
 
@@ -31,6 +33,8 @@ export default function Voice({ s, run }) {
             onChange={e => setThresh(+e.target.value)} onPointerUp={() => save(gain, thresh)} onKeyUp={() => save(gain, thresh)} />
         </label>
       </>}
+      <div className="btns"><button onClick={showList}>{list ? 'Hide' : 'Things you can say'}</button></div>
+      {list && <ul className="phrases">{list.map(p => <li key={p}>{p}</li>)}</ul>}
       <p className="hint">Good start: gain 30–33 dB, threshold 15–20%. Try “dance robot”, “wave hello”, “go home”, “stop”. Speak plainly, about 1 m away.</p>
     </section>
   )

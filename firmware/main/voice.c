@@ -20,7 +20,7 @@
 #include "freertos/task.h"
 #include "sdkconfig.h"
 
-#define MAX_PHRASES 64
+#define MAX_PHRASES 128
 
 static const char *TAG = "voice";
 static esp_codec_dev_handle_t s_in;
