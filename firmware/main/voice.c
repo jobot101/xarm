@@ -245,7 +245,8 @@ static void run_text(const char *t, float pr, const char *tag)
         if (now - s_huh_at > 8000000) { s_huh_at = now; fx_say(SND_HUH); }   // never "huh?" at its own "huh?"
         strlcpy(msg, "didn't understand", sizeof msg);
     }
-    snprintf(why, sizeof why, "%s%s", tag, msg);
+    strlcpy(why, tag, sizeof why);                 // tag + msg, cut to fit (the note only shows 48 chars)
+    strlcat(why, msg, sizeof why);
     note(t, pr, why);
     ESP_LOGI(TAG, "%s\"%s\" -> %s", tag, t, msg);
 }
