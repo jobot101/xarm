@@ -29,12 +29,24 @@ menu "xArm Voice"
         default 10
 
     config XARM_MIC_GAIN_DB
-        int "Mic gain dB"
-        default 30
+        int "Mic gain dB (AFE AGC makes up the rest)"
+        default 24
 
     config XARM_VOICE_THRESHOLD
         int "MultiNet detect threshold (percent, lower = more sensitive)"
-        default 20
+        default 35
+
+    config XARM_MIC_DUAL
+        bool "Use the second mic too (ES7210 MIC2, TDM slot 2) for beamforming"
+        default n
+        help
+            Off: AFE input "MR" (mic1 + speaker reference), the layout xiaozhi uses on this board.
+            On: "MRM" adds MIC2 so the AFE can steer toward the talker. Turn on if the board's
+            second mic is populated; the boot log prints the AFE pipeline either way.
+
+    config XARM_VOICE_VAD_HOLD_MS
+        int "Accept a command only if speech was heard within this many ms"
+        default 1500
 
     config XARM_UPDATE_URL
         string "Auto-update base URL (manifest.json + xarm-voice.bin, trailing slash)"

@@ -79,7 +79,7 @@ git push                              # CI builds + publishes release "latest"
 1. **esp-sr / esp_codec_dev API and sdkconfig names.** `voice.c` follows xiaozhi-esp32 (esp-sr 2.4.7). Check that `CONFIG_SR_MN_EN_MULTINET7_QUANT` and friends exist under menuconfig → ESP Speech Recognition, and that the `model` partition gets flashed.
 2. ~~Vision module data format~~ **Resolved from Hiwonder's source:** 4 × uint8 x,y,w,h on a 240×240 frame.
 3. **Camera PSRAM type.** The flasher picks the octal or quad build from the chip features. Check on first flash that the cam boots (Boot log).
-4. **Mic channel.** `voice.c` uses ES7210 TDM slot 0 at 16 kHz, gain 30 dB (Kconfig). If recognition is deaf, try another slot or a higher gain.
+4. **Mic channels + AFE.** `audio.c` reads ES7210 TDM slots 0 (MIC1) and 1 (MIC3 = speaker reference, per xiaozhi's `AUDIO_INPUT_REFERENCE`) as AFE format `"MR"`; `XARM_MIC_DUAL` adds slot 2 (MIC2) as `"MRM"`. Boot log prints the AFE pipeline. Check that AEC actually cancels the bells (say "stop" during a trick) and that the level meter peaks around −12 to −6 dBFS when talking at arm's length (gain 24 dB default, AGC on).
 5. **Gripper direction and lift sign.** Defaults are open 200 / close 650 and shoulder lift −120. Users fix these in Settings.
 6. **Controller TX logic level** (3.3 V expected), and that the vision module doesn't pull SDA/SCL up to 5 V.
 7. **MultiNet phrase rejection.** `load_commands()` logs rejected phrases. Keep phrases short and plain English.
@@ -97,6 +97,6 @@ git push                              # CI builds + publishes release "latest"
 - **Feedback:** LED ring states (listening/heard/moving/fail) via `led_strip` on GPIO38. Spoken or beep replies via ES8311: init per xiaozhi `box_audio_codec.cc`, PA on TCA9555 EXIO8. Hook both in `pick.c set()` and in the voice detect handler.
 - **Wrist alignment:** use the blob's w/h to set wrist rotate (id 2) for long objects.
 - **Hiwonder action groups:** `xf_action()` exists. Wire router phrases like "wave" to `XCMD_ACTION_RUN`.
-- **Better recognition:** put the ESP-SR AFE (AEC/NS, input format "MR" with the reference channel) in front of MultiNet.
+- **Better recognition (done):** ESP-SR AFE (AEC, AGC, WebRTC VAD; BSS with `XARM_MIC_DUAL`) sits in front of MultiNet. A command only fires if the VAD heard speech within `XARM_VOICE_VAD_HOLD_MS`; while the speaker plays, only stop phrases pass. Voice phrases are 3+ syllables and acoustically distinct; keep new ones that way.
 - **LLM layer:** anything that can produce router text (xiaozhi MCP, a server) can drive the arm through `router_exec()`.
 - **Push instead of poll:** a websocket for `/api/state` if 4 Hz polling gets in the way.

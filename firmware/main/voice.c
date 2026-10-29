@@ -1,5 +1,11 @@
-// Mic path ported from xiaozhi-esp32 boards/waveshare/esp32-s3-audio-board + codecs/box_audio_codec.cc
-// (16 kHz, mic channel 0). MultiNet runs continuously — no wake word — so "stop" is instant.
+// Mic path ported from xiaozhi-esp32 boards/waveshare/esp32-s3-audio-board + codecs/box_audio_codec.cc,
+// AFE setup follows xiaozhi audio/engines/afe_audio_engine.cc (same esp-sr 2.4.7 pin).
+//
+//   ES7210 (mic1 + speaker reference [+ mic2]) -> AFE (AEC, BSS, AGC, VAD) -> MultiNet7 -> router
+//
+// AEC subtracts the board's own bells/organ/voice, so "stop" works while a trick is playing.
+// MultiNet runs continuously — no wake word — so "stop" is instant. A command only counts if the
+// VAD heard real speech in the last XARM_VOICE_VAD_HOLD_MS, which kills most servo-noise triggers.
 #include "voice.h"
 #include <math.h>
 #include <stdio.h>
@@ -11,6 +17,8 @@
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "esp_codec_dev.h"
+#include "esp_afe_sr_models.h"
+#include "esp_afe_config.h"
 #include "esp_mn_iface.h"
 #include "esp_mn_models.h"
 #include "esp_mn_speech_commands.h"
@@ -24,13 +32,16 @@
 
 static const char *TAG = "voice";
 static esp_codec_dev_handle_t s_in;
+static const esp_afe_sr_iface_t *s_afe;
+static esp_afe_sr_data_t *s_afed;
 static const esp_mn_iface_t *s_mn;
 static model_iface_data_t *s_mnd;
 static char s_phr[MAX_PHRASES][48];
 static volatile bool s_ok, s_reload;
 static char s_last[48] = "", s_status[64] = "starting";
-static volatile int s_level;          // mic level 0..100 (dBFS mapped, peak-hold)
+static volatile int s_level;          // mic level 0..100 (dBFS mapped, peak-hold), after AEC/AGC
 static volatile float s_prob;         // confidence of the last recognized phrase
+static volatile int64_t s_speech_us;  // last time the VAD said "speech"
 static int s_gain = CONFIG_XARM_MIC_GAIN_DB, s_thresh = CONFIG_XARM_VOICE_THRESHOLD;
 
 // runtime tuning, saved in NVS so the app can adjust without a rebuild
@@ -46,7 +57,7 @@ static void tune_load(void)
 
 static void tune_apply(void)
 {
-    if (s_in) esp_codec_dev_set_in_channel_gain(s_in, ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0), (float)s_gain);
+    audio_mic_gain((float)s_gain);
     if (s_mn && s_mnd) s_mn->set_det_threshold(s_mnd, s_thresh / 100.0f);
 }
 
@@ -78,48 +89,105 @@ static void load_commands(void)
     ESP_LOGI(TAG, "%s", s_status);
 }
 
-static void task(void *arg)
+// stop words stay live while the speaker plays; everything else waits for quiet
+static bool is_stop(const char *p) { return strstr(p, "stop") || strstr(p, "freeze"); }
+
+// mic -> AFE. Never blocks on anything but the I2S read.
+static void feed_task(void *arg)
 {
-    int chunk = s_mn->get_samp_chunksize(s_mnd);        // samples per detect() call
-    int16_t *buf = heap_caps_malloc(chunk * sizeof(int16_t), MALLOC_CAP_INTERNAL);
-    float peak = 0;
+    int n = s_afe->get_feed_chunksize(s_afed) * s_afe->get_feed_channel_num(s_afed);
+    int16_t *buf = heap_caps_malloc(n * sizeof(int16_t), MALLOC_CAP_INTERNAL);
     for (;;) {
-        if (s_reload) { s_reload = false; load_commands(); }
-        if (esp_codec_dev_read(s_in, buf, chunk * sizeof(int16_t)) != ESP_CODEC_DEV_OK) {
+        if (esp_codec_dev_read(s_in, buf, n * sizeof(int16_t)) != ESP_CODEC_DEV_OK) {
             strlcpy(s_status, "mic read failing", sizeof s_status);
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
+        s_afe->feed(s_afed, buf);
+    }
+}
+
+// AFE -> MultiNet. The AFE fetch size and MultiNet chunk size usually match (512); if not, re-chunk.
+static void detect_task(void *arg)
+{
+    int chunk = s_mn->get_samp_chunksize(s_mnd);
+    int16_t *mbuf = heap_caps_malloc(chunk * sizeof(int16_t), MALLOC_CAP_INTERNAL);
+    int fill = 0;
+    float peak = 0;
+    for (;;) {
+        afe_fetch_result_t *r = s_afe->fetch_with_delay(s_afed, portMAX_DELAY);
+        if (!r || r->ret_value == ESP_FAIL || !r->data) continue;
+        if (r->vad_state == VAD_SPEECH) s_speech_us = esp_timer_get_time();
+        int n = r->data_size / (int)sizeof(int16_t);
+
         // level meter: RMS in dBFS, -60..0 dB -> 0..100, with a slow fall
         double acc = 0;
-        for (int i = 0; i < chunk; i++) acc += (double)buf[i] * buf[i];
-        float db = 10.0f * log10f((float)(acc / chunk) / (32768.0f * 32768.0f) + 1e-9f);
+        for (int i = 0; i < n; i++) acc += (double)r->data[i] * r->data[i];
+        float db = 10.0f * log10f((float)(acc / (n ? n : 1)) / (32768.0f * 32768.0f) + 1e-9f);
         float lv = (db + 60.0f) * (100.0f / 60.0f);
         peak = lv > peak ? lv : peak * 0.93f;
         s_level = peak < 0 ? 0 : peak > 100 ? 100 : (int)peak;
 
-        esp_mn_state_t st = s_mn->detect(s_mnd, buf);
-        // the board's own bells/organ/voice come back through the mic and fake commands (often "stop",
-        // which kills whatever trick is running) — ignore anything heard while the speaker plays + 400 ms
-        bool self = esp_timer_get_time() < audio_play_end_us() + 400000;
-        if (st == ESP_MN_STATE_DETECTED && self) {
-            s_mn->clean(s_mnd);
-        } else if (st == ESP_MN_STATE_DETECTED) {
-            esp_mn_results_t *r = s_mn->get_results(s_mnd);
-            int id = r->command_id[0];
-            if (id >= 1 && id <= MAX_PHRASES) {
-                strlcpy(s_last, s_phr[id - 1], sizeof s_last);
-                s_prob = r->prob[0];
-                fx_event(FX_HEARD);
-                char msg[64];
-                router_exec(s_last, msg, sizeof msg);
-                ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", s_last, r->prob[0], msg);
+        if (s_reload) { s_reload = false; load_commands(); }
+
+        for (int off = 0; off < n; ) {
+            int take = chunk - fill < n - off ? chunk - fill : n - off;
+            memcpy(mbuf + fill, r->data + off, take * sizeof(int16_t));
+            fill += take; off += take;
+            if (fill < chunk) break;
+            fill = 0;
+
+            esp_mn_state_t st = s_mn->detect(s_mnd, mbuf);
+            if (st == ESP_MN_STATE_DETECTED) {
+                esp_mn_results_t *res = s_mn->get_results(s_mnd);
+                int id = res->command_id[0];
+                if (id >= 1 && id <= MAX_PHRASES) {
+                    const char *p = s_phr[id - 1];
+                    int64_t now = esp_timer_get_time();
+                    bool speech = now - s_speech_us < (int64_t)CONFIG_XARM_VOICE_VAD_HOLD_MS * 1000;
+                    bool self = now < audio_play_end_us() + 400000;
+                    if (!speech) {
+                        ESP_LOGI(TAG, "ignored \"%s\" (p=%.2f): no speech", p, res->prob[0]);
+                    } else if (self && !is_stop(p)) {
+                        ESP_LOGI(TAG, "ignored \"%s\" (p=%.2f): speaker playing", p, res->prob[0]);
+                    } else {
+                        strlcpy(s_last, p, sizeof s_last);
+                        s_prob = res->prob[0];
+                        fx_event(FX_HEARD);
+                        char msg[64];
+                        router_exec(s_last, msg, sizeof msg);
+                        ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", s_last, res->prob[0], msg);
+                    }
+                }
+                s_mn->clean(s_mnd);
+            } else if (st == ESP_MN_STATE_TIMEOUT) {
+                s_mn->clean(s_mnd);
             }
-            s_mn->clean(s_mnd);
-        } else if (st == ESP_MN_STATE_TIMEOUT) {
-            s_mn->clean(s_mnd);
         }
     }
+}
+
+static bool afe_start(srmodel_list_t *models)
+{
+    const char *fmt = audio_in_format();
+    afe_config_t *c = afe_config_init(fmt, models, AFE_TYPE_SR, AFE_MODE_HIGH_PERF);
+    if (!c) return false;
+    c->aec_init = true;                  // reference channel is always fed
+    c->ns_init = false;                  // Espressif's advice for ASR: NS smears phonemes, AGC+AEC do the work
+    c->vad_init = true;                  // WebRTC VAD (no vadnet in the model partition)
+    c->vad_mode = VAD_MODE_2;
+    c->wakenet_init = false;
+    c->agc_init = true;
+    c->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
+    s_afe = esp_afe_handle_from_config(c);
+    s_afed = s_afe ? s_afe->create_from_config(c) : NULL;
+    afe_config_free(c);
+    if (!s_afed) return false;
+    if (s_afe->get_feed_channel_num(s_afed) != audio_in_channels())
+        ESP_LOGW(TAG, "AFE wants %d channels, mic gives %d", s_afe->get_feed_channel_num(s_afed), audio_in_channels());
+    s_afe->print_pipeline(s_afed);
+    ESP_LOGI(TAG, "AFE \"%s\": feed %d, fetch %d", fmt, s_afe->get_feed_chunksize(s_afed), s_afe->get_fetch_chunksize(s_afed));
+    return true;
 }
 
 void voice_start(i2c_master_bus_handle_t bus)
@@ -130,6 +198,7 @@ void voice_start(i2c_master_bus_handle_t bus)
     srmodel_list_t *models = esp_srmodel_init("model");
     char *name = models ? esp_srmodel_filter(models, ESP_MN_PREFIX, ESP_MN_ENGLISH) : NULL;
     if (!name) { strlcpy(s_status, "no English speech model in flash", sizeof s_status); ESP_LOGE(TAG, "%s", s_status); return; }
+    if (!afe_start(models)) { strlcpy(s_status, "audio front-end failed to start", sizeof s_status); ESP_LOGE(TAG, "%s", s_status); return; }
     s_mn = esp_mn_handle_from_name(name);
     s_mnd = s_mn->create(name, 3000);
     if (!s_mnd) { strlcpy(s_status, "speech model failed to load", sizeof s_status); return; }
@@ -140,7 +209,8 @@ void voice_start(i2c_master_bus_handle_t bus)
     load_commands();
     s_ok = true;
     ESP_LOGI(TAG, "listening (%s), gain %d dB, threshold %d%%", name, s_gain, s_thresh);
-    xTaskCreatePinnedToCore(task, "voice", 8192, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(feed_task, "voice_feed", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(detect_task, "voice", 8192, NULL, 5, NULL, 1);
 }
 
 void voice_reload(void) { s_reload = true; }

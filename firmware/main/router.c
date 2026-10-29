@@ -71,7 +71,14 @@ int router_phrases(char out[][48], int max)
 {
     int n = 0;
 #define ADD(...) do { if (n < max) snprintf(out[n++], 48, __VA_ARGS__); } while (0)
+    // MultiNet is most reliable on phrases of 3+ syllables that don't sound like each other or like
+    // everyday talk. Single words ("wait", "rest", "open", "hello") and near-twins with different
+    // actions ("hold it"/"hold this", "come home"/"come here") were dropped from voice; the router
+    // still understands them as typed text. "stop" stays short on purpose, with longer backups.
     ADD("stop");
+    ADD("stop robot");
+    ADD("robot stop");
+    ADD("freeze robot");
     ADD("go home");
     ADD("drop it");
     ADD("give it to me");
@@ -79,14 +86,12 @@ int router_phrases(char out[][48], int max)
     ADD("sort by size");
     ADD("wave hello");
     ADD("take a bow");
-    ADD("dance");
     ADD("dance robot");
     ADD("robot dance");
     ADD("ring the bell");
-    ADD("open hand");
-    ADD("close hand");
-    ADD("hold this");
-    ADD("hold it");
+    ADD("open your hand");
+    ADD("close your hand");
+    ADD("hold this for me");
     ADD("let go");
     ADD("a little left");
     ADD("a little right");
@@ -94,19 +99,13 @@ int router_phrases(char out[][48], int max)
     ADD("a little down");
     ADD("build a tower");
     // more ways to say the same things (each must route through router_exec above)
-    ADD("freeze");
-    ADD("halt");
-    ADD("wait");
-    ADD("come home");
     ADD("go back");
-    ADD("rest");
     ADD("put it down");
     ADD("hand it over");
     ADD("bring it here");
     ADD("come here");
     ADD("clean up");
     ADD("tidy up");
-    ADD("hello");
     ADD("say hello");
     ADD("hello robot");
     ADD("goodbye");
@@ -114,16 +113,8 @@ int router_phrases(char out[][48], int max)
     ADD("bow down");
     ADD("lets dance");
     ADD("party time");
-    ADD("boogie");
-    ADD("ring it");
-    ADD("open");
-    ADD("open up");
-    ADD("close");
     ADD("grab it");
-    ADD("squeeze");
-    ADD("release");
     ADD("let it go");
-    ADD("help me");
     ADD("third hand");
     ADD("stack them");
     ADD("move left");

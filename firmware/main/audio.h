@@ -11,6 +11,11 @@
 
 bool audio_init(i2c_master_bus_handle_t bus);   // codecs + speaker amp
 esp_codec_dev_handle_t audio_in(void);           // mic device (NULL if init failed)
+// Mic frames come out interleaved in this AFE layout: "MR" (mic1 + speaker reference) or,
+// with XARM_MIC_DUAL, "MRM" (mic1, reference, mic2). TDM slot order is MIC1, MIC3(ref), MIC2, MIC4.
+const char *audio_in_format(void);
+int audio_in_channels(void);
+void audio_mic_gain(float db);                    // analog gain on the mic(s) only, never the reference
 bool audio_play(const int16_t *pcm, size_t samples);   // mono 16 kHz, blocking
 void audio_volume(int pct);
 int64_t audio_play_end_us(void);                  // esp_timer time the speaker goes quiet (voice ignores itself until then)

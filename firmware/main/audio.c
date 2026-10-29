@@ -76,22 +76,47 @@ bool audio_init(i2c_master_bus_handle_t bus)
     if (!s_out || esp_codec_dev_open(s_out, &ofs) != ESP_CODEC_DEV_OK) { ESP_LOGW(TAG, "speaker init failed"); s_out = NULL; }
     else { esp_codec_dev_set_out_vol(s_out, CONFIG_XARM_VOLUME); pa_enable(bus); }
 
-    // mics: ES7210, channel 0 only
+    // mics: ES7210. TDM slot 0 = MIC1, slot 1 = MIC3 = speaker loopback (the AEC reference, same as
+    // xiaozhi's AUDIO_INPUT_REFERENCE on this board), slot 2 = MIC2 (second mic, opt-in).
     audio_codec_i2c_cfg_t in_i2c = { .port = I2C_NUM_0, .addr = ES7210_CODEC_DEFAULT_ADDR, .bus_handle = bus };
     es7210_codec_cfg_t es7210 = { .ctrl_if = audio_codec_new_i2c_ctrl(&in_i2c),
         .mic_selected = ES7210_SEL_MIC1 | ES7210_SEL_MIC2 | ES7210_SEL_MIC3 | ES7210_SEL_MIC4 };
     esp_codec_dev_cfg_t ic = { .dev_type = ESP_CODEC_DEV_TYPE_IN, .codec_if = es7210_codec_new(&es7210), .data_if = data_if };
     s_in = esp_codec_dev_new(&ic);
     esp_codec_dev_sample_info_t ifs = { .bits_per_sample = 16, .channel = 4,
-        .channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0), .sample_rate = AUDIO_RATE };
+        .channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0) | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1)
+#if CONFIG_XARM_MIC_DUAL
+                      | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(2)
+#endif
+        , .sample_rate = AUDIO_RATE };
     if (!s_in || esp_codec_dev_open(s_in, &ifs) != ESP_CODEC_DEV_OK) { ESP_LOGW(TAG, "mic init failed"); s_in = NULL; }
-    else esp_codec_dev_set_in_channel_gain(s_in, ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0), CONFIG_XARM_MIC_GAIN_DB);
+    else audio_mic_gain(CONFIG_XARM_MIC_GAIN_DB);
 
     ESP_LOGI(TAG, "speaker %s, mic %s", s_out ? "ok" : "off", s_in ? "ok" : "off");
     return s_in || s_out;
 }
 
 esp_codec_dev_handle_t audio_in(void) { return s_in; }
+
+#if CONFIG_XARM_MIC_DUAL
+const char *audio_in_format(void) { return "MRM"; }
+int audio_in_channels(void) { return 3; }
+#else
+const char *audio_in_format(void) { return "MR"; }
+int audio_in_channels(void) { return 2; }
+#endif
+
+// ES7210 gain masks use physical mic numbers (MIC1 = 0, MIC2 = 1), not TDM slots.
+// The reference (MIC3) keeps its default gain so loud bells don't clip the AEC's copy of them.
+void audio_mic_gain(float db)
+{
+    if (!s_in) return;
+    uint16_t m = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0);
+#if CONFIG_XARM_MIC_DUAL
+    m |= ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1);
+#endif
+    esp_codec_dev_set_in_channel_gain(s_in, m, db);
+}
 
 static volatile int64_t s_play_end_us;
 int64_t audio_play_end_us(void) { return s_play_end_us; }
