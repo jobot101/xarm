@@ -4,7 +4,7 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [main, "dev/**"]     # dev/** = compile check only: no release, no Pages, the board never sees it
     paths-ignore: [cam/hiwonder/**, .github/workflows/fetch-cam.yml]
   workflow_dispatch:
 
@@ -86,11 +86,18 @@ jobs:
           B = "firmware/build"
           fa = json.load(open(f"{B}/flasher_args.json"))
           rows = sorted((int(off, 16), os.path.basename(p)) for off, p in fa["flash_files"].items())
+          # "model" partition offset + size straight from partitions.csv
+          MODEL = next(l.split(",") for l in open("firmware/partitions.csv") if l.startswith("model"))
+          sz = lambda x: int(x.strip()[:-1]) << 20 if x.strip().endswith("M") else int(x, 16)
+          MODEL_OFF, MODEL_SIZE = int(MODEL[3], 16), sz(MODEL[4])
+          BANK_OFF, BANK_MAX = 0x380000, 0x340000                 # FX_BANK_OFF / FX_BANK_MAX in fx.h
+          assert BANK_OFF + BANK_MAX <= MODEL_SIZE, "sound bank runs past the model partition"
           if not any(n == "srmodels.bin" for _, n in rows):       # esp-sr may flash it via its own target
-              rows.append((0x810000, "srmodels.bin"))            # = "model" offset in partitions.csv
-          rows.append((0x810000 + 0x2C0000, "sounds.bin"))       # "model" + FX_BANK_OFF (fx.h)
+              rows.append((MODEL_OFF, "srmodels.bin"))
+          rows.append((MODEL_OFF + BANK_OFF, "sounds.bin"))
           sr = os.path.getsize("release/srmodels.bin")
-          assert sr <= 0x2C0000, f"srmodels.bin ({sr} bytes) now runs into the sound bank: raise FX_BANK_OFF in fx.h + here"
+          print(f"srmodels.bin {sr} bytes of {BANK_OFF}")
+          assert sr <= BANK_OFF, f"srmodels.bin ({sr} bytes) now runs into the sound bank: raise FX_BANK_OFF in fx.h + here"
           rows.sort()
           import hashlib
           snd = open("release/sounds.bin", "rb").read()
@@ -110,11 +117,13 @@ jobs:
           ls -la release
 
       - name: replace previous "latest"
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete latest --cleanup-tag -y || true
 
       - name: publish "latest" release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
@@ -179,6 +188,7 @@ jobs:
   # phone flasher page with both boards' files baked in -> https://jobot101.github.io/xarm/
   pages:
     needs: [firmware, camera]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

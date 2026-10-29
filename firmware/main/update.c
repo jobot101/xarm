@@ -122,7 +122,8 @@ static bool sync_sounds(void)
     strlcpy(s_snd_tried, s_snd, sizeof s_snd_tried);
     s_snd_tried_at = now;
     const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "model");
-    if (!p || p->size < FX_BANK_OFF + FX_BANK_MAX) { snd_status("no room in flash for the voice"); return false; }
+    if (!p || p->size < fx_bank_off(p->size) + FX_BANK_MAX) { snd_status("no room in flash for the voice"); return false; }
+    const uint32_t off = fx_bank_off(p->size);
 
     char url[160];
     snprintf(url, sizeof url, "%ssounds.bin?v=%s", CONFIG_XARM_UPDATE_URL, s_snd);
@@ -143,15 +144,15 @@ static bool sync_sounds(void)
         while (got < s_snd_size && (r = esp_http_client_read(h, (char *)buf, 4096)) > 0) {
             if (got + r > s_snd_size) r = s_snd_size - got;
             while ((uint32_t)(got + r) > erased) {
-                if (esp_partition_erase_range(p, FX_BANK_OFF + erased, 0x10000) != ESP_OK) { r = -1; break; }
+                if (esp_partition_erase_range(p, off + erased, 0x10000) != ESP_OK) { r = -1; break; }
                 erased += 0x10000;
             }
-            if (r < 0 || esp_partition_write(p, FX_BANK_OFF + got, buf, r) != ESP_OK) break;
+            if (r < 0 || esp_partition_write(p, off + got, buf, r) != ESP_OK) break;
             got += r;
             if ((got & 0x3FFFF) < 4096) snd_status("downloading Muffin's voice… %d%%", (int)(got * 100LL / s_snd_size));
         }
         char magic[4] = {0};
-        esp_partition_read(p, FX_BANK_OFF, magic, 4);
+        esp_partition_read(p, off, magic, 4);
         ok = got == s_snd_size && !memcmp(magic, "SNB2", 4);
         fx_bank_reload();
     }

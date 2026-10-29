@@ -55,7 +55,7 @@ Use the 2×9 header on the audio board.
 
 GitHub Actions builds every push. The files are on the **latest** release: https://github.com/jobot101/xarm/releases/tag/latest
 
-- **First flash:** plug the board into the phone with a USB-C data cable. Open **https://jobot101.github.io/xarm/** in Chrome, keep **Full install** selected, and tap **Flash**. That page already has the latest build's files. If it can't find the board, hold BOOT, tap RESET, release BOOT, and try again. (Espressif's own esptool-js page can't see this board from Android, because its WebUSB mode only works with CH340 boards.)
+- **First flash:** plug the board into the phone with a USB-C data cable. Open **https://jobot101.github.io/xarm/** in Chrome, pick **Full install, erase** the very first time (after that, **Full install, keep settings** whenever a build says it needs one), and tap **Flash**. That page already has the latest build's files. If it can't find the board, hold BOOT, tap RESET, release BOOT, and try again. (Espressif's own esptool-js page can't see this board from Android, because its WebUSB mode only works with CH340 boards.)
 - **Every flash after that:** open http://muffin, go to **Firmware**, pick `xarm-voice.bin`, and upload. It goes over WiFi with no cable. If a bad build won't start, the board rolls back on its own.
 
 ## First run
@@ -71,7 +71,7 @@ GitHub Actions builds every push. The files are on the **latest** release: https
 
 ## Use it
 
-Say **"pick up the red"**, "grab the blue", "drop it", "go home", "open hand", "close hand", or **"stop"**. There's no wake word, and "stop" works at any time. The web app sends the same commands and has a big STOP button.
+Say **"pick up the red"**, "grab the blue", "drop it", "go home", "open hand", "close hand", or **"stop"**. Say **"Hey Muffin"** first: the ring glows blue while Muffin is listening (about 8 s, longer while you're chatting with it), and tapping anything in the app opens its ears too. **"Stop" works at any time**, no "Hey Muffin" needed. Workshop → Voice can switch "Hey Muffin" off. The web app sends the same commands and has a big STOP button.
 
 ## API
 

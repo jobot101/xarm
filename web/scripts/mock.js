@@ -10,7 +10,8 @@ const st = {
     { name: 'blue', seen: false, x: 0, y: 0, w: 0, h: 0 } ] },
   calib: [{ px: 30, py: 30 }, { px: 210, py: 30 }, { px: 120, py: 200 }],
   voice: { ok: true, last: 'pick up the red', status: 'listening — 24 phrases', level: 12, prob: 0, gain: 24, thresh: 22,
-    bank: false, bank_status: 'downloading Muffin\'s voice… 40%', heard: [{ p: 'dance robot', prob: 41, why: 'ok', ago: 3 }, { p: 'go home', prob: 27, why: 'Muffin was talking', ago: 12 }] },
+    wake: true, awake: false, vad: 'VADNet', dual: false,
+    bank: false, bank_status: 'downloading Muffin\'s voice… 40%', heard: [{ p: 'dance robot', prob: 41, why: 'ok', ago: 3 }, { p: 'go home', prob: 27, why: 'Muffin was talking', ago: 12 }, { p: 'wave hello', prob: 44, why: 'asleep - say Hey Muffin', ago: 20 }] },
   moves: { recording: false, frames: 0, list: [{ i: 0, name: 'robot' }] },
   kids: { cur: -1, list: [{ i: 0, name: 'sam', emoji: '🦖', jewel: 1, visits: 3, best_bells: 5, best_tower: 4 }] },
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
@@ -60,7 +61,7 @@ createServer((req, res) => {
       case 'GET /api/phrases': return send(['stop', 'go home', 'dance robot', 'wave hello', 'thank you', 'move left', 'turn right'])
       case 'GET /api/i2c': return send({ found: '0x18 0x20 0x40 0x51 0x52', cam: true })
       case 'POST /api/limits': st.arm.lim[body.i] = [body.min, body.max]; return send({ ok: true, msg: 'limits saved' })
-      case 'POST /api/voice': if (body.gain >= 0) st.voice.gain = body.gain; if (body.thresh >= 5) st.voice.thresh = body.thresh; return send({ ok: true, msg: 'voice tuned' })
+      case 'POST /api/voice': if (body.gain >= 0) st.voice.gain = body.gain; if (body.thresh >= 5) st.voice.thresh = body.thresh; if (body.wake === 0 || body.wake === 1) st.voice.wake = !!body.wake; if (body.dual === 0 || body.dual === 1) st.voice.dual = !!body.dual; return send({ ok: true, msg: body.dual !== undefined ? 'restarting' : 'voice tuned' })
       case 'POST /api/fx': return send({ ok: true, msg: 'ok' })
       case 'POST /api/kids': {
         const k = st.kids

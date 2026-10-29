@@ -29,6 +29,8 @@ export default function Play({ s, online, run }) {
         <span className="ctl-detail">{online ? s?.detail : 'no connection to the arm'}</span>
         {kid && <span className="ctl-kid">{kid.emoji} {cap(kid.name)}</span>}
       </div>
+      {online && s?.voice?.wake && <p className={`ears${s.voice.awake ? ' on' : ''}`}>
+        {s.voice.awake ? '👂 Muffin is listening…' : '💬 Say “Hey Muffin!” to talk to me'}</p>}
 
       <Drive online={online} busy={busy} run={run} />
 

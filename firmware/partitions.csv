@@ -1,9 +1,12 @@
-# 16 MB flash. Two app slots for OTA from the phone. "store" holds recorded moves. "model" holds ESP-SR speech models.
+# 16 MB flash. Two app slots for OTA from the phone. "model" holds ESP-SR speech models (srmodels.bin,
+# MultiNet7 + VADNet, up to 3.5 MB) and then Muffin's sound bank at FX_BANK_OFF (fx.h). "store" holds
+# recorded moves; it stays at 0xE10000 so a keep-settings install doesn't lose them.
+# Oct 2026: app slots 4M -> 3M (app is ~2.4 MB), model 6M -> 7M to make room for VADNet.
 # name,   type, subtype, offset,   size
 nvs,      data, nvs,     0x9000,   0x4000,
 otadata,  data, ota,     0xd000,   0x2000,
 phy_init, data, phy,     0xf000,   0x1000,
-ota_0,    app,  ota_0,   0x10000,  4M,
-ota_1,    app,  ota_1,   0x410000, 4M,
-model,    data, spiffs,  0x810000, 6M,
+ota_0,    app,  ota_0,   0x10000,  3M,
+ota_1,    app,  ota_1,   0x310000, 3M,
+model,    data, spiffs,  0x610000, 7M,
 store,    data, nvs,     0xe10000, 0x40000,

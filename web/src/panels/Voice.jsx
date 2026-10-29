@@ -12,11 +12,27 @@ export default function Voice({ s, run }) {
   const showList = async () => { if (list) return setList(null); try { setList(await api.phrases()) } catch { setList([]) } }
   const lv = v.level ?? 0
   const save = (g, t) => run(api.voice({ gain: g, thresh: t }))
+  const setWake = on => run(api.voice({ wake: on ? 1 : 0 }))
+  const setDual = on => {
+    if (confirm(`${on ? 'Use both mics' : 'Go back to one mic'}? Muffin restarts to switch (about 15 s).`)) run(api.voice({ dual: on ? 1 : 0 }))
+  }
 
   return (
     <section className="card">
       <h2>Voice</h2>
       <p><b>{v.ok ? '● ' : '○ '}</b>{v.status || 'no voice info from the board'}</p>
+      {v.vad !== undefined && <p className="hint">
+        Voice detector: <b>{v.vad}</b>{v.vad === 'WebRTC' && ' — the newer VADNet detector needs a Full install (keep settings) from the phone flasher'}
+        {' · '}{v.dual ? 'both mics' : 'one mic'}
+        {v.wake && <>{' · '}<b className={v.awake ? 'ok-line' : ''}>{v.awake ? 'listening now' : 'waiting for “Hey Muffin”'}</b></>}
+      </p>}
+      {v.wake !== undefined && <div className="toggles">
+        <label className="toggle"><input type="checkbox" checked={!!v.wake} onChange={e => setWake(e.target.checked)} />
+          <span><b>Say “Hey Muffin” first</b><small>“Stop” always works. After “Hey Muffin” (or a tap in the app) Muffin listens
+            ~8 s, keeps listening while you talk to it, and the ring glows blue while it's listening.</small></span></label>
+        <label className="toggle"><input type="checkbox" checked={!!v.dual} onChange={e => setDual(e.target.checked)} />
+          <span><b>Use both mics</b><small>Steers toward whoever's talking. Try it if Muffin misses you in a noisy room. Restarts Muffin.</small></span></label>
+      </div>}
       {v.bank_status !== undefined && <p className={v.bank ? 'hint' : 'warn-line'}>
         Muffin's voice: <b>{v.bank ? 'ready' : 'not loaded'}</b> — {v.bank_status}
         {!v.bank && ' (needs home WiFi with internet; it downloads by itself)'}</p>}
@@ -30,13 +46,14 @@ export default function Voice({ s, run }) {
         <h3>What Muffin heard <small>newest first · % = how sure</small></h3>
         <ul className="heard">
           {v.heard.map((h, i) => (
-            <li key={i} className={h.why === 'ok' || !/ignored|no voice|talking/.test(h.why) ? 'ok' : 'skip'}>
+            <li key={i} className={h.why === 'ok' || !/ignored|no voice|talking|asleep/.test(h.why) ? 'ok' : 'skip'}>
               <b>{h.p}</b> <span className="pc">{h.prob}%</span> <small>{h.why} · {h.ago}s ago</small>
             </li>))}
         </ul>
         <p className="hint">Said something and it's not here at all? Raise the gain or lower the threshold. Here but
           “no voice heard” or “Muffin was talking”? It caught you but wasn't sure — speak a bit louder or wait for it
-          to finish talking. Here as the wrong phrase? Raise the threshold a little.</p>
+          to finish talking. “asleep”? It heard you fine but nobody said “Hey Muffin” first. Here as the wrong phrase?
+          Raise the threshold a little.</p>
       </>}
       {gain !== null && <>
         <label className="vslide">Mic gain <b>{gain} dB</b>
@@ -50,7 +67,7 @@ export default function Voice({ s, run }) {
       </>}
       <div className="btns"><button onClick={showList}>{list ? 'Hide' : 'Things you can say'}</button></div>
       {list && <ul className="phrases">{list.map(p => <li key={p}>{p}</li>)}</ul>}
-      <p className="hint">Good start: gain 24–30 dB, threshold 18–25%. Try “hey muffin”, “dance robot”, “wave hello”, “go home”, “stop”. Speak plainly, about 1 m away, after Muffin finishes talking.</p>
+      <p className="hint">Good start: gain 24–30 dB, threshold 18–25%. Try “hey muffin”, then “dance robot”, “wave hello”, “go home”, “stop”. Speak plainly, about 1 m away, after Muffin finishes talking.</p>
     </section>
   )
 }

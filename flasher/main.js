@@ -68,7 +68,9 @@ async function flash() {
   if (busy) return
   busy = true; render(); monBtn.disabled = true
   const B = BOARDS[board]
-  const full = board === 'cam' || document.querySelector('input[name=mode]:checked').value === 'full'
+  const mode = document.querySelector('input[name=mode]:checked').value
+  const full = board === 'cam' || mode !== 'app'           // write every part
+  const erase = board === 'cam' || mode === 'full'          // and wipe the chip first ('keep' leaves nvs + store alone)
   let transport
   try {
     terminal.clean(); progress(0)
@@ -107,10 +109,10 @@ async function flash() {
     const total = files.reduce((n, f) => n + f.data.length, 0)
     const before = files.map((_, i) => files.slice(0, i).reduce((n, f) => n + f.data.length, 0))
 
-    status(full ? 'Erasing + writing (about 1–2 min)…' : 'Writing app…')
+    status(erase ? 'Erasing + writing (about 1–2 min)…' : full ? 'Writing everything (about 1–2 min)…' : 'Writing app…')
     await loader.writeFlash({
       fileArray: files, flashMode: 'keep', flashFreq: 'keep', flashSize: 'keep',
-      eraseAll: full, compress: true,
+      eraseAll: erase, compress: true,
       reportProgress: (i, written, size) => progress((before[i] + (written / size) * files[i].data.length) / total),
     })
     progress(1)

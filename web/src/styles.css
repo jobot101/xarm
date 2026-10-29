@@ -230,3 +230,12 @@ input, select, textarea { font-size: 16px; }                                    
 .heard small { display: block; color: var(--dim); }
 .quiz-answers { margin-top: 8px; } .quiz-answers button { flex: 1; font-weight: 700; }
 .warn-line { color: var(--bad); font-size: 14px; }
+/* Voice panel: "Hey Muffin" + both-mics switches */
+.ok-line { color: var(--ok); }
+.toggles { display: grid; gap: 8px; margin: 10px 0; }
+.toggle { display: flex; gap: 10px; align-items: flex-start; padding: 10px; background: var(--card-2); border-radius: 10px; }
+.toggle input { width: 22px; height: 22px; margin: 2px 0 0; flex: none; accent-color: var(--brass); }
+.toggle small { display: block; color: var(--dim); font-size: 13px; margin-top: 2px; }
+/* Play: tells kids how to start talking, lights up while Muffin's ears are open */
+.ears { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--card-2); color: var(--dim); font-size: 15px; text-align: center; }
+.ears.on { background: var(--sapphire); color: #fff; font-weight: 600; }

@@ -20,8 +20,10 @@
 
     <section class="card">
       <div id="modes">
-      <label class="mode"><input type="radio" name="mode" value="full" checked />
-        <span><b>Full install</b><small>first time, or after changing partitions. Erases the board.</small></span></label>
+      <label class="mode"><input type="radio" name="mode" value="keep" checked />
+        <span><b>Full install, keep settings</b><small>everything incl. speech models + Muffin's voice. Keeps WiFi, tuning, kids + recorded moves.</small></span></label>
+      <label class="mode"><input type="radio" name="mode" value="full" />
+        <span><b>Full install, erase</b><small>first time, or if the board acts strange. Wipes everything.</small></span></label>
       <label class="mode"><input type="radio" name="mode" value="app" />
         <span><b>App only</b><small>xarm-voice.bin at 0x10000. Keeps settings + calibration.</small></span></label>
       </div>

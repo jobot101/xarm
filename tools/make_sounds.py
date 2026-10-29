@@ -37,8 +37,8 @@ VOICE = "en_US-ryan-high"          # Piper voice — see --preview for others
 VOICE_SPEED = 0.9                  # Piper length_scale: < 1 = brisker
 ROBOT_TINT = 0.10                  # 0 = plain human voice; 0.1 = a faint metallic shimmer
 BUDGET = 0x340000                  # bytes: the bank lives in the "model" partition after the speech models
-                                   # (FX_BANK_OFF 0x2C0000 in fx.h, to the end of the 6 MB partition) and
-                                   # updates over WiFi on its own
+                                   # (FX_BANK_OFF in fx.h) and updates over WiFi on its own. = FX_BANK_MAX:
+                                   # sized to fit the old 6 MB "model" layout too, so OTA'd boards keep talking
 COLORS = ["red", "yellow", "green", "blue", "purple"]          # camera color order (cam/xarm_color/colors.h)
 NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
 

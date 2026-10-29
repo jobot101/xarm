@@ -7,8 +7,20 @@
 #include <stdbool.h>
 #include "sounds_gen.h"
 
-#define FX_BANK_OFF 0x2C0000      // inside "model", after the speech models (srmodels.bin ~2.76 MB; CI checks it fits)
-#define FX_BANK_MAX 0x340000      // to the end of the 6 MB partition
+#include <stdint.h>
+
+// The bank sits inside "model", after the speech models. Two layouts exist in the field:
+//   7 MB "model" (Oct 2026 on): srmodels.bin (MultiNet7 + VADNet, ~3.05 MB) gets 3.5 MB, bank at 0x380000
+//   6 MB "model" (before):      srmodels.bin (MultiNet7 only, ~2.76 MB), bank at 0x2C0000
+// The app reads the partition size and picks, so an OTA'd app on an old board keeps talking until the
+// next USB install moves everything. CI checks srmodels.bin fits under FX_BANK_OFF.
+#define FX_BANK_OFF     0x380000
+#define FX_BANK_OFF_OLD 0x2C0000
+#define FX_BANK_MAX     0x340000  // = BUDGET in tools/make_sounds.py; fits both layouts
+static inline uint32_t fx_bank_off(uint32_t model_size)
+{
+    return model_size >= FX_BANK_OFF + FX_BANK_MAX ? FX_BANK_OFF : FX_BANK_OFF_OLD;
+}
 
 typedef enum { FX_BOOT, FX_HEARD, FX_ERROR, FX_BELL, FX_CHEER,
                FX_UPDATED } fx_event_t;   // FX_UPDATED: first boot of a new firmware -> fanfare + "Ready to rumble!"
@@ -33,4 +45,5 @@ void fx_bank_release(void);                                     // before rewrit
 void fx_bank_reload(void);                                      // after
 void fx_quiet(int minutes);                                     // "be quiet": no talking for a while (0 = talk again)
 bool fx_is_quiet(void);
-bool fx_speaking(void);                                         // something is playing or queued
+bool fx_speaking(void);
+void fx_listening(bool on);                                     // "Hey Muffin" window open: ring glows sapphire when idle                                         // something is playing or queued

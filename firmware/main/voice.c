@@ -4,8 +4,11 @@
 //   ES7210 (mic1 + speaker reference [+ mic2]) -> AFE (AEC, BSS, AGC, VAD) -> MultiNet7 -> router
 //
 // AEC subtracts the board's own bells/organ/voice, so "stop" works while a trick is playing.
-// MultiNet runs continuously — no wake word — so "stop" is instant. A command only counts if the
-// VAD heard real speech in the last XARM_VOICE_VAD_HOLD_MS, which kills most servo-noise triggers.
+// MultiNet runs continuously, so "stop" is always instant. Everything else waits for "Hey Muffin": that
+// opens an ~8 s listening window (ring glows sapphire), each command heard keeps it open, and it stays
+// open while Muffin is talking plus a few seconds after, so a conversation flows without repeating the
+// name. A command only counts if the VAD (VADNet, a trained model; WebRTC if the model isn't in flash)
+// heard real speech in the last XARM_VOICE_VAD_HOLD_MS, which kills most servo-noise triggers.
 #include "voice.h"
 #include <math.h>
 #include <stdio.h>
@@ -22,6 +25,7 @@
 #include "esp_mn_iface.h"
 #include "esp_mn_models.h"
 #include "esp_mn_speech_commands.h"
+#include "esp_vadn_models.h"
 #include "model_path.h"
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
@@ -44,6 +48,15 @@ static float s_peak;
 static volatile float s_prob;         // confidence of the last recognized phrase
 static volatile int64_t s_speech_us;  // last time the VAD said "speech"
 static int s_gain = CONFIG_XARM_MIC_GAIN_DB, s_thresh = CONFIG_XARM_VOICE_THRESHOLD;
+static bool s_wake = true;            // "Hey Muffin" first (stop words always pass)
+static volatile int64_t s_open_until; // listening window end (esp_timer us)
+static volatile int64_t s_engaged;    // last time anyone talked to Muffin (voice or app)
+static char s_vad[12] = "—";          // which VAD the AFE ended up with
+
+#define WAKE_WINDOW_US  (8 * 1000000LL)    // after "Hey Muffin" or any command heard
+#define FOLLOW_US       (6 * 1000000LL)    // after Muffin stops talking, in an active conversation
+#define SESSION_US      (60 * 1000000LL)   // "active conversation" = someone engaged within this
+
 
 // runtime tuning, saved in NVS so the app can adjust without a rebuild
 static void tune_load(void)
@@ -53,6 +66,8 @@ static void tune_load(void)
     int32_t v;
     if (nvs_get_i32(h, "mic_gain", &v) == ESP_OK) s_gain = v;
     if (nvs_get_i32(h, "mn_thresh", &v) == ESP_OK) s_thresh = v;
+    uint8_t w;
+    if (nvs_get_u8(h, "wake", &w) == ESP_OK) s_wake = w;
     nvs_close(h);
 }
 
@@ -62,15 +77,17 @@ static void tune_apply(void)
     if (s_mn && s_mnd) s_mn->set_det_threshold(s_mnd, s_thresh / 100.0f);
 }
 
-void voice_tune(int gain_db, int thresh_pct)
+void voice_tune(int gain_db, int thresh_pct, int wake)
 {
     if (gain_db >= 0 && gain_db <= 42) s_gain = gain_db;
     if (thresh_pct >= 5 && thresh_pct <= 90) s_thresh = thresh_pct;
+    if (wake == 0 || wake == 1) s_wake = wake;
     tune_apply();
     nvs_handle_t h;
     if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) {
         nvs_set_i32(h, "mic_gain", s_gain);
         nvs_set_i32(h, "mn_thresh", s_thresh);
+        nvs_set_u8(h, "wake", s_wake);
         nvs_commit(h);
         nvs_close(h);
     }
@@ -92,6 +109,23 @@ static void load_commands(void)
 
 // stop words stay live while the speaker plays; everything else waits for quiet
 static bool is_stop(const char *p) { return strstr(p, "stop") || strstr(p, "freeze"); }
+// "hey muffin", "hi muffin", "hello muffin" — but not "stop muffin"
+static bool is_wake(const char *p) { return strstr(p, "muffin") && !is_stop(p); }
+
+// The window: open after a wake phrase or command, and in a live conversation also while Muffin talks
+// and a few seconds after (so "yes please" to Muffin's question works without the name).
+static bool window_open(int64_t now)
+{
+    if (now < s_open_until) return true;
+    return now - s_engaged < SESSION_US && now < audio_play_end_us() + FOLLOW_US;
+}
+
+void voice_engage(void)
+{
+    int64_t now = esp_timer_get_time();
+    s_engaged = now;
+    if (s_open_until < now + WAKE_WINDOW_US) s_open_until = now + WAKE_WINDOW_US;
+}
 
 // the last few things it matched, kept or not, and why — shown in the app's Voice panel for tuning
 #define NOTES 10
@@ -161,6 +195,7 @@ static void detect_task(void *arg)
         afe_fetch_result_t *r = s_afe->fetch_with_delay(s_afed, portMAX_DELAY);
         if (!r || r->ret_value == ESP_FAIL || !r->data) continue;
         if (r->vad_state == VAD_SPEECH) s_speech_us = esp_timer_get_time();
+        fx_listening(s_wake && window_open(esp_timer_get_time()));
         int n = r->data_size / (int)sizeof(int16_t);
 
 
@@ -188,10 +223,12 @@ static void detect_task(void *arg)
                     const char *why = NULL;
                     if (!speech && pr < (th + 0.30f > 0.6f ? th + 0.30f : 0.6f)) why = "no voice heard";
                     else if (self && !is_stop(p) && pr < (th + 0.15f > 0.45f ? th + 0.15f : 0.45f)) why = "Muffin was talking";
+                    else if (s_wake && !is_stop(p) && !is_wake(p) && !window_open(now)) why = "asleep - say Hey Muffin";
                     if (why) {
                         note(p, pr, why);
                         ESP_LOGI(TAG, "ignored \"%s\" (p=%.2f): %s", p, pr, why);
                     } else {
+                        if (!is_stop(p)) voice_engage();      // "hey muffin" opens the window, commands keep it open
                         strlcpy(s_last, p, sizeof s_last);
                         s_prob = pr;
                         fx_event(FX_HEARD);
@@ -216,13 +253,21 @@ static bool afe_start(srmodel_list_t *models)
     if (!c) return false;
     c->aec_init = true;                  // reference channel is always fed
     c->ns_init = false;                  // Espressif's advice for ASR: NS smears phonemes, AGC+AEC do the work
-    c->vad_init = true;                  // WebRTC VAD (no vadnet in the model partition)
+    c->vad_init = true;
+    // VADNet (trained on ~15k h of speech) tells voices from servo whine and bells far better than WebRTC.
+    // afe_config_init picks it when it's in srmodels.bin (CONFIG_SR_VADN_VADNET1_MEDIUM); a board whose
+    // flash still has the old speech models gets WebRTC. Not assigned here: the config owns that string.
+    if (!c->vad_model_name && esp_srmodel_filter(models, ESP_VADN_PREFIX, NULL))
+        ESP_LOGW(TAG, "VADNet is in flash but the AFE didn't pick it");
     c->vad_mode = VAD_MODE_1;            // lenient: the VAD only has to notice a voice, the matcher decides
+    c->vad_min_speech_ms = 96;           // short commands ("stop") still register
+    c->vad_min_noise_ms = 600;
     c->wakenet_init = false;
     c->agc_init = true;
     c->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
     s_afe = esp_afe_handle_from_config(c);
     s_afed = s_afe ? s_afe->create_from_config(c) : NULL;
+    strlcpy(s_vad, c->vad_model_name ? "VADNet" : "WebRTC", sizeof s_vad);
     afe_config_free(c);
     if (!s_afed) return false;
     if (s_afe->get_feed_channel_num(s_afed) != audio_in_channels())
@@ -250,7 +295,8 @@ void voice_start(i2c_master_bus_handle_t bus)
     tune_apply();
     load_commands();
     s_ok = true;
-    ESP_LOGI(TAG, "listening (%s), gain %d dB, threshold %d%%", name, s_gain, s_thresh);
+    ESP_LOGI(TAG, "listening (%s, %s VAD, %s), gain %d dB, threshold %d%%, %s", name, s_vad,
+             audio_mic_dual() ? "both mics" : "one mic", s_gain, s_thresh, s_wake ? "Hey Muffin first" : "always on");
     xTaskCreatePinnedToCore(feed_task, "voice_feed", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(detect_task, "voice", 8192, NULL, 5, NULL, 1);
 }
@@ -262,4 +308,10 @@ void voice_diag(char *status, size_t ns, int *level, float *prob, int *gain, int
 {
     strlcpy(status, s_status, ns);
     *level = s_level; *prob = s_prob; *gain = s_gain; *thresh = s_thresh;
+}
+void voice_diag2(bool *wake, bool *open, const char **vad)
+{
+    *wake = s_wake;
+    *open = !s_wake || window_open(esp_timer_get_time());
+    *vad = s_vad;
 }

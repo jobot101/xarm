@@ -6,6 +6,7 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "esp_partition.h"
+#include "voice.h"
 #include "sounds_gen.h"
 #include "chat.h"
 #include "sdkconfig.h"
@@ -115,8 +116,8 @@ static void bank_attach(void)
 {
     const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "model");
     const void *m;
-    if (!p || p->size < FX_BANK_OFF + FX_BANK_MAX ||
-        esp_partition_mmap(p, FX_BANK_OFF, FX_BANK_MAX, ESP_PARTITION_MMAP_DATA, &m, &s_map) != ESP_OK) {
+    if (!p || p->size < fx_bank_off(p->size) + FX_BANK_MAX ||
+        esp_partition_mmap(p, fx_bank_off(p->size), FX_BANK_MAX, ESP_PARTITION_MMAP_DATA, &m, &s_map) != ESP_OK) {
         ESP_LOGE(TAG, "can't map the sound bank"); return;
     }
     s_mapped = true;
@@ -229,7 +230,7 @@ typedef enum { L_BOOT, L_IDLE, L_THINK, L_WORK, L_HOLD, L_WARN, L_STOP, L_UPDATE
 static led_strip_handle_t s_led;
 static volatile led_mode_t s_mode = L_BOOT;
 static volatile int s_flash, s_show_t, s_show = -1;
-static volatile bool s_working;
+static volatile bool s_working, s_listen;
 
 static void px(int i, rgb_t c, float k)
 {
@@ -263,6 +264,7 @@ static void led_task(void *arg)
             if (t > 6 * LED_N + 30) s_mode = L_IDLE;
             break;
         case L_IDLE:                                         // rose window: sunlight drifting through the glass
+            if (s_listen) { fill(SAPPHIRE, 0.25f + 0.55f * breathe); break; }   // ears open after "Hey Muffin"
             for (int i = 0; i < LED_N; i++)
                 px(i, ROSE[(i + t / 90) % LED_N], 0.10f + 0.22f * (0.5f - 0.5f * cosf(t * 0.05f + i * 0.9f)));
             break;
@@ -287,7 +289,7 @@ static void led_task(void *arg)
             if (s_last_activity_us && s_chatted_after != s_last_activity_us &&
                 quiet > (int64_t)CONFIG_XARM_CHATTER_MIN * 60000000 && quiet < 20LL * 60000000) {
                 s_chatted_after = s_last_activity_us;
-                if (!fx_is_quiet()) chat_idle();         // a line, or a question it'll act on if you answer
+                if (!fx_is_quiet()) { chat_idle(); voice_engage(); }   // a line, or a question it'll act on if you answer
             }
         }
         vTaskDelay(pdMS_TO_TICKS(33));
@@ -360,3 +362,5 @@ void fx_greet(int jewel, unsigned seed)
     enqueue(SND_S_GREET, (int)(seed % 64), false);   // their own jingle, always the same one
     fx_say(SND_GREET);
 }
+
+void fx_listening(bool on) { s_listen = on; }

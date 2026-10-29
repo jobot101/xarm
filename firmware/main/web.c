@@ -21,6 +21,7 @@
 #include "router.h"
 #include "store.h"
 #include "voice.h"
+#include "audio.h"
 
 static const char *TAG = "web";
 extern const uint8_t app_start[] asm("_binary_index_html_gz_start");
@@ -173,6 +174,12 @@ static esp_err_t h_state(httpd_req_t *r)
         cJSON_AddNumberToObject(v, "prob", (int)(pr * 100));
         cJSON_AddNumberToObject(v, "gain", g);
         cJSON_AddNumberToObject(v, "thresh", th);
+        bool wk, open; const char *vad;
+        voice_diag2(&wk, &open, &vad);
+        cJSON_AddBoolToObject(v, "wake", wk);          // "Hey Muffin" first?
+        cJSON_AddBoolToObject(v, "awake", open);       // listening for commands right now
+        cJSON_AddStringToObject(v, "vad", vad);        // "VADNet" or "WebRTC" (old speech models in flash)
+        cJSON_AddBoolToObject(v, "dual", audio_mic_dual());
         char bs[72];
         update_sound_status(bs, sizeof bs);
         cJSON_AddBoolToObject(v, "bank", fx_bank_ok());
@@ -353,12 +360,19 @@ static esp_err_t h_phrases(httpd_req_t *r)
     return e;
 }
 
-// ---------- POST /api/voice {"gain":0..42,"thresh":5..90} ----------
+// ---------- POST /api/voice {"gain":0..42,"thresh":5..90,"wake":0|1,"dual":0|1} ----------
+// "dual" (second mic) changes the AFE channel layout, so it's saved and the board reboots.
 static esp_err_t h_voice(httpd_req_t *r)
 {
     cJSON *b = body(r);
-    voice_tune(num(b, "gain", -1), num(b, "thresh", -1));
+    voice_tune(num(b, "gain", -1), num(b, "thresh", -1), num(b, "wake", -1));
+    int dual = num(b, "dual", -1);
     cJSON_Delete(b);
+    if ((dual == 0 || dual == 1) && dual != audio_mic_dual()) {
+        audio_mic_dual_save(dual);
+        xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+        return reply(r, true, dual ? "both mics on — restarting" : "one mic — restarting");
+    }
     return reply(r, true, "voice tuned");
 }
 
@@ -370,6 +384,7 @@ static esp_err_t h_cmd(httpd_req_t *r)
     char msg[96];
     bool ok = cJSON_IsString(t) && router_exec(t->valuestring, msg, sizeof msg);
     if (!cJSON_IsString(t)) strcpy(msg, "need text");
+    else voice_engage();     // someone's playing from the app: Muffin listens without "Hey Muffin" for a bit
     cJSON_Delete(b);
     return reply(r, ok, msg);
 }

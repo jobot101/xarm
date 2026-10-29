@@ -1,4 +1,5 @@
-// voice.h — offline speech commands: ES7210 mic -> ESP-SR MultiNet (English) -> router.
+// voice.h — offline speech commands: ES7210 mic -> ESP-SR AFE (AEC, AGC, VADNet) -> MultiNet7 (English) -> router.
+// "stop" always works; everything else after "Hey Muffin" (switchable in Workshop -> Voice).
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
@@ -9,7 +10,9 @@ void voice_reload(void);                  // call after slot names change
 bool voice_ok(void);
 void voice_last(char *out, size_t n);     // last heard phrase
 void voice_diag(char *status, size_t ns, int *level, float *prob, int *gain, int *thresh);
-void voice_tune(int gain_db, int thresh_pct);   // live + saved; -1 leaves a value alone
+void voice_tune(int gain_db, int thresh_pct, int wake);   // live + saved; -1 leaves a value alone
+void voice_diag2(bool *wake, bool *open, const char **vad);  // "Hey Muffin" gate on, window open now, "VADNet"/"WebRTC"
+void voice_engage(void);                  // someone's talking to Muffin (app tap, Muffin asked a question): open the window
 
 typedef struct { char phrase[40]; char why[36]; int prob; int age_s; } voice_note_t;
 int voice_notes(voice_note_t *out, int max);   // recent matches, newest first, with what happened ("ok", why ignored)

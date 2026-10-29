@@ -5,6 +5,7 @@
 #include "driver/i2s_std.h"
 #include "driver/i2s_tdm.h"
 #include "esp_codec_dev_defaults.h"
+#include "nvs.h"
 #include "sdkconfig.h"
 
 #define PIN_MCLK 12
@@ -16,6 +17,32 @@
 
 static const char *TAG = "audio";
 static esp_codec_dev_handle_t s_in, s_out;
+#ifdef CONFIG_XARM_MIC_DUAL
+#define DUAL_DEFAULT true
+#else
+#define DUAL_DEFAULT false
+#endif
+static bool s_dual = DUAL_DEFAULT;             // both mics (BSS beamforming)? set from the app, applied at boot
+
+// "mic_dual" in NVS overrides the Kconfig default (Workshop -> Voice -> "Use both mics", then a reboot)
+static void dual_load(void)
+{
+    nvs_handle_t h;
+    uint8_t v;
+    if (nvs_open("xarm", NVS_READONLY, &h) != ESP_OK) return;
+    if (nvs_get_u8(h, "mic_dual", &v) == ESP_OK) s_dual = v;
+    nvs_close(h);
+}
+
+bool audio_mic_dual(void) { return s_dual; }
+void audio_mic_dual_save(bool on)
+{
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u8(h, "mic_dual", on);
+    nvs_commit(h);
+    nvs_close(h);
+}
 
 // TCA9555 port 1 bit 0 -> output high. Read-modify-write so buttons on the other pins keep working.
 static void pa_enable(i2c_master_bus_handle_t bus)
@@ -33,6 +60,7 @@ static void pa_enable(i2c_master_bus_handle_t bus)
 
 bool audio_init(i2c_master_bus_handle_t bus)
 {
+    dual_load();
     i2s_chan_handle_t tx, rx;
     i2s_chan_config_t cc = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     cc.auto_clear_after_cb = true;
@@ -85,26 +113,19 @@ bool audio_init(i2c_master_bus_handle_t bus)
     s_in = esp_codec_dev_new(&ic);
     esp_codec_dev_sample_info_t ifs = { .bits_per_sample = 16, .channel = 4,
         .channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0) | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1)
-#if CONFIG_XARM_MIC_DUAL
-                      | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(2)
-#endif
-        , .sample_rate = AUDIO_RATE };
+                      | (s_dual ? ESP_CODEC_DEV_MAKE_CHANNEL_MASK(2) : 0),
+        .sample_rate = AUDIO_RATE };
     if (!s_in || esp_codec_dev_open(s_in, &ifs) != ESP_CODEC_DEV_OK) { ESP_LOGW(TAG, "mic init failed"); s_in = NULL; }
     else audio_mic_gain(CONFIG_XARM_MIC_GAIN_DB);
 
-    ESP_LOGI(TAG, "speaker %s, mic %s", s_out ? "ok" : "off", s_in ? "ok" : "off");
+    ESP_LOGI(TAG, "speaker %s, mic %s (%s)", s_out ? "ok" : "off", s_in ? "ok" : "off", s_dual ? "both mics" : "one mic");
     return s_in || s_out;
 }
 
 esp_codec_dev_handle_t audio_in(void) { return s_in; }
 
-#if CONFIG_XARM_MIC_DUAL
-const char *audio_in_format(void) { return "MRM"; }
-int audio_in_channels(void) { return 3; }
-#else
-const char *audio_in_format(void) { return "MR"; }
-int audio_in_channels(void) { return 2; }
-#endif
+const char *audio_in_format(void) { return s_dual ? "MRM" : "MR"; }
+int audio_in_channels(void) { return s_dual ? 3 : 2; }
 
 // ES7210 gain masks use physical mic numbers (MIC1 = 0, MIC2 = 1), not TDM slots.
 // The reference (MIC3) keeps its default gain so loud bells don't clip the AEC's copy of them.
@@ -112,9 +133,7 @@ void audio_mic_gain(float db)
 {
     if (!s_in) return;
     uint16_t m = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0);
-#if CONFIG_XARM_MIC_DUAL
-    m |= ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1);
-#endif
+    if (s_dual) m |= ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1);
     esp_codec_dev_set_in_channel_gain(s_in, m, db);
 }
 

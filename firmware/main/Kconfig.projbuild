@@ -37,12 +37,12 @@ menu "xArm Voice"
         default 22
 
     config XARM_MIC_DUAL
-        bool "Use the second mic too (ES7210 MIC2, TDM slot 2) for beamforming"
+        bool "Default: use the second mic too (ES7210 MIC2, TDM slot 2) for beamforming"
         default n
         help
             Off: AFE input "MR" (mic1 + speaker reference), the layout xiaozhi uses on this board.
-            On: "MRM" adds MIC2 so the AFE can steer toward the talker. Turn on if the board's
-            second mic is populated; the boot log prints the AFE pipeline either way.
+            On: "MRM" adds MIC2 so the AFE's BSS can steer toward the talker.
+            Only the default: Workshop -> Voice -> "Use both mics" saves the choice in NVS and reboots.
 
     config XARM_VOICE_VAD_HOLD_MS
         int "Weak matches count only if the VAD heard a voice within this many ms"

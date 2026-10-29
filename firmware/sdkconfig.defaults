@@ -14,10 +14,12 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # console over the board's USB-C (native USB)
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
-# ESP-SR: English MultiNet7, no Chinese model, no wake word (commands are listened for directly)
+# ESP-SR: English MultiNet7, no Chinese model, no WakeNet ("Hey Muffin" is a MultiNet phrase that opens a listening window)
 CONFIG_SR_MN_CN_NONE=y
 CONFIG_SR_MN_EN_MULTINET7_QUANT=y
 CONFIG_SR_WN_WN9_HIESP=n
+# VADNet: a trained voice detector in front of MultiNet (WebRTC VAD is the fallback if it's missing)
+CONFIG_SR_VADN_VADNET1_MEDIUM=y
 
 # OTA: a bad build that never calls esp_ota_mark_app_valid_cancel_rollback() reverts on reboot
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
