@@ -79,6 +79,7 @@ jobs:
           cp $B/ota_data_initial.bin release/
           cp $B/xarm-voice.bin release/
           cp $B/srmodels/srmodels.bin release/
+          cp firmware/main/sounds.bin release/        # Muffin's voice + bells: flashed after the speech models
           # offsets straight from the build, so they can't drift
           python3 - <<'EOF'
           import json, os
@@ -87,13 +88,17 @@ jobs:
           rows = sorted((int(off, 16), os.path.basename(p)) for off, p in fa["flash_files"].items())
           if not any(n == "srmodels.bin" for _, n in rows):       # esp-sr may flash it via its own target
               rows.append((0x810000, "srmodels.bin"))            # = "model" offset in partitions.csv
-              rows.sort()
+          rows.append((0x810000 + 0x380000, "sounds.bin"))       # "model" + FX_BANK_OFF (fx.h)
+          rows.sort()
+          import hashlib
+          snd = open("release/sounds.bin", "rb").read()
           with open("release/OFFSETS.txt", "w") as f:
               f.write("Flash with https://espressif.github.io/esptool-js/  (add each file at its offset)\n\n")
               for off, name in rows:
                   f.write(f"0x{off:06x}  {name}\n")
           json.dump({
               "name": "xarm-voice", "version": os.environ.get("GITHUB_SHA", "dev")[:7],
+              "sounds": hashlib.sha256(snd).hexdigest()[:12], "sounds_size": len(snd),   # board syncs this over WiFi
               "new_install_prompt_erase": True,
               "builds": [{"chipFamily": "ESP32-S3",
                           "parts": [{"path": n, "offset": o} for o, n in rows]}],
@@ -118,7 +123,7 @@ jobs:
           body: |
             Built from ${{ github.sha }}.
             Flash from a phone (USB-C): https://jobot101.github.io/xarm/ — one tap, files built in.
-            Updates (WiFi): http://xarm.local → Firmware → upload xarm-voice.bin
+            Updates (WiFi): automatic, or http://muffin → Firmware → upload xarm-voice.bin
 
       - uses: actions/upload-artifact@v4
         with:

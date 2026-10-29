@@ -1,6 +1,7 @@
 #include "update.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "cJSON.h"
 #include "esp_app_desc.h"
@@ -8,6 +9,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
+#include "esp_partition.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "nvs.h"
@@ -22,6 +24,9 @@ static const char *TAG = "update";
 static TaskHandle_t s_task;
 static bool s_auto = true;
 static char s_latest[16] = "", s_status[64] = "waiting for internet";
+static char s_snd[24] = "";                 // sound bank version the manifest offers (hash of sounds.bin)
+static int s_snd_size;
+static char s_snd_tried[24] = "";           // one try per version per boot
 
 static void status(const char *fmt, ...)
 {
@@ -48,17 +53,21 @@ static bool fetch_latest(char *ver, size_t n)
     esp_http_client_config_t c = { .url = url, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 10000 };
     esp_http_client_handle_t h = esp_http_client_init(&c);
     bool ok = false;
-    char buf[1024];
-    if (esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0
+    const int cap = 4096;
+    char *buf = malloc(cap);
+    if (buf && esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0
         && esp_http_client_get_status_code(h) == 200) {
         int len = 0, r;
-        while (len < (int)sizeof buf - 1 && (r = esp_http_client_read(h, buf + len, sizeof buf - 1 - len)) > 0) len += r;
+        while (len < cap - 1 && (r = esp_http_client_read(h, buf + len, cap - 1 - len)) > 0) len += r;
         buf[len] = 0;
         cJSON *j = cJSON_Parse(buf);
         cJSON *v = cJSON_GetObjectItem(j, "version");
         if (cJSON_IsString(v)) { strlcpy(ver, v->valuestring, n); ok = true; }
+        cJSON *sv = cJSON_GetObjectItem(j, "sounds"), *ss = cJSON_GetObjectItem(j, "sounds_size");
+        if (cJSON_IsString(sv) && cJSON_IsNumber(ss)) { strlcpy(s_snd, sv->valuestring, sizeof s_snd); s_snd_size = ss->valueint; }
         cJSON_Delete(j);
     }
+    free(buf);
     esp_http_client_cleanup(h);
     return ok;
 }
@@ -86,6 +95,56 @@ static void install(const char *ver)
     fx_event(FX_ERROR);
 }
 
+// The sound bank (voice + bells, tools/make_sounds.py) lives in the "model" partition after the speech
+// models, not in the app, so it's synced on its own: download sounds.bin into place, then reload.
+// No reboot. Sounds go quiet for the ~30 s it takes.
+static bool sync_sounds(void)
+{
+    char have[24];
+    nvs_str("sndver", have, sizeof have, false);
+    bool want = s_snd[0] && s_snd_size > 0 && s_snd_size <= FX_BANK_MAX &&
+                (strcmp(have, s_snd) || !fx_bank_ok()) && strcmp(s_snd_tried, s_snd);
+    if (!want) return true;
+    strlcpy(s_snd_tried, s_snd, sizeof s_snd_tried);
+    const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "model");
+    if (!p || p->size < FX_BANK_OFF + FX_BANK_MAX) { status("no room for the sound bank"); return false; }
+
+    char url[160];
+    snprintf(url, sizeof url, "%ssounds.bin?v=%s", CONFIG_XARM_UPDATE_URL, s_snd);
+    esp_http_client_config_t c = { .url = url, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 15000,
+                                   .buffer_size = 4096 };
+    esp_http_client_handle_t h = esp_http_client_init(&c);
+    uint8_t *buf = malloc(4096);
+    bool ok = false;
+    if (buf && esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0
+        && esp_http_client_get_status_code(h) == 200) {
+        status("downloading Muffin's voice…");
+        fx_bank_release();
+        uint32_t erase = (s_snd_size + 4095) & ~4095u;
+        if (esp_partition_erase_range(p, FX_BANK_OFF, erase) == ESP_OK) {
+            int got = 0, r;
+            while (got < s_snd_size && (r = esp_http_client_read(h, (char *)buf, 4096)) > 0) {
+                if (got + r > s_snd_size) r = s_snd_size - got;
+                if (esp_partition_write(p, FX_BANK_OFF + got, buf, r) != ESP_OK) break;
+                got += r;
+            }
+            char magic[4] = {0};
+            esp_partition_read(p, FX_BANK_OFF, magic, 4);
+            ok = got == s_snd_size && !memcmp(magic, "SNB2", 4);
+            if (!ok) status("sound bank download stopped at %d of %d bytes", got, s_snd_size);
+        }
+        fx_bank_reload();
+    }
+    free(buf);
+    esp_http_client_cleanup(h);
+    if (ok) {
+        nvs_str("sndver", s_snd, 0, true);
+        status("Muffin's voice updated (%s)", s_snd);
+        fx_say(SND_UPDATED);
+    } else if (!fx_bank_ok()) status("couldn't get the sound bank — will retry after a reboot");
+    return ok;
+}
+
 static void task(void *arg)
 {
     const char *running = esp_app_get_description()->version;
@@ -98,6 +157,8 @@ static void task(void *arg)
                 status("couldn't reach update server");
             } else {
                 strlcpy(s_latest, latest, sizeof s_latest);
+                // sounds first: they don't reboot, and they belong to the same build as the app on offer
+                if (!pick_busy()) sync_sounds();
                 char tried[16];
                 nvs_str("tried", tried, sizeof tried, false);
                 if (!strcmp(latest, running))            status("up to date (%s)", running);

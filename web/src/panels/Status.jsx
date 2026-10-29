@@ -2,7 +2,7 @@ export default function Status({ s, online }) {
   const v = s?.arm?.battery_mv ? (s.arm.battery_mv / 1000).toFixed(2) + ' V' : '— V'
   return (
     <header className="status">
-      <div className="brand">xArm<span>voice</span></div>
+      <div className="brand">Muffin<span>Ragamuffin Hall</span></div>
       <div className={`state st-${s?.state || 'offline'}`}>
         <b>{online ? s?.state : 'offline'}</b>
         <small>{online ? s?.detail : 'no reply from the arm'}</small>

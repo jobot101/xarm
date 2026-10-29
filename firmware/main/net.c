@@ -28,16 +28,16 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         esp_ip4addr_ntoa(&e->ip_info.ip, s_ip, sizeof s_ip);
         s_mode = "sta";
         s_online = true;
-        ESP_LOGI(TAG, "connected to %s: http://%s  http://xarm  http://xarm.local  (backup: wifi 'xarm-voice' -> http://192.168.4.1)", s_ssid, s_ip);
+        ESP_LOGI(TAG, "connected to %s: http://%s  http://muffin  http://muffin.local  (backup: wifi 'Muffin' -> http://192.168.4.1)", s_ssid, s_ip);
         xEventGroupSetBits(s_ev, 1);
     }
 }
 
-// The board's own network "xarm-voice" (http://192.168.4.1). It stays up next to home WiFi, so any
+// The board's own network "Muffin" (http://192.168.4.1). It stays up next to home WiFi, so any
 // phone — iPhone or Android — always has one address that works, no router or mDNS needed.
 static void ap_config(void)
 {
-    wifi_config_t ap = { .ap = { .ssid = "xarm-voice", .channel = 6, .max_connection = 4 } };
+    wifi_config_t ap = { .ap = { .ssid = "Muffin", .channel = 6, .max_connection = 4 } };
     strlcpy((char *)ap.ap.password, CONFIG_XARM_AP_PASS, sizeof ap.ap.password);
     ap.ap.authmode = strlen(CONFIG_XARM_AP_PASS) >= 8 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     esp_wifi_set_config(WIFI_IF_AP, &ap);
@@ -53,7 +53,7 @@ static void start_ap(void)
     esp_wifi_start();
     strcpy(s_ip, "192.168.4.1");
     s_mode = "ap";
-    ESP_LOGW(TAG, "AP mode: join wifi 'xarm-voice', open http://192.168.4.1");
+    ESP_LOGW(TAG, "AP mode: join wifi 'Muffin', open http://192.168.4.1");
 }
 
 // creds saved from the web app win; menuconfig values are the fallback
@@ -79,9 +79,9 @@ void net_start(void)
     ESP_ERROR_CHECK(esp_netif_init());
     esp_netif_t *sta_if = esp_netif_create_default_wifi_sta();
     esp_netif_create_default_wifi_ap();
-    // DHCP hostname: most home routers then answer http://xarm (or xarm.lan / xarm.home) for every
-    // phone. That's the Android path, since Android often can't resolve xarm.local.
-    esp_netif_set_hostname(sta_if, "xarm");
+    // DHCP hostname: most home routers then answer http://muffin (or muffin.lan / muffin.home) for every
+    // phone. That's the Android path, since Android often can't resolve muffin.local.
+    esp_netif_set_hostname(sta_if, "muffin");
     wifi_init_config_t ic = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&ic));
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL);
@@ -106,7 +106,7 @@ void net_start(void)
     }
 
     mdns_init();
-    mdns_hostname_set("xarm");
+    mdns_hostname_set("muffin");
     mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
 }
 

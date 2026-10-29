@@ -5,7 +5,9 @@
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "esp_partition.h"
 #include "sounds_gen.h"
+#include "chat.h"
 #include "sdkconfig.h"
 #include "led_strip.h"
 #include "freertos/FreeRTOS.h"
@@ -20,21 +22,27 @@ static const char *TAG = "fx";
 
 // ---------------------------------------------------------------- palette: stained glass
 typedef struct { float r, g, b; } rgb_t;
-static const rgb_t RUBY = {0.70f, 0.04f, 0.12f}, SAPPHIRE = {0.10f, 0.22f, 0.80f}, EMERALD = {0.05f, 0.55f, 0.25f},
-                   GOLD = {0.95f, 0.68f, 0.18f}, AMETHYST = {0.45f, 0.10f, 0.60f};
-static const rgb_t ROSE[LED_N] = {RUBY, GOLD, SAPPHIRE, EMERALD, RUBY, AMETHYST, SAPPHIRE};
+// the rose window's four glass colors (ragamuffinstudios.com emblem), pushed a little for LEDs
+static const rgb_t RUBY = {0.85f, 0.10f, 0.07f}, SAPPHIRE = {0.12f, 0.40f, 0.85f}, EMERALD = {0.30f, 0.72f, 0.10f},
+                   GOLD = {0.95f, 0.62f, 0.05f}, AMETHYST = {0.45f, 0.10f, 0.60f};
+static const rgb_t ROSE[LED_N] = {RUBY, GOLD, EMERALD, SAPPHIRE, RUBY, GOLD, EMERALD};   // petal order, clockwise
 static const rgb_t JEWEL[4] = {RUBY, SAPPHIRE, EMERALD, GOLD};
 
 // ---------------------------------------------------------------- sound: the bank
 // Everything it says and plays is pre-rendered by tools/make_sounds.py (Piper voice, sampled-quality
 // bells and organ in a hall, mastered for this speaker) into sounds.bin: IMA ADPCM clips, grouped.
 // A group has variants; one is picked at random, never the same one twice in a row.
-extern const uint8_t bank_start[] asm("_binary_sounds_bin_start");
-extern const uint8_t bank_end[]   asm("_binary_sounds_bin_end");
-
-typedef struct __attribute__((packed)) { uint32_t off, n; int16_t first; uint8_t idx, rate; } clip_t;
+// The bank sits in the "model" flash partition after the speech models (FX_BANK_OFF), so it doesn't eat
+// app space; update.c keeps it in sync over WiFi, and the phone flasher writes it on a full install.
+typedef struct __attribute__((packed)) { char magic[4]; uint32_t layout, ngroups, nclips, data; } bank_hdr_t;
+typedef struct __attribute__((packed)) { uint16_t first, n; } grp_t;
+typedef struct __attribute__((packed)) { uint32_t off, n; int16_t first; uint8_t idx, khz; } clip_t;
+static const uint8_t *s_bank;                 // mapped bank, NULL = silent
+static const grp_t *s_grp;
 static const clip_t *s_clip;
 static uint32_t s_nclips;
+static esp_partition_mmap_handle_t s_map;
+static bool s_mapped;
 
 typedef struct { uint16_t g; int8_t pick; uint8_t low; int64_t at; } req_t;
 static QueueHandle_t s_sq;
@@ -69,27 +77,29 @@ static int dec_next(dec_t *d)
     return d->pred;
 }
 
-// decode one clip straight to the speaker; 12 kHz clips are upsampled to 16 kHz (linear) on the way
+// decode one clip straight to the speaker; slower clips (speech at 11/12 kHz) are resampled to 16 kHz
+// (linear) on the way
 static void play_clip(uint32_t i)
 {
     const clip_t *c = &s_clip[i];
-    dec_t d = { bank_start + c->off, c->n, 0, c->first, c->idx };
+    dec_t d = { s_bank + c->off, c->n, 0, c->first, c->idx };
     static int16_t buf[256];
     int k = 0;
-    if (c->rate == 0) {
+    if (c->khz == AUDIO_RATE / 1000 || c->khz == 0) {
         buf[k++] = (int16_t)d.pred;
         for (uint32_t s = 1; s < c->n && !s_hush; s++) {
             buf[k++] = (int16_t)dec_next(&d);
             if (k == 256) { audio_play(buf, k); k = 0; }
         }
-    } else {                                  // 12k -> 16k: output j sits at input j * 3/4
+    } else {                                  // output j sits at input j * khz/16, phase in 1/16ths
+        const uint32_t step = c->khz, one = AUDIO_RATE / 1000;
         int a = d.pred, b = c->n > 1 ? dec_next(&d) : a;
-        uint32_t used = 2, ph = 0;            // ph in quarters of an input sample
+        uint32_t used = 2, ph = 0;
         while (!s_hush) {
-            buf[k++] = (int16_t)(a + (b - a) * (int)ph / 4);
-            ph += 3;
-            while (ph >= 4) {
-                ph -= 4; a = b;
+            buf[k++] = (int16_t)(a + (b - a) * (int)ph / (int)one);
+            ph += step;
+            while (ph >= one) {
+                ph -= one; a = b;
                 if (used >= c->n) goto done;
                 b = dec_next(&d); used++;
             }
@@ -100,6 +110,49 @@ done:
     if (k && !s_hush) audio_play(buf, k);
 }
 
+// map the bank and check it matches this firmware's group list; anything off = stay quiet
+static void bank_attach(void)
+{
+    const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "model");
+    const void *m;
+    if (!p || p->size < FX_BANK_OFF + FX_BANK_MAX ||
+        esp_partition_mmap(p, FX_BANK_OFF, FX_BANK_MAX, ESP_PARTITION_MMAP_DATA, &m, &s_map) != ESP_OK) {
+        ESP_LOGE(TAG, "can't map the sound bank"); return;
+    }
+    s_mapped = true;
+    const bank_hdr_t *h = m;
+    if (memcmp(h->magic, "SNB2", 4)) { ESP_LOGW(TAG, "no sound bank in flash yet (it downloads over WiFi)"); return; }
+    if (h->layout != SND_LAYOUT || h->ngroups != SND_GROUPS) {
+        ESP_LOGW(TAG, "sound bank is for a different build (layout %08x, want %08x) — waiting for the update",
+                 (unsigned)h->layout, (unsigned)SND_LAYOUT);
+        return;
+    }
+    s_grp = (const grp_t *)(h + 1);
+    s_clip = (const clip_t *)(s_grp + h->ngroups);
+    s_nclips = h->nclips;
+    s_bank = m;
+    ESP_LOGI(TAG, "sound bank: %u clips, voice %s", (unsigned)s_nclips, SND_VOICE);
+}
+
+static void bank_detach(void)
+{
+    s_bank = NULL;
+    if (s_mapped) { esp_partition_munmap(s_map); s_mapped = false; }
+}
+
+bool fx_bank_ok(void) { return s_bank != NULL; }
+
+// update.c is about to rewrite the bank: cut any sound, wait for the player to let go, unmap
+void fx_bank_release(void)
+{
+    s_bank = NULL;
+    fx_hush();
+    for (int i = 0; i < 100 && s_talking; i++) vTaskDelay(pdMS_TO_TICKS(10));
+    bank_detach();
+}
+
+void fx_bank_reload(void) { bank_detach(); bank_attach(); }
+
 static void sound_task(void *arg)
 {
     req_t r;
@@ -109,12 +162,13 @@ static void sound_task(void *arg)
         int64_t now = esp_timer_get_time();
         // narration that's fallen behind the arm is worse than silence
         if (now - r.at > (r.low ? 300000 : 2500000)) continue;
-        if (r.g >= SND_GROUPS || !s_clip) continue;
-        int n = SND_GROUP[r.g].n, v;
+        if (r.g >= SND_GROUPS || !s_bank) continue;
+        int n = s_grp[r.g].n, v;
+        if (n <= 0) continue;
         if (r.pick >= 0) v = r.pick % n;
         else { v = rnd(0, n - 1); if (n > 1 && v == s_lastpick[r.g]) v = (v + 1) % n; }
         s_lastpick[r.g] = (uint8_t)v;
-        uint32_t i = SND_GROUP[r.g].first + v;
+        uint32_t i = s_grp[r.g].first + v;
         if (i >= s_nclips) continue;
         s_talking = true;
         play_clip(i);
@@ -131,10 +185,17 @@ static void enqueue(int g, int pick, bool low)
 }
 
 static void play(int g) { enqueue(g, -1, false); }
+void fx_play(int g) { play(g); }
+
+static volatile int64_t s_quiet_until;
+void fx_quiet(int minutes) { s_quiet_until = minutes > 0 ? esp_timer_get_time() + (int64_t)minutes * 60000000 : 0; }
+bool fx_is_quiet(void) { return s_quiet_until && esp_timer_get_time() < s_quiet_until; }
 
 void fx_say(int g)
 {
     s_last_said_us = s_last_activity_us = esp_timer_get_time();
+    // "be quiet" holds for everything but the lines about being quiet, and stopping
+    if (fx_is_quiet() && g != SND_QUIET && g != SND_TALK_AGAIN && g != SND_STOPPED) return;
     enqueue(g, -1, false);
 }
 
@@ -225,7 +286,7 @@ static void led_task(void *arg)
             if (s_last_activity_us && s_chatted_after != s_last_activity_us &&
                 quiet > (int64_t)CONFIG_XARM_CHATTER_MIN * 60000000 && quiet < 20LL * 60000000) {
                 s_chatted_after = s_last_activity_us;
-                enqueue(SND_IDLE, -1, false);
+                if (!fx_is_quiet()) chat_idle();         // a line, or a question it'll act on if you answer
             }
         }
         vTaskDelay(pdMS_TO_TICKS(33));
@@ -242,11 +303,7 @@ void fx_start(void)
     led_strip_rmt_config_t rc = { .clk_src = RMT_CLK_SRC_DEFAULT, .resolution_hz = 10 * 1000 * 1000 };
     if (led_strip_new_rmt_device(&lc, &rc, &s_led) == ESP_OK) xTaskCreate(led_task, "fx_led", 3072, NULL, 2, NULL);
     else ESP_LOGW(TAG, "LED ring init failed");
-    if (bank_end - bank_start > 8 && !memcmp(bank_start, "SNB1", 4)) {
-        memcpy(&s_nclips, bank_start + 4, 4);
-        s_clip = (const clip_t *)(bank_start + 8);
-        ESP_LOGI(TAG, "sound bank: %u clips, voice %s", (unsigned)s_nclips, SND_VOICE);
-    } else ESP_LOGE(TAG, "sound bank missing or bad");
+    bank_attach();
     memset(s_lastpick, 0xFF, sizeof s_lastpick);
     s_sq = xQueueCreate(8, sizeof(req_t));
     xTaskCreate(sound_task, "fx_snd", 4096, NULL, 4, NULL);

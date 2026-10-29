@@ -9,6 +9,7 @@
 #include "fx.h"
 #include "moves.h"
 #include "kids.h"
+#include "chat.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -472,6 +473,15 @@ static void task(void *arg)
         xQueueReceive(s_q, &j, portMAX_DELAY);
         s_abort = false;
         s_busy = true;
+        {   // asked for the same show twice in a row? it has opinions about that
+            static int last_op = -1, last_slot = -1;
+            static int64_t last_t;
+            int64_t now = esp_timer_get_time();
+            bool show = j.op == OP_WAVE || j.op == OP_BOW || j.op == OP_DANCE || j.op == OP_BELL || j.op == OP_PLAY ||
+                        j.op == OP_STACK || j.op == OP_SORT || j.op == OP_SORT_SIZE || j.op == OP_PICK;
+            if (show && (int)j.op == last_op && j.slot == last_slot && now - last_t < 90000000) fx_maybe(SND_AGAIN, 60);
+            last_op = j.op; last_slot = j.slot; last_t = now;
+        }
         switch (j.op) {
         case OP_PICK:  do_pick(j.slot); break;
         case OP_DROP:  do_drop(); break;
@@ -499,6 +509,8 @@ static void task(void *arg)
         }
         if (s_abort) set("stopped", "stopped");
         s_busy = false;
+        bool show = j.op == OP_WAVE || j.op == OP_BOW || j.op == OP_DANCE || j.op == OP_BELL || j.op == OP_PLAY || j.op == OP_STACK;
+        if (show && !s_abort) chat_show_done(j.op, j.slot);
     }
 }
 

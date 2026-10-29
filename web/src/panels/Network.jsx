@@ -6,7 +6,7 @@ export default function Network({ s, run }) {
   const [ssid, setSsid] = useState('')
   const [pass, setPass] = useState('')
   const n = s?.net || {}
-  const where = n.mode === 'sta' ? `on “${n.ssid}” · ${n.ip} · http://xarm · backup “xarm-voice” 192.168.4.1` : n.mode === 'ap' ? 'own hotspot “xarm-voice” · 192.168.4.1' : '—'
+  const where = n.mode === 'sta' ? `on “${n.ssid}” · ${n.ip} · http://muffin · backup “Muffin” 192.168.4.1` : n.mode === 'ap' ? 'own hotspot “Muffin” · 192.168.4.1' : '—'
 
   return (
     <section className="card">
@@ -17,11 +17,11 @@ export default function Network({ s, run }) {
       </div>
       <div className="btns">
         <button className="primary" disabled={!ssid}
-          onClick={() => confirm(`Join “${ssid}” and reboot? Then reconnect your phone to that WiFi and open http://xarm (iPhone: xarm.local works too). The “xarm-voice” network stays on as a backup: 192.168.4.1`) && run(api.wifi(ssid, pass))}>
+          onClick={() => confirm(`Join “${ssid}” and reboot? Then reconnect your phone to that WiFi and open http://muffin (iPhone: muffin.local works too). The “Muffin” network stays on as a backup: 192.168.4.1`) && run(api.wifi(ssid, pass))}>
           Save &amp; reboot
         </button>
       </div>
-      <p className="hint">If it can't join, it falls back to its own “xarm-voice” hotspot after 15 s.</p>
+      <p className="hint">If it can't join, it falls back to its own “Muffin” hotspot after 15 s.</p>
     </section>
   )
 }

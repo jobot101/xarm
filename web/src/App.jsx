@@ -66,8 +66,8 @@ export default function App() {
           <RoseWindow size={52} spin={!!s?.busy} progress={hold} />
         </button>
         <div className="hall-name">
-          <b>Ragamuffin Hall</b>
-          <small>{mode === 'play' ? 'arm control' : 'workshop'}</small>
+          <b>Muffin</b>
+          <small>Ragamuffin Hall · {mode === 'play' ? 'play' : 'workshop'}</small>
         </div>
         {mode === 'workshop' && <button className="pill" onClick={() => switchMode('play')}>Back to play</button>}
       </header>

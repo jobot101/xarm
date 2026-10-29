@@ -209,7 +209,7 @@ static esp_err_t h_wifi(httpd_req_t *r)
     cJSON_Delete(b);
     if (!ok) return reply(r, false, "need a network name");
     xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
-    return reply(r, true, "saved — rebooting onto your WiFi. find it at http://xarm or http://xarm.local");
+    return reply(r, true, "saved — rebooting onto your WiFi. find it at http://muffin or http://muffin.local");
 }
 
 // ---------- POST /api/update {"auto":true|false} and/or {"check":true} ----------

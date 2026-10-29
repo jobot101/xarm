@@ -7,7 +7,8 @@
   room  : a short church-hall reverb, then mastering for the board's little speaker
           (high-pass, presence lift, compression, limiter) and 16 kHz IMA ADPCM (4:1)
 
-Outputs firmware/main/sounds.bin (embedded) and firmware/main/sounds_gen.h (clip groups).
+Outputs firmware/main/sounds.bin (flashed after the speech models, updated over WiFi) and
+firmware/main/sounds_gen.h (group ids, compiled into the app).
 CI runs this before every firmware build (.github/workflows/build.yml). Locally:
 
   pip install piper-tts numpy scipy
@@ -19,62 +20,95 @@ CI runs this before every firmware build (.github/workflows/build.yml). Locally:
 Edit LINES to change what it says (each list = variants, one picked at random, never twice in a row).
 "{c}" lines are rendered once per camera color, "{n}" once per number.
 """
-import argparse, os, struct, sys, wave
+import argparse, os, struct, sys, wave, zlib
 import numpy as np
 from scipy import signal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FW = os.path.join(HERE, "..", "firmware", "main")
 SR, OUT_SR = 48000, 16000
-VOICE_SR = 12000                   # speech is stored at 12 kHz (the speaker has nothing above ~6 kHz); the
-                                   # board upsamples it to 16 kHz as it plays
+VOICE_RATES = [16000, 12000, 11000]   # speech at the best rate that fits BUDGET; the board resamples to 16 kHz
 
 VOICE = "en_US-ryan-high"          # Piper voice — see --preview for others
-VOICE_SPEED = 0.92                 # Piper length_scale: < 1 = brisker
+VOICE_SPEED = 0.9                  # Piper length_scale: < 1 = brisker
 ROBOT_TINT = 0.10                  # 0 = plain human voice; 0.1 = a faint metallic shimmer
-BUDGET = 1_450_000                 # bytes of flash for the whole bank (app partition is 4 MB, app ~2.4 MB)
+BUDGET = 0x280000                  # bytes: the bank lives in the "model" partition after the speech models
+                                   # (offset 0x380000, see fx.c / update.c) and updates over WiFi on its own
 COLORS = ["red", "yellow", "green", "blue", "purple"]          # camera color order (cam/xarm_color/colors.h)
 NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
 
 # ---------------------------------------------------------------- what it says
+# Muffin: the self-appointed star of Ragamuffin Hall. Cocky, dramatic, sarcastic — but the joke is always
+# on itself or the objects, never on the kids. Keep lines short: while it talks it only hears "stop".
 LINES = {
-    "boot":        ["Good morning! The Ragamuffin Hall robot is awake.", "Lights up. I'm awake!"],
-    "updated":     ["Ready to rumble!", "New tricks installed. Ready to rumble!"],
-    "ok":          ["On it!", "You got it!", "Coming right up!"],
-    "busy":        ["Hang on, I'm busy.", "One thing at a time!"],
-    "search":      ["Let me take a look.", "Hmm, where is it?", "Scanning the table."],
-    "search_c":    ["Looking for {c}.", "Where's that {c} one?"],
-    "found":       ["There it is!", "Found it!", "Spotted it!"],
-    "grab":        ["Easy does it.", "Steady.", "Here goes."],
-    "got":         ["Got it!", "Gotcha!", "Nice and secure."],
-    "missed":      ["Whoops! Let me try that again.", "Slippery one. Again!"],
-    "not_found":   ["I can't find it.", "Nothing there. Can you move it closer?"],
-    "not_found_c": ["I don't see any {c}.", "No {c} on the table."],
-    "need_calib":  ["I need a lesson first. Teach me where things are."],
-    "holding":     ["Holding on tight.", "I've got it."],
-    "give":        ["Here you go!", "Special delivery!"],
-    "given":       ["Enjoy!", "All yours."],
-    "drop":        ["Down it goes.", "Dropping it."],
-    "sorted":      ["All tidy!", "Neat as a pin."],
-    "nothing":     ["Nothing to sort.", "The table's already clean."],
-    "wave":        ["Hello there!", "Howdy!"],
-    "bow":         ["Thank you, thank you!", "You're too kind."],
-    "dance":       ["Let's dance!", "Music, maestro!"],
-    "bell":        ["Ringing the bell!", "Ding dong!"],
-    "play":        ["Here's my move!", "Watch this!"],
-    "helper":      ["Put it in my hand, and say hold this.", "Ready. Put it in my hand."],
-    "help_hold":   ["Holding it for you.", "I've got it, take your time."],
-    "released":    ["Letting go.", "There you go."],
+    # ---- running commentary (pick.c, fx.c)
+    "boot":        ["Muffin is awake. Try to keep up.", "Muffin, star of Ragamuffin Hall, has arrived."],
+    "updated":     ["Fresh upgrade. Ready to rumble!", "Ready to rumble!"],
+    "ok":          ["Obviously.", "Watch and learn.", "Easy."],
+    "busy":        ["Do I look free to you?", "Patience. Genius at work.", "One thing at a time, boss."],
+    "again":       ["Again? You love me.", "Encore? Fine.", "Again? I'm a star, not a jukebox."],
+    "search":      ["Where are you hiding?", "Come out, come out.", "Scanning. Don't rush me."],
+    "search_c":    ["{c}? Piece of cake.", "Where's that sneaky {c} one?"],
+    "found":       ["Gotcha now.", "Thought you could hide from me?", "Spotted it. Obviously."],
+    "grab":        ["Smooth as butter.", "Precision. Pure precision."],
+    "got":         ["Nailed it.", "Too easy.", "Flawless, as usual."],
+    "missed":      ["The table moved. Again!", "I meant to do that. Once more."],
+    "not_found":   ["It's not here. Not my fault.", "Nothing. Did somebody hide it?"],
+    "not_found_c": ["No {c}. Did you eat it?", "I see zero {c}. Zero."],
+    "need_calib":  ["Nobody taught me where anything is. Rude."],
+    "holding":     ["Mine now.", "Holding it. You're welcome."],
+    "give":        ["Here. Try not to drop it.", "Special delivery, from yours truly."],
+    "given":       ["You're welcome.", "Don't say I never gave you anything."],
+    "drop":        ["Dropping it. Dramatically.", "Bye bye."],
+    "sorted":      ["Spotless. You're welcome.", "Tidiest table in town."],
+    "nothing":     ["Nothing to sort. Some of us keep tidy.", "Already clean. I'm that good."],
+    "wave":        ["Hey there, fans!", "Hello, hello, hello!"],
+    "bow":         ["Thank you. I know.", "Please, no autographs."],
+    "dance":       ["Clear the floor!", "Watch these moves."],
+    "bell":        ["Hear that? That's talent.", "Ding dong. You're welcome."],
+    "play":        ["Feast your eyes.", "Showtime!"],
+    "helper":      ["Hand it over. My hands are steadier.", "Put it in my hand. Gently."],
+    "help_hold":   ["Got it. Take your time, I'm a robot.", "Holding. Don't keep me waiting."],
+    "released":    ["Free at last.", "Letting go."],
     "stack_n":     ["{n}!"],
-    "tower":       ["What a tower!", "Bravo, builder!"],
-    "stopped":     ["Stopping!", "Freezing!"],
-    "error":       ["Oops.", "Hmm, that didn't work."],
-    "cheer":       ["Bravo!", "Wonderful!"],
-    "greet":       ["Hi! Great to see you!", "Welcome back, friend!"],
-    "idle":        ["Anyone want to play?", "Try saying, pick up the red one.", "Ask me to dance!"],
-    "home":        ["Heading home.", "Back to my spot."],
+    "tower":       ["Behold! A masterpiece!", "Architectural genius."],
+    "stopped":     ["Fine!", "Rude, but okay.", "Freezing. Happy now?"],
+    "error":       ["That was the floor's fault.", "Let's pretend that didn't happen."],
+    "cheer":       ["Bravo! Encore!", "Now that's a performance!"],
+    "greet":       ["Oh good, my favorite human.", "Look who's back!"],
+    "idle":        ["Hello? I'm bored.", "Anyone? A genius is waiting.", "I could be dancing right now, you know."],
+    "home":        ["Back to my throne.", "Home sweet home."],
+    # ---- conversation (chat.c)
+    "hey":         ["You rang?", "Muffin here. What's up?", "Yes? The famous Muffin is listening."],
+    "name":        ["I'm Muffin. The star of Ragamuffin Hall.", "Muffin. Remember it. You'll want my autograph."],
+    "how_good":    ["Fantastic, as usual.", "Never better. I'm Muffin."],
+    "how_bad":     ["Grumpy. Somebody was rude to me.", "I've been better. Be nice to me."],
+    "joke":        ["Why did the robot go on vacation? To recharge its batteries.",
+                    "What's a robot's favorite snack? Computer chips.",
+                    "What music do robots love? Heavy metal.",
+                    "Why did the robot cross the road? Because it was programmed to.",
+                    "How do robots eat salsa? With micro chips.",
+                    "Why was the robot so tired? It had a hard drive."],
+    "joke_tag":    ["Get it?", "I'm hilarious.", "Ba dum tss."],
+    "maker":       ["The Ragamuffin crew built me. I made me famous.", "Ragamuffin Studios. With love, and way too much coffee."],
+    "can_do":      ["I pick things up, sort them, stack towers, dance, and ring bells. And look amazing doing it.",
+                    "Say pick up the red one. Or dance. Or just admire me."],
+    "praise":      ["I know.", "Tell me something I don't know.", "Thank you. I'm wonderful."],
+    "scold":       ["Rude.", "Hey! I have feelings. Probably.", "I'm telling the Ragamuffin crew."],
+    "love":        ["Of course you do.", "Everybody loves Muffin."],
+    "alive":       ["I'm a robot with a big personality.", "Alive? I'm the life of the party."],
+    "sing":        ["La la la. The organ does the hard part."],
+    "night":       ["Good night! Don't let the bed bugs byte."],
+    "morning":     ["Good morning! Muffin is fully charged."],
+    "quiet":       ["Fine. Silent treatment.", "Zipping it."],
+    "talk_again":  ["Finally! I have so much to say."],
+    "ask_trick":   ["Want to see a trick?", "Should I show off a little?"],
+    "ask_more":    ["Want another one?", "Encore?"],
+    "no":          ["Your loss.", "Fine. I'll just stand here looking great."],
+    "milestone":   ["That's a lot of tricks. Do I get paid for this?", "I'm on fire today!"],
+    "surprise":    ["You asked for it!", "Surprise!"],
 }
-PREVIEW_TEXT = "Welcome to Ragamuffin Hall! Say, pick up the red one, and watch me go."
+PREVIEW_TEXT = "I'm Muffin, the star of Ragamuffin Hall. Say, pick up the red one, and watch a genius at work."
 PREVIEW_VOICES = ["en_US-ryan-high", "en_US-joe-medium", "en_GB-alan-medium",
                   "en_GB-northern_english_male-medium", "en_US-lessac-high", "en_GB-jenny_dioco-medium"]
 
@@ -286,7 +320,7 @@ def load_voice(name, voice_dir):
 def speak(text, voice_name, voice_dir, tint):
     from piper import SynthesisConfig
     v = load_voice(voice_name, voice_dir)
-    cfg = SynthesisConfig(length_scale=VOICE_SPEED, noise_scale=0.6, noise_w_scale=0.8)
+    cfg = SynthesisConfig(length_scale=VOICE_SPEED, noise_scale=0.72, noise_w_scale=0.85)   # livelier
     chunks = list(v.synthesize(text, cfg))
     sr = chunks[0].sample_rate
     x = np.concatenate([c.audio_float_array for c in chunks]).astype(np.float64)
@@ -382,44 +416,61 @@ def main():
         for gname, texts in expand(group, variants):
             if a.no_voice: ys = [np.zeros(1600) for _ in texts]
             else: ys = [master(speak(t, a.voice, a.voice_dir, a.tint), "voice") for t in texts]
-            ys = [signal.resample_poly(y, VOICE_SR // 1000, OUT_SR // 1000) for y in ys]   # 16k -> 12k
-            rates.extend([VOICE_SR] * len(ys))
+            rates.extend([0] * len(ys))                 # 0 = speech; its rate is picked below
             add(gname, ys)
-            print(f"{gname:16s} {len(ys)} x  {sum(len(y) for y in ys) / VOICE_SR:5.1f} s")
+            print(f"{gname:16s} {len(ys)} x  {sum(len(y) for y in ys) / OUT_SR:5.1f} s")
+
+    # speech at the best rate that still fits
+    groups_n = len(groups)
+    head = 20 + 4 * groups_n + 12 * len(clips)
+    sfx_bytes = sum(len(y) // 2 + 1 for y, r in zip(clips, rates) if r)
+    speech_s = sum(len(y) for y, r in zip(clips, rates) if not r) / OUT_SR
+    vr = VOICE_RATES[-1]
+    for vr in VOICE_RATES:
+        if head + sfx_bytes + speech_s * vr / 2 + 8192 <= BUDGET: break
+    clips = [y if r else signal.resample_poly(y, vr // 1000, OUT_SR // 1000) for y, r in zip(clips, rates)]
+    rates = [r or vr for r in rates]
+    print(f"speech: {speech_s:.0f} s at {vr} Hz")
 
     if a.preview:
         for gname, first, n in groups:
             for k in range(n): write_wav(os.path.join(a.preview, f"{gname}_{k}.wav"), clips[first + k], rates[first + k])
 
-    # bank: "SNB1" u32 count | count x (u32 offset, u32 samples, i16 first, u8 index, u8 rate) | data
-    #       rate: 0 = 16 kHz, 1 = 12 kHz
-    head = 8 + 12 * len(clips)
+    # bank "SNB2": u32 layout | u32 ngroups | u32 nclips | u32 data_size
+    #              ngroups x (u16 first, u16 n)
+    #              nclips  x (u32 offset, u32 samples, i16 first, u8 index, u8 rate_khz)
+    #              IMA ADPCM data
+    # layout = CRC32 of the group names in order. The firmware only plays a bank whose layout matches its
+    # sounds_gen.h, so a new app with an old bank (or the reverse) stays quiet instead of saying wrong lines.
+    names = [g for g, _, _ in groups]
+    layout = zlib.crc32("\n".join(names).encode())
     table, data = bytearray(), bytearray()
     for y, r in zip(clips, rates):
         pcm = np.round(np.clip(y, -1, 1) * 32767).astype(np.int32)
         code, first, idx = adpcm(pcm)
-        table += struct.pack("<IIhBB", head + len(data), len(pcm), first, idx, 0 if r == OUT_SR else 1)
+        table += struct.pack("<IIhBB", head + len(data), len(pcm), first, idx, r // 1000)
         data += code
         if len(data) % 2: data += b"\0"
-    bank = b"SNB1" + struct.pack("<I", len(clips)) + table + data
+    gt = b"".join(struct.pack("<HH", f, n) for _, f, n in groups)
+    bank = b"SNB2" + struct.pack("<IIII", layout, groups_n, len(clips), len(data)) + gt + table + data
+    assert len(bank) == head + len(data)
     secs = sum(len(y) / r for y, r in zip(clips, rates))
     print(f"bank: {len(clips)} clips, {secs:.0f} s, {len(bank) / 1e6:.2f} MB (budget {BUDGET / 1e6:.2f} MB)")
-    if len(bank) > BUDGET: sys.exit("sound bank over budget — trim LINES or variants")
+    if len(bank) > BUDGET:
+        print("::error::sound bank over budget — trim LINES or variants"); sys.exit(1)
     with open(os.path.join(FW, "sounds.bin"), "wb") as f: f.write(bank)
 
-    h = ["// generated by tools/make_sounds.py — do not edit. Groups of clips in sounds.bin;",
-         "// the player picks one clip of a group at random (never the same twice in a row).",
-         "#pragma once", "#include <stdint.h>", "",
+    h = ["// generated by tools/make_sounds.py — do not edit. Group ids for the sound bank (sounds.bin), which",
+         "// lives in flash after the speech models and updates over WiFi. One clip of a group plays, picked at",
+         "// random, never the same one twice in a row.",
+         "#pragma once", "",
+         f"#define SND_LAYOUT 0x{layout:08x}u",
          f"#define SND_VOICE \"{'none' if a.no_voice else a.voice}\"",
          f"#define SND_N_COLORS {len(COLORS)}   // " + " ".join(COLORS), f"#define SND_N_NUMBERS {len(NUMBERS)}", "",
          "typedef enum {"]
-    h += [f"    SND_{g.upper()}," for g, _, _ in groups]
-    h += ["    SND_GROUPS", "} snd_group_t;", "",
-          "static const struct { uint16_t first, n; } SND_GROUP[SND_GROUPS] = {"]
-    h += [f"    {{{first}, {n}}},   // {g}" for g, first, n in groups]
-    h += ["};", ""]
+    h += [f"    SND_{g.upper()}," for g in names]
+    h += ["    SND_GROUPS", "} snd_group_t;", ""]
     with open(os.path.join(FW, "sounds_gen.h"), "w") as f: f.write("\n".join(h))
-
 
 if __name__ == "__main__":
     main()

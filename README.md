@@ -11,7 +11,7 @@ Tell a Hiwonder xArm 1S to pick something up by voice. You can also drive it fro
   │  router → pick sequence    │  I2C 0x52    ├──────────────────┤
   │  web server + React app    │◀─────────────│ Hiwonder S3 cam  │  color blobs x,y,w,h
   └─────────────┬──────────────┘              └──────────────────┘
-                │ WiFi  http://xarm  (or xarm.local, or 192.168.4.1 on 'xarm-voice')
+                │ WiFi  http://muffin  (or muffin.local, or 192.168.4.1 on 'Muffin')
               phone / laptop
 ```
 
@@ -47,20 +47,20 @@ Use the 2×9 header on the audio board.
    idf.py menuconfig        # xArm Voice → WiFi SSID/pass
    idf.py build flash monitor
    ```
-   The board always runs its own network `xarm-voice` (password `ragamuffin`) too, even when it's on your WiFi. Join it and open http://192.168.4.1 — that works on any phone. On Android, when it says the network has no internet, tap **Stay connected** (or turn mobile data off), or Chrome will try the address over cellular.
+   The board always runs its own network `Muffin` (password `ragamuffin`) too, even when it's on your WiFi. Join it and open http://192.168.4.1 — that works on any phone. On Android, when it says the network has no internet, tap **Stay connected** (or turn mobile data off), or Chrome will try the address over cellular.
 
-   **Which address, iPhone or Android:** on your WiFi, try **http://xarm** first (the board registers that name with your router; some routers use `xarm.lan` or `xarm.home`). iPhones also understand **http://xarm.local**; many Androids don't. If your router won't do names, give the board a reserved IP in the router's DHCP settings and bookmark that on both phones.
+   **Which address, iPhone or Android:** on your WiFi, try **http://muffin** first (the board registers that name with your router; some routers use `muffin.lan` or `muffin.home`). iPhones also understand **http://muffin.local**; many Androids don't. If your router won't do names, give the board a reserved IP in the router's DHCP settings and bookmark that on both phones.
 
 ### From an Android phone
 
 GitHub Actions builds every push. The files are on the **latest** release: https://github.com/jobot101/xarm/releases/tag/latest
 
 - **First flash:** plug the board into the phone with a USB-C data cable. Open **https://jobot101.github.io/xarm/** in Chrome, keep **Full install** selected, and tap **Flash**. That page already has the latest build's files. If it can't find the board, hold BOOT, tap RESET, release BOOT, and try again. (Espressif's own esptool-js page can't see this board from Android, because its WebUSB mode only works with CH340 boards.)
-- **Every flash after that:** open http://xarm, go to **Firmware**, pick `xarm-voice.bin`, and upload. It goes over WiFi with no cable. If a bad build won't start, the board rolls back on its own.
+- **Every flash after that:** open http://muffin, go to **Firmware**, pick `xarm-voice.bin`, and upload. It goes over WiFi with no cable. If a bad build won't start, the board rolls back on its own.
 
 ## First run
 
-1. Open **http://xarm** (or http://xarm.local on iPhone). All three status lights (arm, cam, mic) should be green.
+1. Open **http://muffin** (or http://muffin.local on iPhone). All three status lights (arm, cam, mic) should be green.
 2. **Jog:** check each joint's ID and direction. Find the gripper's open and closed values and enter them under Settings.
 3. **Teach:** press "Limp", pose the arm by hand, then save **Home** (safe carry pose) and **Drop** (where things go).
 4. **Calibrate:** do this for 5–9 spots across the mat (corners and center):

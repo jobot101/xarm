@@ -6,6 +6,7 @@
 #include "pick.h"
 #include "store.h"
 #include "kids.h"
+#include "chat.h"
 
 static bool starts(const char *s, const char *p) { return strncmp(s, p, strlen(p)) == 0; }
 static bool has(const char *s, const char *w) { return strstr(s, w) != NULL; }
@@ -26,7 +27,9 @@ bool router_exec(const char *text, char *msg, size_t n)
     t[k] = 0;
 
     // order matters: specific phrases before generic words
-    if (has(t, "stop") || has(t, "freeze") || has(t, "halt") || has(t, "wait"))                         { pick_stop(); snprintf(msg, n, "stopped"); return true; }
+    if (has(t, "stop") || has(t, "freeze") || has(t, "halt") || has(t, "wait"))                         { pick_stop(); chat_stopped(); snprintf(msg, n, "stopped"); return true; }
+    // Muffin's conversation (name, small talk, jokes, yes/no answers...) — before the tricks, which match loosely
+    if (chat_exec(t, msg, n)) return true;
     // third hand
     if (has(t, "hold this") || has(t, "help me") || has(t, "third hand"))  return pick_run(OP_HELPER, 0, msg, n);
     if (has(t, "hold it") || has(t, "grip") || has(t, "grab it") || has(t, "squeeze")) return pick_run(OP_CLOSE, 0, msg, n);
@@ -127,6 +130,15 @@ int router_phrases(char out[][48], int max)
     ADD("turn right");
     ADD("tilt up");
     ADD("tilt down");
+    // conversation (chat.c). Bare "yes"/"no" only count right after Muffin asks something.
+    ADD("hey muffin"); ADD("hi muffin"); ADD("hello muffin"); ADD("muffin stop"); ADD("stop muffin");
+    ADD("whats your name"); ADD("who are you"); ADD("how are you"); ADD("how are you doing");
+    ADD("tell me a joke"); ADD("another joke"); ADD("who made you"); ADD("what can you do");
+    ADD("good job"); ADD("good robot"); ADD("nice work"); ADD("well done"); ADD("you are awesome");
+    ADD("bad robot"); ADD("you are silly"); ADD("i love you"); ADD("are you alive"); ADD("are you a robot");
+    ADD("sing a song"); ADD("good night"); ADD("good morning"); ADD("be quiet"); ADD("quiet please");
+    ADD("you can talk again"); ADD("surprise me"); ADD("do a trick");
+    ADD("yes"); ADD("yes please"); ADD("sure"); ADD("yeah"); ADD("no"); ADD("no thanks");
     for (int i = 0; i < KIDS_MAX; i++) if (kids_get(i)) ADD("hi i'm %s", kids_get(i)->name);
     for (int i = 0; i < NSLOT; i++) {
         if (!g_cfg.slot_name[i][0]) continue;
