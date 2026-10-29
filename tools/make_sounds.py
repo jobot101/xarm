@@ -27,13 +27,18 @@ from scipy import signal
 HERE = os.path.dirname(os.path.abspath(__file__))
 FW = os.path.join(HERE, "..", "firmware", "main")
 SR, OUT_SR = 48000, 16000
-VOICE_RATES = [16000, 12000, 11000]   # speech at the best rate that fits BUDGET; the board resamples to 16 kHz
+# rates (Hz) for (talk, lessons, sfx), best first; the first combo that fits BUDGET wins. The board
+# resamples everything to 16 kHz as it plays. Lessons go lower before banter does: they're long.
+RATE_PLANS = [(16000, 16000, 16000), (12000, 12000, 16000), (12000, 11000, 16000), (12000, 10000, 16000),
+              (11000, 10000, 16000), (12000, 10000, 12000), (11000, 10000, 12000), (11000, 8000, 12000),
+              (10000, 8000, 12000), (8000, 8000, 12000)]
 
 VOICE = "en_US-ryan-high"          # Piper voice — see --preview for others
 VOICE_SPEED = 0.9                  # Piper length_scale: < 1 = brisker
 ROBOT_TINT = 0.10                  # 0 = plain human voice; 0.1 = a faint metallic shimmer
-BUDGET = 0x280000                  # bytes: the bank lives in the "model" partition after the speech models
-                                   # (offset 0x380000, see fx.c / update.c) and updates over WiFi on its own
+BUDGET = 0x340000                  # bytes: the bank lives in the "model" partition after the speech models
+                                   # (FX_BANK_OFF 0x2C0000 in fx.h, to the end of the 6 MB partition) and
+                                   # updates over WiFi on its own
 COLORS = ["red", "yellow", "green", "blue", "purple"]          # camera color order (cam/xarm_color/colors.h)
 NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
 
@@ -108,6 +113,115 @@ LINES = {
     "milestone":   ["That's a lot of tricks. Do I get paid for this?", "I'm on fire today!"],
     "surprise":    ["You asked for it!", "Surprise!"],
 }
+# ---- teaching (pick.c do_teach): each lesson is a list of sentences, played in order. Muffin moves the part
+# it's talking about on the same sentence (motion is matched by lesson name + sentence number in pick.c).
+LESSONS = {
+    "robot": [
+        "Lesson time. What is a robot?",
+        "A robot is a machine that does three things. It senses, it thinks, and it acts.",
+        "I sense with my camera and my microphones.",
+        "I think with a tiny computer in my base.",
+        "And I act with my motors. Like this.",
+        "Sense, think, act. Over and over. Just like you, but shinier.",
+    ],
+    "servo": [
+        "My joints are servo motors.",
+        "A servo is a motor with a sensor inside that always knows its angle.",
+        "My brain says, go to this spot. The servo checks where it is, and keeps correcting until it gets there.",
+        "Checking and correcting like that is called feedback. Robots love feedback. Especially compliments.",
+    ],
+    "joints": [
+        "I have six servos, so I have six degrees of freedom. Each one is a way I can move.",
+        "One. My base spins.",
+        "Two. My shoulder lifts.",
+        "Three. My elbow bends.",
+        "Four. My wrist tilts.",
+        "Five. My wrist twists.",
+        "Six. My gripper opens and closes.",
+        "Your arm has about seven. Show off.",
+    ],
+    "gripper": [
+        "This is my gripper. Two fingers, one servo.",
+        "When I grab something, I close until it pushes back.",
+        "Then I loosen up a tiny bit, so I don't squish it. Engineers call that force control.",
+        "Eggs everywhere thank me.",
+    ],
+    "vision": [
+        "My eye is a camera with its own little computer.",
+        "I don't see a red block the way you do. I see thousands of tiny dots called pixels.",
+        "Every pixel is just a number for its color.",
+        "My camera hunts for a blob of red numbers, then tells my brain where it is and how big it is.",
+        "That's computer vision. Numbers. Lots and lots of numbers.",
+    ],
+    "hearing": [
+        "My ears are microphones.",
+        "Sound is just air wiggling. My microphones turn those wiggles into numbers.",
+        "My brain cleans out the noise, and even subtracts my own voice.",
+        "Then it compares what's left to the phrases I know. That's called speech recognition.",
+        "That's why you have to say things my way. Sorry. Not sorry.",
+    ],
+    "brain": [
+        "My brain is a microcontroller. A whole computer, smaller than a cookie.",
+        "It runs a program. A program is a list of instructions, like a recipe.",
+        "My program runs in a loop, over and over, hundreds of times every second.",
+        "Check the microphone. Check the camera. Move the motors. Repeat.",
+        "People wrote every one of those steps. I just make it look easy.",
+    ],
+    "smooth": [
+        "Watch me move with no planning.",
+        "Jerky, right? Sudden starts and stops make a robot shake.",
+        "Now watch me speed up gently, and slow down gently.",
+        "That's called a motion profile. Smooth is safe, and smooth is stylish.",
+    ],
+    "power": [
+        "My muscles run on electricity.",
+        "Servos are hungry. When they work hard, they pull a lot of current from the battery.",
+        "When the battery gets low, they get weak and wobbly. Kind of like you before lunch.",
+    ],
+    "reach": [
+        "To grab something, I have to work out how to bend every joint so my hand lands in the right spot.",
+        "That math is called inverse kinematics.",
+        "Here's a secret. Somebody taught me a few spots, and I blend between them.",
+        "Work smarter, not harder.",
+    ],
+    "jobs": [
+        "Robots do all kinds of jobs.",
+        "They build cars, explore Mars, help doctors in surgery, and vacuum floors.",
+        "Some even entertain crowds in historic churches. That's me. Best job there is.",
+    ],
+}
+FACTS = [
+    "The word robot comes from a play written in 1920. It meant forced work. Rude.",
+    "The first factory robot arm went to work in 1961, at a car plant.",
+    "Some robots are soft, like octopus arms, so they can squeeze through tight spaces.",
+    "A message to a robot on Mars can take up to twenty minutes to get there.",
+    "Robot vacuums build a map of your house while they clean.",
+    "Some robots learn by trial and error, just like you learning to ride a bike.",
+    "There are robots that can do backflips. I prefer bows.",
+    "Engineers often copy animals when they design robots. That's called biomimicry.",
+]
+# true/false quiz: (question, answer, why) — chat.c asks three in a row
+QUIZ = [
+    ("True or false? A servo knows its own position.", True, "A servo has a sensor inside that measures its angle."),
+    ("True or false? Robots see colors the same way you do.", False, "I see a number for every pixel, not colors like you."),
+    ("True or false? I have six degrees of freedom.", True, "Six servos, six ways to move."),
+    ("True or false? A program is a list of instructions.", True, "Like a recipe, one step at a time."),
+    ("True or false? Robots never make mistakes.", False, "Robots make mistakes. Rarely. Okay, sometimes."),
+    ("True or false? Sudden starts and stops make a robot shake.", True, "Smooth starts and stops keep a robot steady."),
+    ("True or false? Microphones turn sound into numbers.", True, "Air wiggles become numbers my brain can compare."),
+    ("True or false? The word robot is older than the airplane.", False, "Airplanes flew in 1903. The word robot showed up in 1920."),
+]
+LINES.update({
+    "fact":        FACTS,
+    "ask_lesson":  ["Want to learn more?", "Ready for the next lesson?"],
+    "quiz_intro":  ["Pop quiz! After each question, say that's true, or that's false."],
+    "right":       ["Correct! You're almost as smart as me.", "Right! Nailed it."],
+    "wrong":       ["Nope!", "Not quite."],
+    "quiz_score":  ["You got {n} out of three!"],
+    "quiz_zero":   ["Zero out of three. Let's call that practice."],
+})
+LESSON_GROUPS = {}     # filled by main(): lesson -> list of group names, one per sentence
+
 PREVIEW_TEXT = "I'm Muffin, the star of Ragamuffin Hall. Say, pick up the red one, and watch a genius at work."
 PREVIEW_VOICES = ["en_US-ryan-high", "en_US-joe-medium", "en_GB-alan-medium",
                   "en_GB-northern_english_male-medium", "en_US-lessac-high", "en_GB-jenny_dioco-medium"]
@@ -225,6 +339,9 @@ SFX = {
     "s_chirp":   None,     # soft blips while working
     "s_greet":   None,     # per-kid 3-bell jingles, picked by the kid's seed
 }
+
+
+BLIPS = {"s_heard": 0.28, "s_chirp": 0.22}   # max seconds
 
 
 def sfx_variants(name):
@@ -369,7 +486,8 @@ def expand(group, variants):
     if any("{c}" in v for v in variants):
         return [(f"{group}_{c}", [v.format(c=c) for v in variants]) for c in COLORS]
     if any("{n}" in v for v in variants):
-        return [(f"{group}_{i + 1}", [v.format(n=w.capitalize()) for v in variants]) for i, w in enumerate(NUMBERS)]
+        return [(f"{group}_{i + 1}", [(lambda t: t[0].upper() + t[1:])(v.format(n=w)) for v in variants])
+                for i, w in enumerate(NUMBERS)]
     return [(group, variants)]
 
 
@@ -407,8 +525,13 @@ def main():
     for name in SFX:
         ys = []
         for x in sfx_variants(name):
-            y = reverb(x, 0.28)[:len(x) + int(0.45 * SR)]
-            f = int(0.3 * SR); y[-f:] *= np.linspace(1, 0, f) ** 2
+            if name in BLIPS:                     # while these play the mic is half-deaf: keep them tiny
+                y = reverb(x, 0.10)[:int(BLIPS[name] * SR)]
+                f = int(0.08 * SR)
+            else:
+                y = reverb(x, 0.28)[:len(x) + int(0.45 * SR)]
+                f = int(0.3 * SR)
+            y[-f:] *= np.linspace(1, 0, f) ** 2
             ys.append(master(y, "sfx"))
         rates.extend([OUT_SR] * len(ys))
         add(name, ys)
@@ -416,21 +539,37 @@ def main():
         for gname, texts in expand(group, variants):
             if a.no_voice: ys = [np.zeros(1600) for _ in texts]
             else: ys = [master(speak(t, a.voice, a.voice_dir, a.tint), "voice") for t in texts]
-            rates.extend([0] * len(ys))                 # 0 = speech; its rate is picked below
+            rates.extend([0] * len(ys))                 # 0 = talk; its rate is picked below
             add(gname, ys)
             print(f"{gname:16s} {len(ys)} x  {sum(len(y) for y in ys) / OUT_SR:5.1f} s")
 
-    # speech at the best rate that still fits
+    def speech(t):
+        return np.zeros(1600) if a.no_voice else master(speak(t, a.voice, a.voice_dir, a.tint), "voice")
+
+    for lesson, sentences in LESSONS.items():
+        LESSON_GROUPS[lesson] = []
+        for k, t in enumerate(sentences, 1):
+            g = f"l_{lesson}_{k}"
+            LESSON_GROUPS[lesson].append(g)
+            add(g, [speech(t)]); rates.append(-1)
+        print(f"lesson {lesson:9s} {len(sentences)} sentences")
+    for k, (q, ans, why) in enumerate(QUIZ, 1):
+        add(f"q_{k}", [speech(q)]); rates.append(-1)
+        add(f"qa_{k}", [speech(why)]); rates.append(-1)
+    print(f"quiz      {len(QUIZ)} questions")
+
+    # the best (talk, lesson, sfx) rates that still fit
     groups_n = len(groups)
     head = 20 + 4 * groups_n + 12 * len(clips)
-    sfx_bytes = sum(len(y) // 2 + 1 for y, r in zip(clips, rates) if r)
-    speech_s = sum(len(y) for y, r in zip(clips, rates) if not r) / OUT_SR
-    vr = VOICE_RATES[-1]
-    for vr in VOICE_RATES:
-        if head + sfx_bytes + speech_s * vr / 2 + 8192 <= BUDGET: break
-    clips = [y if r else signal.resample_poly(y, vr // 1000, OUT_SR // 1000) for y, r in zip(clips, rates)]
-    rates = [r or vr for r in rates]
-    print(f"speech: {speech_s:.0f} s at {vr} Hz")
+    secs = {k: sum(len(y) for y, r in zip(clips, rates) if r == k) / OUT_SR for k in (0, -1, OUT_SR)}
+    for plan in RATE_PLANS:
+        size = head + 8192 + sum(secs[k] * plan[i] / 2 for i, k in enumerate((0, -1, OUT_SR)))
+        if size <= BUDGET: break
+    talk_r, lesson_r, sfx_r = plan
+    pick = {0: talk_r, -1: lesson_r, OUT_SR: sfx_r}
+    rates = [pick[r] for r in rates]
+    clips = [y if r == OUT_SR else signal.resample_poly(y, r // 1000, OUT_SR // 1000) for y, r in zip(clips, rates)]
+    print(f"talk {secs[0]:.0f} s @ {talk_r} Hz, lessons {secs[-1]:.0f} s @ {lesson_r} Hz, sfx {secs[OUT_SR]:.0f} s @ {sfx_r} Hz")
 
     if a.preview:
         for gname, first, n in groups:
@@ -463,13 +602,24 @@ def main():
     h = ["// generated by tools/make_sounds.py — do not edit. Group ids for the sound bank (sounds.bin), which",
          "// lives in flash after the speech models and updates over WiFi. One clip of a group plays, picked at",
          "// random, never the same one twice in a row.",
-         "#pragma once", "",
+         "#pragma once", "#include <stdint.h>", "",
          f"#define SND_LAYOUT 0x{layout:08x}u",
          f"#define SND_VOICE \"{'none' if a.no_voice else a.voice}\"",
          f"#define SND_N_COLORS {len(COLORS)}   // " + " ".join(COLORS), f"#define SND_N_NUMBERS {len(NUMBERS)}", "",
          "typedef enum {"]
     h += [f"    SND_{g.upper()}," for g in names]
     h += ["    SND_GROUPS", "} snd_group_t;", ""]
+    gid = {g: i for i, g in enumerate(names)}
+    h += ["// lessons, in teaching order: first sentence group + sentence count", "typedef enum {"]
+    h += [f"    LESSON_{n.upper()}," for n in LESSONS]
+    h += ["    LESSON_COUNT", "} lesson_t;", "",
+          "static const struct { uint16_t first, n; } LESSON[LESSON_COUNT] __attribute__((unused)) = {"]
+    h += [f"    {{SND_{LESSON_GROUPS[n][0].upper()}, {len(LESSON_GROUPS[n])}}},   // {n}" for n in LESSONS]
+    h += ["};", "", "// true/false quiz: question group, explanation group, answer",
+          f"#define QUIZ_COUNT {len(QUIZ)}",
+          "static const struct { uint16_t q, why; uint8_t truth; } QUIZ[QUIZ_COUNT] __attribute__((unused)) = {"]
+    h += [f"    {{SND_Q_{k}, SND_QA_{k}, {1 if ans else 0}}}," for k, (_, ans, _) in enumerate(QUIZ, 1)]
+    h += ["};", ""]
     with open(os.path.join(FW, "sounds_gen.h"), "w") as f: f.write("\n".join(h))
 
 if __name__ == "__main__":
