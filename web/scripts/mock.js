@@ -56,6 +56,7 @@ createServer((req, res) => {
         return send({ ok: true, msg: body.action === 'save' ? `saved "${body.name}"` : 'ok' })
       }
       case 'POST /api/drive': if (body.base) st.arm.pos[5] = Math.max(0, Math.min(1000, st.arm.pos[5] + body.base * body.step)); return send({ ok: true, msg: 'ok' })
+      case 'GET /api/i2c': return send({ found: '0x18 0x20 0x40 0x51 0x52', cam: true })
       case 'POST /api/limits': st.arm.lim[body.i] = [body.min, body.max]; return send({ ok: true, msg: 'limits saved' })
       case 'POST /api/voice': if (body.gain >= 0) st.voice.gain = body.gain; if (body.thresh >= 5) st.voice.thresh = body.thresh; return send({ ok: true, msg: 'voice tuned' })
       case 'POST /api/fx': return send({ ok: true, msg: 'ok' })

@@ -1,6 +1,7 @@
 #include "web.h"
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -303,6 +304,22 @@ static esp_err_t h_limits(httpd_req_t *r)
     return reply(r, true, "limits saved");
 }
 
+// ---------- GET /api/i2c -> {"found":"0x18 0x20 0x40 0x51 0x52","cam":true} ----------
+static esp_err_t h_i2c(httpd_req_t *r)
+{
+    char list[128];
+    cam_scan(list, sizeof list);
+    cJSON *j = cJSON_CreateObject();
+    cJSON_AddStringToObject(j, "found", list);
+    cJSON_AddBoolToObject(j, "cam", strstr(list, "0x52") != NULL);
+    char *txt = cJSON_PrintUnformatted(j);
+    cJSON_Delete(j);
+    httpd_resp_set_type(r, "application/json");
+    esp_err_t e = httpd_resp_sendstr(r, txt);
+    free(txt);
+    return e;
+}
+
 // ---------- POST /api/voice {"gain":0..42,"thresh":5..90} ----------
 static esp_err_t h_voice(httpd_req_t *r)
 {
@@ -547,6 +564,7 @@ bool web_start(void)
         {"/api/kids",   HTTP_POST, h_kids},
         {"/api/voice",  HTTP_POST, h_voice},
         {"/api/limits", HTTP_POST, h_limits},
+        {"/api/i2c",    HTTP_GET,  h_i2c},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);

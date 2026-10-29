@@ -24,6 +24,7 @@ export const api = {
   kids:   (action, extra = {}) => call('/api/kids', { action, ...extra }),     // add {name,emoji,jewel} | select {i} | remove {i} | score {game,score}
   voice:  (body)        => call('/api/voice', body),     // {gain:0..42 dB, thresh:5..90 %}
   limits: (i, min, max)  => call('/api/limits', { i, min, max }),
+  i2c:    ()            => call('/api/i2c'),            // bus scan {found:'0x18 0x20 ...', cam:bool}
   fx:     (body)        => call('/api/fx', body),        // {show:0..3} | {event:'sad'|'happy'}
 }
 

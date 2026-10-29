@@ -11,6 +11,7 @@ import Firmware from './panels/Firmware.jsx'
 import Network from './panels/Network.jsx'
 import Helper from './panels/Helper.jsx'
 import Voice from './panels/Voice.jsx'
+import Vision from './panels/Vision.jsx'
 import Limits from './panels/Limits.jsx'
 
 const POLL_MS = 250
@@ -79,6 +80,7 @@ export default function App() {
           <main className="grid">
             <Commands s={s} run={run} />
             <Voice s={s} run={run} />
+            <Vision s={s} run={run} />
             <Joints s={s} run={run} title="Jog" torqueBtn />
             <Helper s={s} run={run} />
             <Limits s={s} run={run} />

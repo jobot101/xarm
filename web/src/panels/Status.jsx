@@ -9,6 +9,7 @@ export default function Status({ s, online }) {
       </div>
       <div className="lights">
         <Light ok={online && s?.arm?.link} label="arm" />
+        <Light ok={online && s?.cam?.ok} label="cam" />
         <Light ok={online && s?.voice?.ok} label="mic" />
         <span className="volt">{v}</span>
       </div>
