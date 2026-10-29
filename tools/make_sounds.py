@@ -227,6 +227,9 @@ SFX = {
 }
 
 
+BLIPS = {"s_heard": 0.28, "s_chirp": 0.22}   # max seconds
+
+
 def sfx_variants(name):
     if SFX[name] is not None: return [seq(SFX[name])]
     if name == "s_show": return [seq([("bell", f, 420, 75)]) for f in (C5, E5, G5, C6)]
@@ -407,8 +410,13 @@ def main():
     for name in SFX:
         ys = []
         for x in sfx_variants(name):
-            y = reverb(x, 0.28)[:len(x) + int(0.45 * SR)]
-            f = int(0.3 * SR); y[-f:] *= np.linspace(1, 0, f) ** 2
+            if name in BLIPS:                     # while these play the mic is half-deaf: keep them tiny
+                y = reverb(x, 0.10)[:int(BLIPS[name] * SR)]
+                f = int(0.08 * SR)
+            else:
+                y = reverb(x, 0.28)[:len(x) + int(0.45 * SR)]
+                f = int(0.3 * SR)
+            y[-f:] *= np.linspace(1, 0, f) ** 2
             ys.append(master(y, "sfx"))
         rates.extend([OUT_SR] * len(ys))
         add(name, ys)

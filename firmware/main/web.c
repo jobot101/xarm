@@ -173,6 +173,17 @@ static esp_err_t h_state(httpd_req_t *r)
         cJSON_AddNumberToObject(v, "prob", (int)(pr * 100));
         cJSON_AddNumberToObject(v, "gain", g);
         cJSON_AddNumberToObject(v, "thresh", th);
+        voice_note_t nt[8];
+        int nn = voice_notes(nt, 8);
+        cJSON *ev = cJSON_AddArrayToObject(v, "heard");
+        for (int i = 0; i < nn; i++) {
+            cJSON *o = cJSON_CreateObject();
+            cJSON_AddStringToObject(o, "p", nt[i].phrase);
+            cJSON_AddNumberToObject(o, "prob", nt[i].prob);
+            cJSON_AddStringToObject(o, "why", nt[i].why);
+            cJSON_AddNumberToObject(o, "ago", nt[i].age_s);
+            cJSON_AddItemToArray(ev, o);
+        }
     }
 
     net_info(ip, sizeof ip, &mode);

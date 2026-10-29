@@ -43,7 +43,7 @@ static bool reply(int group, char *msg, size_t n, const char *what)
 bool chat_exec(const char *t, char *msg, size_t n)
 {
     // ---- answers to the question it just asked
-    bool yes = eq(t, "yes") || eq(t, "yes please") || eq(t, "sure") || eq(t, "yeah");
+    bool yes = eq(t, "yes") || eq(t, "yes please") || eq(t, "sure") || eq(t, "sure thing") || eq(t, "yeah");
     bool no  = eq(t, "no") || eq(t, "no thanks") || eq(t, "nope");
     if (yes || no) {
         bool pending = s_ask.op >= 0 && esp_timer_get_time() < s_ask.until;

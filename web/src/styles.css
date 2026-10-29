@@ -222,3 +222,9 @@ input, select, textarea { font-size: 16px; }                                    
 
 .phrases { columns: 2; column-gap: 16px; padding-left: 18px; margin: 10px 0; font-size: 15px; }
 .phrases li { break-inside: avoid; padding: 2px 0; }
+
+.heard { list-style: none; padding: 0; margin: 6px 0; font-size: 14px; }
+.heard li { padding: 5px 8px; border-left: 4px solid var(--ok); margin: 3px 0; background: var(--card-2); border-radius: 6px; }
+.heard li.skip { border-left-color: var(--warn); }
+.heard .pc { font-variant-numeric: tabular-nums; color: var(--dim); }
+.heard small { display: block; color: var(--dim); }

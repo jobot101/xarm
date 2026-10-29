@@ -34,7 +34,7 @@ menu "xArm Voice"
 
     config XARM_VOICE_THRESHOLD
         int "MultiNet detect threshold (percent, lower = more sensitive)"
-        default 35
+        default 22
 
     config XARM_MIC_DUAL
         bool "Use the second mic too (ES7210 MIC2, TDM slot 2) for beamforming"
@@ -45,8 +45,8 @@ menu "xArm Voice"
             second mic is populated; the boot log prints the AFE pipeline either way.
 
     config XARM_VOICE_VAD_HOLD_MS
-        int "Accept a command only if speech was heard within this many ms"
-        default 1500
+        int "Weak matches count only if the VAD heard a voice within this many ms"
+        default 3000
 
     config XARM_UPDATE_URL
         string "Auto-update base URL (manifest.json + xarm-voice.bin, trailing slash)"

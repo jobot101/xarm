@@ -130,7 +130,7 @@ int router_phrases(char out[][48], int max)
     ADD("turn right");
     ADD("tilt up");
     ADD("tilt down");
-    // conversation (chat.c). Bare "yes"/"no" only count right after Muffin asks something.
+    // conversation (chat.c). Answers only count right after Muffin asks something.
     ADD("hey muffin"); ADD("hi muffin"); ADD("hello muffin"); ADD("muffin stop"); ADD("stop muffin");
     ADD("whats your name"); ADD("who are you"); ADD("how are you"); ADD("how are you doing");
     ADD("tell me a joke"); ADD("another joke"); ADD("who made you"); ADD("what can you do");
@@ -138,7 +138,7 @@ int router_phrases(char out[][48], int max)
     ADD("bad robot"); ADD("you are silly"); ADD("i love you"); ADD("are you alive"); ADD("are you a robot");
     ADD("sing a song"); ADD("good night"); ADD("good morning"); ADD("be quiet"); ADD("quiet please");
     ADD("you can talk again"); ADD("surprise me"); ADD("do a trick");
-    ADD("yes"); ADD("yes please"); ADD("sure"); ADD("yeah"); ADD("no"); ADD("no thanks");
+    ADD("yes please"); ADD("sure thing"); ADD("no thanks");   // no bare yes/no: one syllable steals matches
     for (int i = 0; i < KIDS_MAX; i++) if (kids_get(i)) ADD("hi i'm %s", kids_get(i)->name);
     for (int i = 0; i < NSLOT; i++) {
         if (!g_cfg.slot_name[i][0]) continue;

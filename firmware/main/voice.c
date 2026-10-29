@@ -92,6 +92,40 @@ static void load_commands(void)
 // stop words stay live while the speaker plays; everything else waits for quiet
 static bool is_stop(const char *p) { return strstr(p, "stop") || strstr(p, "freeze"); }
 
+// the last few things it matched, kept or not, and why — shown in the app's Voice panel for tuning
+#define NOTES 10
+static struct { char p[40]; char why[36]; uint8_t prob; uint32_t age_s; int64_t t; } s_notes[NOTES];
+static int s_note_n;
+static portMUX_TYPE s_note_mux = portMUX_INITIALIZER_UNLOCKED;
+
+static void note(const char *p, float pr, const char *why)
+{
+    portENTER_CRITICAL(&s_note_mux);
+    int i = s_note_n++ % NOTES;
+    strlcpy(s_notes[i].p, p, sizeof s_notes[i].p);
+    strlcpy(s_notes[i].why, why, sizeof s_notes[i].why);
+    s_notes[i].prob = (uint8_t)(pr * 100);
+    s_notes[i].t = esp_timer_get_time();
+    portEXIT_CRITICAL(&s_note_mux);
+}
+
+int voice_notes(voice_note_t *out, int max)
+{
+    int n = 0;
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_note_mux);
+    for (int k = 0; k < NOTES && n < max && k < s_note_n; k++) {
+        int i = (s_note_n - 1 - k) % NOTES;                    // newest first
+        strlcpy(out[n].phrase, s_notes[i].p, sizeof out[n].phrase);
+        strlcpy(out[n].why, s_notes[i].why, sizeof out[n].why);
+        out[n].prob = s_notes[i].prob;
+        out[n].age_s = (int)((now - s_notes[i].t) / 1000000);
+        n++;
+    }
+    portEXIT_CRITICAL(&s_note_mux);
+    return n;
+}
+
 // mic -> AFE. Never blocks on anything but the I2S read.
 static void feed_task(void *arg)
 {
@@ -143,20 +177,26 @@ static void detect_task(void *arg)
                 int id = res->command_id[0];
                 if (id >= 1 && id <= MAX_PHRASES) {
                     const char *p = s_phr[id - 1];
+                    float pr = res->prob[0], th = s_thresh / 100.0f;
                     int64_t now = esp_timer_get_time();
                     bool speech = now - s_speech_us < (int64_t)CONFIG_XARM_VOICE_VAD_HOLD_MS * 1000;
-                    bool self = now < audio_play_end_us() + 400000;
-                    if (!speech) {
-                        ESP_LOGI(TAG, "ignored \"%s\" (p=%.2f): no speech", p, res->prob[0]);
-                    } else if (self && !is_stop(p)) {
-                        ESP_LOGI(TAG, "ignored \"%s\" (p=%.2f): speaker playing", p, res->prob[0]);
+                    bool self = now < audio_play_end_us() + 250000;
+                    // The gates only bite on weak matches: a confident one goes through even if the VAD
+                    // missed it, or while Muffin is talking (the AEC has taken Muffin out of the mic).
+                    const char *why = NULL;
+                    if (!speech && pr < (th + 0.30f > 0.6f ? th + 0.30f : 0.6f)) why = "no voice heard";
+                    else if (self && !is_stop(p) && pr < (th + 0.15f > 0.45f ? th + 0.15f : 0.45f)) why = "Muffin was talking";
+                    if (why) {
+                        note(p, pr, why);
+                        ESP_LOGI(TAG, "ignored \"%s\" (p=%.2f): %s", p, pr, why);
                     } else {
                         strlcpy(s_last, p, sizeof s_last);
-                        s_prob = res->prob[0];
+                        s_prob = pr;
                         fx_event(FX_HEARD);
                         char msg[64];
                         router_exec(s_last, msg, sizeof msg);
-                        ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", s_last, res->prob[0], msg);
+                        note(p, pr, msg);
+                        ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", s_last, pr, msg);
                     }
                 }
                 s_mn->clean(s_mnd);
@@ -175,7 +215,7 @@ static bool afe_start(srmodel_list_t *models)
     c->aec_init = true;                  // reference channel is always fed
     c->ns_init = false;                  // Espressif's advice for ASR: NS smears phonemes, AGC+AEC do the work
     c->vad_init = true;                  // WebRTC VAD (no vadnet in the model partition)
-    c->vad_mode = VAD_MODE_2;
+    c->vad_mode = VAD_MODE_1;            // lenient: the VAD only has to notice a voice, the matcher decides
     c->wakenet_init = false;
     c->agc_init = true;
     c->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
