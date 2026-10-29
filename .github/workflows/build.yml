@@ -113,6 +113,11 @@ jobs:
                           "parts": [{"path": n, "offset": o} for o, n in rows]}],
           }, open("release/manifest.json", "w"), indent=2)
           print(open("release/OFFSETS.txt").read())
+          # readable from the phone/API without log access (check-run annotations)
+          srb = open("release/srmodels.bin", "rb").read()
+          models = sorted({m.decode() for m in __import__("re").findall(rb"(mn\d\w*|vadnet\w*|wn\d+\w*|nsnet\w*)", srb[:8192])})
+          app = os.path.getsize("release/xarm-voice.bin")
+          print(f"::notice::srmodels.bin {sr} B (limit {BANK_OFF}) models {models}; app {app} B; sounds {len(snd)} B")
           EOF
           ls -la release
 
