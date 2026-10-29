@@ -10,6 +10,7 @@
 #include "esp_https_ota.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "mbedtls/sha256.h"
 #include "esp_heap_caps.h"
 #include "esp_partition.h"
 #include "esp_system.h"
@@ -116,6 +117,28 @@ static void install(const char *ver)
     fx_event(FX_ERROR);
 }
 
+// sha256 of the bank in flash, first 12 hex chars = the manifest's "sounds" value (CI: sha256(sounds.bin)[:12])
+static bool bank_hash_is(const esp_partition_t *p, uint32_t off, int size, const char *want)
+{
+    uint8_t *b = malloc(4096), d[32];
+    if (!b) return false;
+    mbedtls_sha256_context c;
+    mbedtls_sha256_init(&c);
+    mbedtls_sha256_starts(&c, 0);
+    bool ok = true;
+    for (int at = 0; at < size && ok; at += 4096) {
+        int n = size - at < 4096 ? size - at : 4096;
+        ok = esp_partition_read(p, off + at, b, n) == ESP_OK;
+        if (ok) mbedtls_sha256_update(&c, b, n);
+    }
+    mbedtls_sha256_finish(&c, d);
+    mbedtls_sha256_free(&c);
+    free(b);
+    char hex[13];
+    for (int i = 0; i < 6; i++) snprintf(hex + 2 * i, 3, "%02x", d[i]);
+    return ok && !strncmp(hex, want, 12);
+}
+
 // The sound bank (voice + bells, tools/make_sounds.py) lives in the "model" partition after the speech
 // models, not in the app, so it's synced on its own: download sounds.bin into place, then reload.
 // No reboot. Sounds go quiet for the ~30 s it takes.
@@ -124,7 +147,7 @@ static bool sync_sounds(void)
     char have[24];
     nvs_str("sndver", have, sizeof have, false);
     int64_t now = esp_timer_get_time();
-    bool retry_ok = strcmp(s_snd_tried, s_snd) || now - s_snd_tried_at > 10LL * 60 * 1000000;   // a failed try: again in 10 min
+    bool retry_ok = strcmp(s_snd_tried, s_snd) || now - s_snd_tried_at > 60LL * 1000000;   // a failed try: again in 1 min
     bool want = s_snd[0] && s_snd_size > 0 && s_snd_size <= FX_BANK_MAX && (strcmp(have, s_snd) || !fx_bank_ok());
     if (!want) { if (fx_bank_ok()) snd_status("ready (%s)", have); return true; }
     if (!retry_ok) return false;
@@ -135,46 +158,67 @@ static bool sync_sounds(void)
     const uint32_t off = fx_bank_off(p->size);
 
     if (__atomic_test_and_set(&s_bank_lock, __ATOMIC_ACQUIRE)) return false;   // a phone upload is writing it
+    // A USB install already wrote this exact bank: hash what's in flash, and if it matches, just remember it
+    // (otherwise every USB flash was followed by a pointless 3 MB download that left Muffin mute if it failed)
+    if (fx_bank_ok() && bank_hash_is(p, off, s_snd_size, s_snd)) {
+        __atomic_clear(&s_bank_lock, __ATOMIC_RELEASE);
+        nvs_str("sndver", s_snd, 0, true);
+        snd_status("ready (%s)", s_snd);
+        return true;
+    }
     char url[160];
     snprintf(url, sizeof url, "%ssounds.bin?v=%s", CONFIG_XARM_UPDATE_URL, s_snd);
-    esp_http_client_config_t c = { .url = url, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 20000,
-                                   .buffer_size = 4096, .keep_alive_enable = true };
-    esp_http_client_handle_t h = esp_http_client_init(&c);
     uint8_t *buf = malloc(4096);
-    bool ok = false;
+    bool ok = false, released = false;
     int got = 0;
-    if (buf && esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0
-        && esp_http_client_get_status_code(h) == 200) {
-        snd_status("downloading Muffin's voice…");
-        fx_bank_release();
-        // erase 64 KB at a time just ahead of the data. Erasing the whole 2-3 MB first took ~20 s, long
-        // enough for the server to drop the idle connection, so the download died every time.
-        uint32_t erased = 0;
-        int r = 0;
-        while (got < s_snd_size && (r = esp_http_client_read(h, (char *)buf, 4096)) > 0) {
-            if (got + r > s_snd_size) r = s_snd_size - got;
-            while ((uint32_t)(got + r) > erased) {
-                if (esp_partition_erase_range(p, off + erased, 0x10000) != ESP_OK) { r = -1; break; }
-                erased += 0x10000;
+    uint32_t erased = 0;
+    // up to 8 connections per sync: a dropped one resumes where it stopped (HTTP Range), it doesn't start over
+    for (int attempt = 0; buf && attempt < 8 && got < s_snd_size; attempt++) {
+        if (attempt) { snd_status("downloading Muffin's voice… %d%% (reconnecting)", (int)(got * 100LL / s_snd_size)); vTaskDelay(pdMS_TO_TICKS(2000)); }
+        esp_http_client_config_t c = { .url = url, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 20000,
+                                       .buffer_size = 4096 };
+        esp_http_client_handle_t h = esp_http_client_init(&c);
+        char range[32];
+        if (got) { snprintf(range, sizeof range, "bytes=%d-", got); esp_http_client_set_header(h, "Range", range); }
+        int code = 0;
+        if (esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0)
+            code = esp_http_client_get_status_code(h);
+        if (code == 200 || code == 206) {
+            if (!released) { snd_status("downloading Muffin's voice…"); fx_bank_release(); released = true; }
+            int skip = code == 200 ? got : 0;            // server ignored Range: throw away what we already have
+            int r = 0;
+            while (got < s_snd_size && (r = esp_http_client_read(h, (char *)buf, 4096)) > 0) {
+                int o = 0;
+                if (skip) { int k = r < skip ? r : skip; skip -= k; o = k; r -= k; if (!r) continue; }
+                if (got + r > s_snd_size) r = s_snd_size - got;
+                // erase 64 KB at a time just ahead of the data. Erasing the whole 2-3 MB first took ~20 s, long
+                // enough for the server to drop the idle connection.
+                while ((uint32_t)(got + r) > erased) {
+                    if (esp_partition_erase_range(p, off + erased, 0x10000) != ESP_OK) { r = -1; break; }
+                    erased += 0x10000;
+                }
+                if (r < 0 || esp_partition_write(p, off + got, buf + o, r) != ESP_OK) { attempt = 99; break; }   // flash fault: give up
+                got += r;
+                if ((got & 0x3FFFF) < 4096) snd_status("downloading Muffin's voice… %d%%", (int)(got * 100LL / s_snd_size));
             }
-            if (r < 0 || esp_partition_write(p, off + got, buf, r) != ESP_OK) break;
-            got += r;
-            if ((got & 0x3FFFF) < 4096) snd_status("downloading Muffin's voice… %d%%", (int)(got * 100LL / s_snd_size));
         }
+        esp_http_client_cleanup(h);
+        if (code && code != 200 && code != 206) break;  // 404 etc.: retrying won't help
+    }
+    if (released) {
         char magic[4] = {0};
         esp_partition_read(p, off, magic, 4);
         ok = got == s_snd_size && !memcmp(magic, "SNB2", 4);
         fx_bank_reload();
     }
     free(buf);
-    esp_http_client_cleanup(h);
     __atomic_clear(&s_bank_lock, __ATOMIC_RELEASE);
     if (ok) {
         nvs_str("sndver", s_snd, 0, true);
         snd_status("ready (%s)", s_snd);
         fx_say(SND_UPDATED);
     } else {
-        snd_status("download failed at %d of %d bytes — retrying in 10 min", got, s_snd_size);
+        snd_status("download stopped at %d of %d bytes — trying again in 1 min", got, s_snd_size);
     }
     return ok;
 }
