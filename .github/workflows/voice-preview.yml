@@ -1,0 +1,30 @@
+# Renders voice samples (several Piper voices) + every clip of the sound bank as WAVs, so they can be
+# listened to before a voice is picked. Push to the voice-preview branch, or run it by hand.
+name: voice-preview
+
+on:
+  push:
+    branches: [voice-preview]
+  workflow_dispatch:
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: piper + voices
+        run: |
+          pip install piper-tts numpy scipy
+          V=$(python3 -c "import sys; sys.path.insert(0,'tools'); import make_sounds as m; print(' '.join(m.PREVIEW_VOICES))")
+          python3 -m piper.download_voices $V --download-dir ~/.cache/piper
+      - name: render
+        run: |
+          python3 tools/make_sounds.py --preview preview/voices --voices-only
+          python3 tools/make_sounds.py --preview preview/all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview
+          path: preview
