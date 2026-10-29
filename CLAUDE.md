@@ -23,8 +23,8 @@ The owner wants to **flash and update this board from an Android phone**. A PC i
 | `partition-table.bin` | 0x8000 | first USB flash |
 | `ota_data_initial.bin` | 0xd000 | first USB flash |
 | `xarm-voice.bin` | 0x10000 | first USB flash, **and** every OTA update after that |
-| `srmodels.bin` | 0x610000 | first USB flash (speech models: MultiNet7 + VADNet; only reflash if the models change) |
-| `sounds.bin` | 0x990000 | first USB flash (Muffin's voice; after that it syncs over WiFi) |
+| `srmodels.bin` | 0x710000 | first USB flash (speech models: MultiNet7 + VADNet; only reflash if the models change) |
+| `sounds.bin` | 0xA90000 | first USB flash (Muffin's voice; after that it syncs over WiFi) |
 
 CI also writes `OFFSETS.txt` and an ESP Web Tools `manifest.json`, taking the offsets from `build/flasher_args.json`. Files land at `https://github.com/jobot101/xarm/releases/download/latest/<file>`.
 
