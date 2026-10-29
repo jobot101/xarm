@@ -231,6 +231,9 @@ static esp_err_t h_state(httpd_req_t *r)
     cJSON_AddStringToObject(fw, "latest", latest);
     cJSON_AddStringToObject(fw, "update", ust);
     cJSON_AddBoolToObject(fw, "auto", update_auto());
+    char sv[24];
+    update_sound_version(sv, sizeof sv);
+    cJSON_AddStringToObject(fw, "sounds", sv);
     return send_json(r, j);
 }
 
@@ -628,6 +631,7 @@ bool web_start(void)
         {"/api/config", HTTP_GET,  h_cfg_get},
         {"/api/config", HTTP_POST, h_cfg_post},
         {"/api/ota",    HTTP_POST, ota_handle},
+        {"/api/sounds", HTTP_POST, update_sounds_upload},
         {"/api/wifi",   HTTP_POST, h_wifi},
         {"/api/update", HTTP_POST, h_update},
         {"/api/moves",  HTTP_POST, h_moves},

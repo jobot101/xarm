@@ -49,9 +49,25 @@ function render(hint = false) {
 
 document.querySelectorAll('.board').forEach(b => b.addEventListener('click', () => { if (!busy) { board = b.dataset.board; render(true) } }))
 
-// pick a board over WebUSB and wrap it as a Web-Serial-style port esptool-js understands
+// How this browser reaches the board:
+//   Android Chrome         -> WebUSB (its Web Serial can't open the S3's native USB)
+//   desktop Chrome / Edge  -> Web Serial (the OS driver owns CDC, so WebUSB can't claim it)
+//   iPhone / iPad / Safari / Firefox -> none: WiFi updates only
+const ANDROID = /Android/i.test(navigator.userAgent)
+const VIA = ANDROID && 'usb' in navigator ? 'webusb' : 'serial' in navigator ? 'serial' : 'usb' in navigator ? 'webusb' : null
+
 async function pickPort() {
-  if (!('usb' in navigator)) throw new Error('This browser has no WebUSB. Use Chrome on Android.')
+  if (VIA === 'serial') {
+    const filters = [{ usbVendorId: ESPRESSIF }, { usbVendorId: WCH }]
+    const known = (await navigator.serial.getPorts()).filter(p => filters.some(f => f.usbVendorId === p.getInfo().usbVendorId))
+    return known[0] || navigator.serial.requestPort({ filters })
+  }
+  if (VIA !== 'webusb') throw new Error("This browser can't reach USB. Use Chrome on Android, or Chrome/Edge on a computer.")
+  return pickUsb()
+}
+
+// pick a board over WebUSB and wrap it as a Web-Serial-style port esptool-js understands
+async function pickUsb() {
   const known = (await navigator.usb.getDevices()).filter(d => d.vendorId === ESPRESSIF || d.vendorId === WCH)
   const dev = known[0] || await navigator.usb.requestDevice({ filters: [{ vendorId: ESPRESSIF }, { vendorId: WCH }] })
   if (dev.vendorId === WCH) return new WebUSBSerialPort(dev).asSerialPort()
@@ -119,13 +135,13 @@ async function flash() {
     status('Done. Rebooting…', 'ok')
     await loader.after('hard_reset')
     status(board === 'arm'
-      ? 'Done ✓ — listen for “Ready to rumble!”, then join WiFi “xarm-voice” (pw ragamuffin) → 192.168.4.1'
+      ? 'Done ✓ — listen for “Ready to rumble!”, then join WiFi “Muffin” (pw ragamuffin) → 192.168.4.1'
       : 'Camera done ✓ — plug it back onto the arm (5V, GND, SDA, SCL). If nothing happens, tap its reset.', 'ok')
   } catch (e) {
     console.error(e)
     log(`\nERROR: ${e.message || e}\n`)
     const msg = String(e.message || e)
-    if (/No device selected|requestDevice/.test(msg)) status('No board picked. Check the cable, or do BOOT+RESET and try again.', 'bad')
+    if (/No device selected|requestDevice|No port selected|requestPort/.test(msg)) status('No board picked. Check the cable, or do BOOT+RESET and try again.', 'bad')
     else status('Failed: ' + msg + ' — try BOOT+RESET, then Flash again.', 'bad')
   } finally {
     try { await transport?.disconnect() } catch {}
@@ -157,5 +173,19 @@ async function monitor() {
 
 flashBtn.addEventListener('click', flash)
 monBtn.addEventListener('click', monitor)
-if (!('usb' in navigator)) status('This browser has no WebUSB. Open this page in Chrome on Android.', 'bad')
+if (!VIA) {
+  // no USB at all (iPhone, iPad, Safari, Firefox): WiFi card first, USB tools out of the way
+  document.body.classList.add('no-usb')
+  $('nousb').hidden = false
+  document.querySelector('.usb').hidden = true
+  $('wifi').after($('nousb'))
+}
+// iPhones resolve muffin.local; many Androids don't, but the router usually answers http://muffin
+const IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+if (!IOS) $('open-home').href = 'http://muffin/#update'
+$('share').addEventListener('click', async () => {
+  const url = location.href.split('#')[0]
+  try { if (navigator.share) return await navigator.share({ title: 'Ragamuffin Flasher', url }) } catch { return }
+  try { await navigator.clipboard.writeText(url); $('share').textContent = 'Link copied' } catch { prompt('Copy this link', url) }
+})
 loadManifests()

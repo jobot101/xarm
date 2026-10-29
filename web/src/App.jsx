@@ -21,7 +21,10 @@ export default function App() {
   const [s, setS] = useState(null)        // latest /api/state
   const [online, setOnline] = useState(false)
   const [toast, setToast] = useState('')
-  const [mode, setMode] = useState(() => { try { return localStorage.getItem('mode') || 'play' } catch { return 'play' } })
+  const [mode, setMode] = useState(() => {
+    if (location.hash === '#update') return 'workshop'   // flasher page's "Open Muffin" lands on Firmware
+    try { return localStorage.getItem('mode') || 'play' } catch { return 'play' }
+  })
   const [hold, setHold] = useState(0)
   const holdTimer = useRef(null)
 

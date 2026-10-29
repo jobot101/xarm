@@ -16,7 +16,7 @@ const st = {
   moves: { recording: false, frames: 0, list: [{ i: 0, name: 'robot' }] },
   kids: { cur: -1, list: [{ i: 0, name: 'sam', emoji: '🦖', jewel: 1, visits: 3, best_bells: 5, best_tower: 4 }] },
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
-  fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true },
+  fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true, sounds: '' },
 }
 const cfg = { home: [500, 500, 500, 500, 500, 500], drop: [500, 500, 500, 500, 500, 800],
   lift: [0, 0, 0, 0, -120, 0], reach: [0, 0, 0, -90, 90, 0], pick2: { align_axis: 1, align_turn: 375, grab_check: true, grab_margin: 40, grab_tries: 3, size_split: 900 }, grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'], cam_on_head: true, scan: [0, -200, 200], stack_pct: 30 }
@@ -25,7 +25,9 @@ createServer((req, res) => {
   let b = ''
   req.on('data', d => (b += d))
   req.on('end', () => {
-    const body = b && req.url !== '/api/ota' ? JSON.parse(b) : {}   // OTA body is the raw .bin, not json
+    const raw = req.url === '/api/ota' || req.url.startsWith('/api/sounds')
+    const body = b && !raw ? JSON.parse(b) : {}   // OTA / voice bodies are raw .bin, not json
+    if (req.method === 'POST' && req.url.startsWith('/api/sounds')) { st.fw.sounds = new URL(req.url, 'http://x').searchParams.get('v'); return (res.setHeader('Content-Type', 'application/json'), res.end(JSON.stringify({ ok: true, msg: 'voice updated' }))) }
     const send = (o) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
     st.cam.slots[0].x = 80 + Math.round(5 * Math.sin(Date.now() / 700))
     switch (`${req.method} ${req.url}`) {

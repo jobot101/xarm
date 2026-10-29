@@ -51,12 +51,19 @@ Use the 2×9 header on the audio board.
 
    **Which address, iPhone or Android:** on your WiFi, try **http://muffin** first (the board registers that name with your router; some routers use `muffin.lan` or `muffin.home`). iPhones also understand **http://muffin.local**; many Androids don't. If your router won't do names, give the board a reserved IP in the router's DHCP settings and bookmark that on both phones.
 
-### From an Android phone
+### From a phone or computer
 
-GitHub Actions builds every push. The files are on the **latest** release: https://github.com/jobot101/xarm/releases/tag/latest
+GitHub Actions builds every push. The files are on the **latest** release: https://github.com/jobot101/xarm/releases/tag/latest. Everything goes through **https://jobot101.github.io/xarm/** (the Ragamuffin flasher), which adapts to the browser:
 
-- **First flash:** plug the board into the phone with a USB-C data cable. Open **https://jobot101.github.io/xarm/** in Chrome, pick **Full install, erase** the very first time (after that, **Full install, keep settings** whenever a build says it needs one), and tap **Flash**. That page already has the latest build's files. If it can't find the board, hold BOOT, tap RESET, release BOOT, and try again. (Espressif's own esptool-js page can't see this board from Android, because its WebUSB mode only works with CH340 boards.)
-- **Every flash after that:** open http://muffin, go to **Firmware**, pick `xarm-voice.bin`, and upload. It goes over WiFi with no cable. If a bad build won't start, the board rolls back on its own.
+| browser | USB install (first time, camera, speech models) | WiFi update |
+|---|---|---|
+| Android, Chrome | yes (WebUSB) | yes |
+| Computer, Chrome or Edge | yes (Web Serial) | yes |
+| iPhone / iPad (any browser), Safari, Firefox | no: Apple blocks USB in every iOS browser | yes |
+
+- **First flash (USB, Android or computer):** plug the board in with a USB-C data cable, open the flasher, pick **Full install, erase** the very first time (after that, **Full install, keep settings** whenever a build says it needs one), and tap **Flash**. If it can't find the board, hold BOOT, tap RESET, release BOOT, and try again. (Espressif's own esptool-js page can't see this board from Android, because its WebUSB mode only works with CH340 boards.)
+- **Every update after that (WiFi, iPhone or Android):** on the flasher, tap **Open Muffin**, then **Install latest** on the Firmware panel. The phone downloads the newest app + Muffin's voice from GitHub and hands them to the board, so it works on Muffin's own WiFi too (keep mobile data on). With home WiFi set, the board also updates itself. Manual upload of a saved `xarm-voice.bin` still works. A bad build rolls back on its own.
+- **Camera module:** USB only (Android or computer); it has no WiFi updater.
 
 ## First run
 

@@ -8,6 +8,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
+#include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_partition.h"
@@ -28,6 +29,7 @@ static char s_latest[16] = "", s_status[112] = "waiting for internet";
 static char s_snd[24] = "";                 // sound bank version the manifest offers (hash of sounds.bin)
 static int s_snd_size;
 static char s_snd_tried[24] = "";           // last version tried, and when
+static bool s_bank_lock;                    // one writer at a time: the WiFi sync or a phone upload
 static int64_t s_snd_tried_at;
 static char s_snd_status[72] = "waiting for internet";
 
@@ -132,6 +134,7 @@ static bool sync_sounds(void)
     if (!p || p->size < fx_bank_off(p->size) + FX_BANK_MAX) { snd_status("no room in flash for the voice"); return false; }
     const uint32_t off = fx_bank_off(p->size);
 
+    if (__atomic_test_and_set(&s_bank_lock, __ATOMIC_ACQUIRE)) return false;   // a phone upload is writing it
     char url[160];
     snprintf(url, sizeof url, "%ssounds.bin?v=%s", CONFIG_XARM_UPDATE_URL, s_snd);
     esp_http_client_config_t c = { .url = url, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 20000,
@@ -165,6 +168,7 @@ static bool sync_sounds(void)
     }
     free(buf);
     esp_http_client_cleanup(h);
+    __atomic_clear(&s_bank_lock, __ATOMIC_RELEASE);
     if (ok) {
         nvs_str("sndver", s_snd, 0, true);
         snd_status("ready (%s)", s_snd);
@@ -237,4 +241,71 @@ void update_status(char *latest, size_t nl, char *st, size_t ns)
 {
     strlcpy(latest, s_latest, nl);
     strlcpy(st, s_status, ns);
+}
+
+void update_sound_version(char *out, size_t n) { nvs_str("sndver", out, n, false); }
+
+static esp_err_t up_reply(httpd_req_t *r, bool ok, const char *msg)
+{
+    cJSON *j = cJSON_CreateObject();
+    cJSON_AddBoolToObject(j, "ok", ok);
+    cJSON_AddStringToObject(j, "msg", msg);
+    char *t = cJSON_PrintUnformatted(j);
+    httpd_resp_set_type(r, "application/json");
+    httpd_resp_sendstr(r, t);
+    cJSON_free(t);
+    cJSON_Delete(j);
+    return ESP_OK;
+}
+
+// POST /api/sounds?v=<hash>: the phone relays sounds.bin (it has internet, the board may not, e.g. an
+// iPhone on Muffin's own WiFi). Same erase-ahead write as the WiFi sync, no reboot.
+esp_err_t update_sounds_upload(httpd_req_t *r)
+{
+    char q[64] = "", ver[24] = "";
+    if (httpd_req_get_url_query_str(r, q, sizeof q) == ESP_OK) httpd_query_key_value(q, "v", ver, sizeof ver);
+    int size = r->content_len;
+    if (!ver[0]) return up_reply(r, false, "missing ?v=");
+    if (size < 16 || size > FX_BANK_MAX) return up_reply(r, false, "bad voice bank size");
+    const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "model");
+    if (!p || p->size < fx_bank_off(p->size) + FX_BANK_MAX) return up_reply(r, false, "no room in flash for the voice");
+    if (__atomic_test_and_set(&s_bank_lock, __ATOMIC_ACQUIRE)) return up_reply(r, false, "voice is already updating");
+    const uint32_t off = fx_bank_off(p->size);
+
+    uint8_t *buf = malloc(4096);
+    const bool nomem = !buf;
+    int got = 0;
+    bool ok = false;
+    if (buf) {
+        snd_status("receiving Muffin's voice from the phone…");
+        fx_bank_release();
+        uint32_t erased = 0;
+        while (got < size) {
+            int n = httpd_req_recv(r, (char *)buf, size - got < 4096 ? size - got : 4096);
+            if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            if (n <= 0) break;
+            bool bad = false;
+            while ((uint32_t)(got + n) > erased && !bad) {
+                bad = esp_partition_erase_range(p, off + erased, 0x10000) != ESP_OK;
+                erased += 0x10000;
+            }
+            if (bad || esp_partition_write(p, off + got, buf, n) != ESP_OK) break;
+            got += n;
+        }
+        char magic[4] = {0};
+        esp_partition_read(p, off, magic, 4);
+        ok = got == size && !memcmp(magic, "SNB2", 4);
+        fx_bank_reload();
+        free(buf);
+    }
+    __atomic_clear(&s_bank_lock, __ATOMIC_RELEASE);
+    if (!ok) {
+        snd_status("upload failed at %d of %d bytes", got, size);
+        return up_reply(r, false, nomem ? "out of memory" : "voice upload failed");
+    }
+    nvs_str("sndver", ver, 0, true);
+    strlcpy(s_snd_tried, ver, sizeof s_snd_tried);
+    snd_status("ready (%s)", ver);
+    fx_say(SND_UPDATED);
+    return up_reply(r, true, "voice updated");
 }
