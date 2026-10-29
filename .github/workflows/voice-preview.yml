@@ -7,6 +7,9 @@ on:
     branches: [voice-preview]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   render:
     runs-on: ubuntu-latest
@@ -24,7 +27,10 @@ jobs:
         run: |
           python3 tools/make_sounds.py --preview preview/voices --voices-only
           python3 tools/make_sounds.py --preview preview/all
-      - uses: actions/upload-artifact@v4
-        with:
-          name: preview
-          path: preview
+      # committed back to this branch (git is the one place the WAVs can be fetched from everywhere)
+      - name: commit previews
+        if: "!contains(github.event.head_commit.message, '[previews]')"
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git add -f preview
+          git commit -q -m "[previews] rendered WAVs" && git push
