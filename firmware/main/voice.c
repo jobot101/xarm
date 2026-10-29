@@ -14,6 +14,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "router.h"
+#include "cloud.h"
+#include "core.h"
 #include "audio.h"
 #include "fx.h"
 #include "esp_log.h"
@@ -42,7 +44,7 @@ static const esp_mn_iface_t *s_mn;
 static model_iface_data_t *s_mnd;
 static char s_phr[MAX_PHRASES][48];
 static volatile bool s_ok, s_reload;
-static char s_last[48] = "", s_status[64] = "starting";
+static char s_last[64] = "", s_status[64] = "starting";
 static volatile int s_level;          // raw mic level 0..100 (dBFS mapped, peak-hold)
 static float s_peak;
 static volatile float s_prob;         // confidence of the last recognized phrase
@@ -129,7 +131,7 @@ void voice_engage(void)
 
 // the last few things it matched, kept or not, and why — shown in the app's Voice panel for tuning
 #define NOTES 10
-static struct { char p[40]; char why[36]; uint8_t prob; uint32_t age_s; int64_t t; } s_notes[NOTES];
+static struct { char p[64]; char why[48]; uint8_t prob; uint32_t age_s; int64_t t; } s_notes[NOTES];
 static int s_note_n;
 static portMUX_TYPE s_note_mux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -159,6 +161,93 @@ int voice_notes(voice_note_t *out, int max)
     }
     portEXIT_CRITICAL(&s_note_mux);
     return n;
+}
+
+// ---------------------------------------------------------------- cloud ears: utterance recorder
+// While the cloud is usable, every stretch of speech the VAD marks is recorded (with ~320 ms of pre-roll, so
+// the first word isn't clipped). When it ends, it's sent to Whisper if Muffin was listening: the window was
+// open, or MultiNet caught "Hey Muffin" inside it. MultiNet still runs on everything: it does "stop" on the
+// spot, opens the window on the wake word, and its guess is the fallback if the cloud call fails.
+#define SEG_MAX  (CLOUD_RATE * CLOUD_MAX_MS / 1000)
+#define PRE_N    (CLOUD_RATE * 320 / 1000)
+#define SEG_MIN  (CLOUD_RATE * 350 / 1000)
+static int16_t *s_seg, s_pre[PRE_N];
+static int s_seg_n, s_pre_i;
+static bool s_seg_on, s_seg_wake, s_seg_stopped;
+static int64_t s_seg_t0;
+static char s_seg_fb[48];
+static float s_seg_fbp;
+static int64_t s_huh_at, s_sent_at;
+
+static void run_text(const char *t, float pr, const char *tag);
+
+static void seg_feed(const int16_t *d, int n, bool speech, int64_t now)
+{
+    if (!s_seg_on) {
+        for (int i = 0; i < n; i++) { s_pre[s_pre_i] = d[i]; s_pre_i = (s_pre_i + 1) % PRE_N; }
+        if (!speech) return;
+        s_seg_on = true;
+        s_seg_t0 = now;
+        s_seg_wake = !s_wake || window_open(now);
+        s_seg_stopped = false;
+        s_seg_fb[0] = 0; s_seg_fbp = 0;
+        // pre-roll, oldest first (it already holds this frame, so it isn't appended again)
+        for (int i = 0; i < PRE_N; i++) s_seg[i] = s_pre[(s_pre_i + i) % PRE_N];
+        s_seg_n = PRE_N;
+        return;
+    }
+    int take = n < SEG_MAX - s_seg_n ? n : SEG_MAX - s_seg_n;
+    if (take > 0) { memcpy(s_seg + s_seg_n, d, take * sizeof(int16_t)); s_seg_n += take; }
+    if (speech && s_seg_n < SEG_MAX) return;
+
+    // the end of an utterance (the VAD only says silence after ~0.5 s of it, so the tail is included)
+    s_seg_on = false;
+    if (window_open(now)) s_seg_wake = true;     // "Hey Muffin" may have opened it on the way
+    if (s_seg_n < PRE_N + SEG_MIN || !s_seg_wake) return;
+    // started while Muffin was talking and ended right after: that's Muffin's own voice leaking past the AEC
+    int64_t play_end = audio_play_end_us();
+    if (s_seg_t0 < play_end && now < play_end + 400000 && !s_seg_fb[0]) return;
+    cloud_clip_t c = { .pcm = s_seg, .n = s_seg_n, .wake = s_seg_wake, .stopped = s_seg_stopped, .fallback_prob = s_seg_fbp };
+    strlcpy(c.fallback, s_seg_fb, sizeof c.fallback);
+    s_sent_at = now;
+    if (!cloud_submit(&c)) {
+        if (s_seg_fb[0]) run_text(s_seg_fb, s_seg_fbp, "");      // still waiting on the last one: use MultiNet's guess
+        else note("(too fast)", 0, "still thinking about the last one");
+    }
+}
+
+// cloud.c calls this from its task with Whisper's text (err = HTTP status or -1 when it failed)
+void voice_cloud_heard(const char *text, int err, const cloud_clip_t *c)
+{
+    if (err) {
+        if (c->fallback[0] && c->fallback_prob >= s_thresh / 100.0f) run_text(c->fallback, c->fallback_prob, "on-board: ");
+        else note("(cloud didn't answer)", 0, err == 429 ? "Groq's free limit — on-board for 1 min" : "on-board ears for a bit");
+        return;
+    }
+    char t[96];
+    int f = text_clean(text, t, sizeof t);
+    if (!t[0] && (f & TC_WAKE)) strcpy(t, "hey muffin");          // only said its name: it answers to that
+    if (text_junk(t)) { note(text[0] ? text : "(nothing)", 0, "cloud: no words in it"); return; }
+    if (c->stopped && (strstr(t, "stop") || strstr(t, "freeze"))) { note(t, 100, "stop (already done)"); return; }
+    run_text(t, 1.0f, "☁ ");
+}
+
+// one command, from either ear
+static void run_text(const char *t, float pr, const char *tag)
+{
+    char msg[64], why[48];
+    voice_engage();
+    strlcpy(s_last, t, sizeof s_last);
+    s_prob = pr;
+    bool ok = router_exec(t, msg, sizeof msg);
+    if (!ok && !strcmp(msg, "unknown command")) {
+        int64_t now = esp_timer_get_time();
+        if (now - s_huh_at > 8000000) { s_huh_at = now; fx_say(SND_HUH); }   // never "huh?" at its own "huh?"
+        strlcpy(msg, "didn't understand", sizeof msg);
+    }
+    snprintf(why, sizeof why, "%s%s", tag, msg);
+    note(t, pr, why);
+    ESP_LOGI(TAG, "%s\"%s\" -> %s", tag, t, msg);
 }
 
 // mic -> AFE. Never blocks on anything but the I2S read.
@@ -197,6 +286,7 @@ static void detect_task(void *arg)
         if (r->vad_state == VAD_SPEECH) s_speech_us = esp_timer_get_time();
         fx_listening(s_wake && window_open(esp_timer_get_time()));
         int n = r->data_size / (int)sizeof(int16_t);
+        bool cloud = s_seg && cloud_ready();
 
 
         if (s_reload) { s_reload = false; load_commands(); }
@@ -227,15 +317,25 @@ static void detect_task(void *arg)
                     if (why) {
                         note(p, pr, why);
                         ESP_LOGI(TAG, "ignored \"%s\" (p=%.2f): %s", p, pr, why);
+                    } else if (cloud && !s_seg_on && !is_stop(p) && now - s_sent_at < 1500000) {
+                        note(p, pr, "→ cloud");          // MultiNet caught up after the clip already went out
+                    } else if (cloud && s_seg_on && !is_stop(p)) {
+                        // the cloud gets this utterance: the wake word just opens the window (and marks it for
+                        // sending), anything else is kept as the fallback if the cloud call fails
+                        if (is_wake(p)) { voice_engage(); s_seg_wake = true; fx_event(FX_HEARD); note(p, pr, "wake — listening ☁"); }
+                        else { if (pr > s_seg_fbp) { strlcpy(s_seg_fb, p, sizeof s_seg_fb); s_seg_fbp = pr; } note(p, pr, "→ cloud"); }
+                        ESP_LOGI(TAG, "\"%s\" (p=%.2f) -> cloud", p, pr);
                     } else {
-                        if (!is_stop(p)) voice_engage();      // "hey muffin" opens the window, commands keep it open
-                        strlcpy(s_last, p, sizeof s_last);
-                        s_prob = pr;
+                        if (is_stop(p)) s_seg_stopped = s_seg_on;
                         fx_event(FX_HEARD);
-                        char msg[64];
-                        router_exec(s_last, msg, sizeof msg);
-                        note(p, pr, msg);
-                        ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", s_last, pr, msg);
+                        if (is_stop(p)) {
+                            char msg[64];
+                            strlcpy(s_last, p, sizeof s_last);
+                            s_prob = pr;
+                            router_exec(p, msg, sizeof msg);
+                            note(p, pr, msg);
+                            ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", p, pr, msg);
+                        } else run_text(p, pr, "");     // "hey muffin" opens the window, commands keep it open
                     }
                 }
                 s_mn->clean(s_mnd);
@@ -243,6 +343,8 @@ static void detect_task(void *arg)
                 s_mn->clean(s_mnd);
             }
         }
+        if (cloud) seg_feed(r->data, n, r->vad_state == VAD_SPEECH, esp_timer_get_time());
+        else s_seg_on = false;
     }
 }
 
@@ -261,7 +363,7 @@ static bool afe_start(srmodel_list_t *models)
         ESP_LOGW(TAG, "VADNet is in flash but the AFE didn't pick it");
     c->vad_mode = VAD_MODE_1;            // lenient: the VAD only has to notice a voice, the matcher decides
     c->vad_min_speech_ms = 96;           // short commands ("stop") still register
-    c->vad_min_noise_ms = 600;
+    c->vad_min_noise_ms = 500;           // also how long a pause ends an utterance for the cloud ears
     c->wakenet_init = false;
     c->agc_init = true;
     c->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
@@ -294,6 +396,8 @@ void voice_start(i2c_master_bus_handle_t bus)
     if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "commands_alloc: %s", esp_err_to_name(e));
     tune_apply();
     load_commands();
+    s_seg = heap_caps_malloc(SEG_MAX * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    cloud_init();
     s_ok = true;
     ESP_LOGI(TAG, "listening (%s, %s VAD, %s), gain %d dB, threshold %d%%, %s", name, s_vad,
              audio_mic_dual() ? "both mics" : "one mic", s_gain, s_thresh, s_wake ? "Hey Muffin first" : "always on");

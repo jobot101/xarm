@@ -71,3 +71,13 @@ int  align_twist(int w, int h, int jaws_axis, int turn);
 bool grip_missed(int actual, int grip_close, int grip_open, int margin);
 // size sort: 0 = small, 1 = big (blob box area vs split, px^2)
 int  size_bin(int w, int h, int split);
+
+// ---- cloud speech (Whisper transcript -> router text) ----
+// "Hey Muffin, can you pick up the RED one, please?" -> "pick up the red one". Lower-cases, turns
+// punctuation into spaces, strips a leading wake word and politeness ("can you", "please", "um"...), and
+// folds one-word answers onto what chat.c expects ("yeah sure!" -> "yes", "nah" -> "no").
+// Returns TC_WAKE if "muffin" was in it; out may be "" (they only said its name).
+#define TC_WAKE 1
+int  text_clean(const char *in, char *out, size_t n);
+// Whisper's stock hallucinations on noise ("thanks for watching", a lone "you"): true = throw away
+bool text_junk(const char *cleaned);

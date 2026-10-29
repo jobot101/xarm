@@ -239,3 +239,9 @@ input, select, textarea { font-size: 16px; }                                    
 /* Play: tells kids how to start talking, lights up while Muffin's ears are open */
 .ears { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--card-2); color: var(--dim); font-size: 15px; text-align: center; }
 .ears.on { background: var(--sapphire); color: #fff; font-weight: 600; }
+/* Voice panel: cloud ears */
+.cloud { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.cloud h3 { margin: 0 0 6px; }
+.keyrow { display: flex; gap: 8px; margin: 10px 0 4px; }
+.keyrow input { flex: 1; min-width: 0; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
+button.link { background: none; border: 0; padding: 4px 0; color: var(--bad); font-size: 13px; text-decoration: underline; }

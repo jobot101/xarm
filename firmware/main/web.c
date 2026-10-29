@@ -21,6 +21,8 @@
 #include "router.h"
 #include "store.h"
 #include "voice.h"
+#include "cloud.h"
+#include "sdkconfig.h"
 #include "audio.h"
 
 static const char *TAG = "web";
@@ -180,6 +182,19 @@ static esp_err_t h_state(httpd_req_t *r)
         cJSON_AddBoolToObject(v, "awake", open);       // listening for commands right now
         cJSON_AddStringToObject(v, "vad", vad);        // "VADNet" or "WebRTC" (old speech models in flash)
         cJSON_AddBoolToObject(v, "dual", audio_mic_dual());
+        {   // cloud ears (Groq Whisper). The key itself never leaves the board, only "gsk_…wxyz"
+            bool on; char kh[24], cs[80], cl[96]; int ms, today;
+            cloud_diag(&on, kh, sizeof kh, cs, sizeof cs, cl, sizeof cl, &ms, &today);
+            cJSON *c = cJSON_AddObjectToObject(v, "cloud");
+            cJSON_AddBoolToObject(c, "on", on);
+            cJSON_AddBoolToObject(c, "ready", cloud_ready());
+            cJSON_AddStringToObject(c, "key", kh);
+            cJSON_AddStringToObject(c, "status", cs);
+            cJSON_AddStringToObject(c, "last", cl);
+            cJSON_AddNumberToObject(c, "ms", ms);
+            cJSON_AddNumberToObject(c, "today", today);
+            cJSON_AddNumberToObject(c, "max", CONFIG_XARM_STT_DAILY_MAX);
+        }
         char bs[72];
         update_sound_status(bs, sizeof bs);
         cJSON_AddBoolToObject(v, "bank", fx_bank_ok());
@@ -360,14 +375,19 @@ static esp_err_t h_phrases(httpd_req_t *r)
     return e;
 }
 
-// ---------- POST /api/voice {"gain":0..42,"thresh":5..90,"wake":0|1,"dual":0|1} ----------
+// ---------- POST /api/voice {"gain":0..42,"thresh":5..90,"wake":0|1,"dual":0|1,"cloud":0|1,"stt_key":"gsk_…"} ----------
 // "dual" (second mic) changes the AFE channel layout, so it's saved and the board reboots.
 static esp_err_t h_voice(httpd_req_t *r)
 {
     cJSON *b = body(r);
     voice_tune(num(b, "gain", -1), num(b, "thresh", -1), num(b, "wake", -1));
-    int dual = num(b, "dual", -1);
+    int dual = num(b, "dual", -1), cl = num(b, "cloud", -1);
+    cJSON *key = cJSON_GetObjectItem(b, "stt_key");
+    bool keyed = cJSON_IsString(key);
+    if (keyed) cloud_set_key(key->valuestring);
+    if (cl == 0 || cl == 1) cloud_enable(cl);
     cJSON_Delete(b);
+    if (keyed) return reply(r, true, cloud_ready() ? "key saved — say “Hey Muffin”" : "key saved");
     if ((dual == 0 || dual == 1) && dual != audio_mic_dual()) {
         audio_mic_dual_save(dual);
         xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);

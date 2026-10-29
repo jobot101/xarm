@@ -13,6 +13,10 @@ export default function Voice({ s, run }) {
   const lv = v.level ?? 0
   const save = (g, t) => run(api.voice({ gain: g, thresh: t }))
   const setWake = on => run(api.voice({ wake: on ? 1 : 0 }))
+  const c = v.cloud
+  const [key, setKey] = useState('')
+  const saveKey = () => { run(api.voice({ stt_key: key.trim() })); setKey('') }
+  const setCloud = on => run(api.voice({ cloud: on ? 1 : 0 }))
   const setDual = on => {
     if (confirm(`${on ? 'Use both mics' : 'Go back to one mic'}? Muffin restarts to switch (about 15 s).`)) run(api.voice({ dual: on ? 1 : 0 }))
   }
@@ -33,6 +37,23 @@ export default function Voice({ s, run }) {
         <label className="toggle"><input type="checkbox" checked={!!v.dual} onChange={e => setDual(e.target.checked)} />
           <span><b>Use both mics</b><small>Steers toward whoever's talking. Try it if Muffin misses you in a noisy room. Restarts Muffin.</small></span></label>
       </div>}
+      {c && <div className="cloud">
+        <h3>Cloud ears <small>Groq Whisper · free · only after “Hey Muffin”</small></h3>
+        <p><b className={c.ready ? 'ok-line' : ''}>{c.ready ? '● ' : '○ '}</b>{c.status}
+          {c.ready && c.today > 0 && <small> · {c.today} of {c.max} today</small>}</p>
+        {c.last && <p className="hint">Last: “{c.last}”{c.ms ? ` — ${(c.ms / 1000).toFixed(1)} s` : ''}</p>}
+        {c.key && <label className="toggle"><input type="checkbox" checked={!!c.on} onChange={e => setCloud(e.target.checked)} />
+          <span><b>Use cloud ears</b><small>Understands whole sentences (“can you pick up the red one?”). “Stop” and
+            “Hey Muffin” stay on the board, and with no internet it falls back to the on-board phrases by itself.</small></span></label>}
+        <div className="keyrow">
+          <input type="password" autoComplete="off" spellCheck="false" placeholder={c.key ? `set: ${c.key}` : 'Groq key (gsk_…)'}
+            value={key} onChange={e => setKey(e.target.value)} />
+          <button disabled={!key.trim()} onClick={saveKey}>Save key</button>
+        </div>
+        {c.key && <button className="link" onClick={() => confirm('Remove the Groq key from Muffin?') && run(api.voice({ stt_key: '' }))}>Remove key</button>}
+        <p className="hint">Get a free key at console.groq.com → API Keys. It's stored on Muffin only. Voice clips go to Groq's
+          servers, only after “Hey Muffin”.{!v.wake && ' With “Hey Muffin” switched off, every sentence near Muffin is sent — that uses the free daily allowance fast.'}</p>
+      </div>}
       {v.bank_status !== undefined && <p className={v.bank ? 'hint' : 'warn-line'}>
         Muffin's voice: <b>{v.bank ? 'ready' : 'not loaded'}</b> — {v.bank_status}
         {!v.bank && ' (needs home WiFi with internet; it downloads by itself)'}</p>}
@@ -43,11 +64,11 @@ export default function Voice({ s, run }) {
       <p className="hint">Mic level {lv}. Quiet room ≈ 10–30, talking at arm's length should jump past 40.</p>
       <p>Last heard: <b>{v.last || '—'}</b>{v.prob ? ` (${v.prob}%)` : ''}</p>
       {v.heard?.length > 0 && <>
-        <h3>What Muffin heard <small>newest first · % = how sure</small></h3>
+        <h3>What Muffin heard <small>newest first · % = how sure the on-board ears were · ☁ = cloud</small></h3>
         <ul className="heard">
           {v.heard.map((h, i) => (
-            <li key={i} className={h.why === 'ok' || !/ignored|no voice|talking|asleep/.test(h.why) ? 'ok' : 'skip'}>
-              <b>{h.p}</b> <span className="pc">{h.prob}%</span> <small>{h.why} · {h.ago}s ago</small>
+            <li key={i} className={/ignored|no voice|talking|asleep|didn't|no words|cloud didn't|too fast/.test(h.why) ? 'skip' : 'ok'}>
+              <b>{h.p}</b> {!/^☁/.test(h.why) && h.prob > 0 && <span className="pc">{h.prob}%</span>} <small>{h.why} · {h.ago}s ago</small>
             </li>))}
         </ul>
         <p className="hint">Said something and it's not here at all? Raise the gain or lower the threshold. Here but

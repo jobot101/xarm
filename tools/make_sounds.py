@@ -112,6 +112,8 @@ LINES = {
     "no":          ["Your loss.", "Fine. I'll just stand here looking great."],
     "milestone":   ["That's a lot of tricks. Do I get paid for this?", "I'm on fire today!"],
     "surprise":    ["You asked for it!", "Surprise!"],
+    "huh":         ["Huh? Say that again.", "I'm brilliant, not a mind reader. One more time?",
+                    "Didn't catch that. Try again, nice and slow."],
 }
 # ---- teaching (pick.c do_teach): each lesson is a list of sentences, played in order. Muffin moves the part
 # it's talking about on the same sentence (motion is matched by lesson name + sentence number in pick.c).

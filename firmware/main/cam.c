@@ -16,7 +16,15 @@ static volatile bool s_ok;
 
 static void task(void *arg)
 {
+    int misses = 0;
     for (;;) {
+        // no camera answering for 2 s: stop reading (each failed read floods the log with I2C errors) and
+        // just knock quietly every 2 s until one shows up
+        if (misses >= 20) {
+            if (i2c_master_probe(s_bus, CAM_ADDR, 50) != ESP_OK) { s_ok = false; vTaskDelay(pdMS_TO_TICKS(2000)); continue; }
+            ESP_LOGI(TAG, "camera answered at 0x52");
+            misses = 0;
+        }
         bool ok = true;
         for (int slot = 0; slot < 2; slot++) {
             uint8_t reg = (uint8_t)slot, raw[CAM_BYTES];
@@ -27,6 +35,8 @@ static void task(void *arg)
             s_box[slot] = b;
         }
         s_ok = ok;
+        misses = ok ? 0 : misses + 1;
+        if (misses == 20) ESP_LOGW(TAG, "no camera at 0x52 — checking every 2 s");
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }

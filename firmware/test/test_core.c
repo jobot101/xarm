@@ -122,6 +122,36 @@ int main(void)
     assert(fabsf(catmull(0, 100, 200, 300, 0.5f) - 150) < 1e-3f);
     printf("ok   catmull\n");
 
+    // cloud transcripts -> router text
+    {
+        char o[96]; int f;
+        f = text_clean("Hey Muffin, can you pick up the RED one, please?", o, sizeof o);
+        assert(f == TC_WAKE && !strcmp(o, "pick up the red one"));
+        f = text_clean("Hey, Muffin!", o, sizeof o);          assert(f == TC_WAKE && !strcmp(o, ""));
+        f = text_clean("muffin", o, sizeof o);                assert(f == TC_WAKE && !strcmp(o, ""));
+        f = text_clean("Dance, robot!", o, sizeof o);         assert(f == 0 && !strcmp(o, "dance robot"));
+        text_clean("Stop, Muffin!", o, sizeof o);             assert(!strcmp(o, "stop"));
+        text_clean("Muffin, stop.", o, sizeof o);             assert(!strcmp(o, "stop"));
+        text_clean("Yeah, sure!", o, sizeof o);               assert(!strcmp(o, "yes"));
+        text_clean("Yes please.", o, sizeof o);               assert(!strcmp(o, "yes please"));
+        text_clean("Okay.", o, sizeof o);                     assert(!strcmp(o, "yes"));
+        text_clean("Nah.", o, sizeof o);                      assert(!strcmp(o, "no"));
+        text_clean("No thanks", o, sizeof o);                 assert(!strcmp(o, "no thanks"));
+        text_clean("Muffin, yes.", o, sizeof o);              assert(!strcmp(o, "yes"));
+        text_clean("That’s true!", o, sizeof o);         assert(!strcmp(o, "that's true"));
+        text_clean("Um, so, could you please sort everything?", o, sizeof o); assert(!strcmp(o, "sort everything"));
+        text_clean("Okay Muffin, tell me a joke.", o, sizeof o); assert(!strcmp(o, "tell me a joke"));
+        text_clean("Hold this for me.", o, sizeof o);         assert(!strcmp(o, "hold this for me"));
+        text_clean("Sort by size", o, sizeof o);              assert(!strcmp(o, "sort by size"));   // "so" is a whole word only
+        text_clean("Hey", o, sizeof o);                       assert(!strcmp(o, "hey"));
+        text_clean("  ", o, sizeof o);                        assert(!strcmp(o, "") && text_junk(o));
+        text_clean("Thanks for watching!", o, sizeof o);      assert(text_junk(o));
+        text_clean("Thank you.", o, sizeof o);                assert(!text_junk(o) && !strcmp(o, "thank you"));
+        text_clean("Pick up the red one now please", o, sizeof o); assert(!strcmp(o, "pick up the red one"));
+        char tiny[8]; text_clean("pick up the red one", tiny, sizeof tiny); assert(strlen(tiny) < 8);
+    }
+    printf("ok   text_clean\n");
+
     puts("all passed");
     return 0;
 }

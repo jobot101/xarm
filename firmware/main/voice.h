@@ -14,5 +14,5 @@ void voice_tune(int gain_db, int thresh_pct, int wake);   // live + saved; -1 le
 void voice_diag2(bool *wake, bool *open, const char **vad);  // "Hey Muffin" gate on, window open now, "VADNet"/"WebRTC"
 void voice_engage(void);                  // someone's talking to Muffin (app tap, Muffin asked a question): open the window
 
-typedef struct { char phrase[40]; char why[36]; int prob; int age_s; } voice_note_t;
+typedef struct { char phrase[64]; char why[48]; int prob; int age_s; } voice_note_t;
 int voice_notes(voice_note_t *out, int max);   // recent matches, newest first, with what happened ("ok", why ignored)

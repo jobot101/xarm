@@ -1,5 +1,7 @@
 #include "core.h"
 #include <math.h>
+#include <string.h>
+#include <ctype.h>
 
 #define LO(v) ((uint8_t)((v) & 0xFF))
 #define HI(v) ((uint8_t)(((v) >> 8) & 0xFF))
@@ -149,4 +151,99 @@ float catmull(float p0, float p1, float p2, float p3, float t)
 {
     float t2 = t * t, t3 = t2 * t;
     return 0.5f * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (3 * p1 - p0 - 3 * p2 + p3) * t3);
+}
+
+// ---------------------------------------------------------------- cloud speech text
+static bool word_at(const char *s, const char *w)        // s starts with whole word(s) w
+{
+    size_t k = strlen(w);
+    return !strncmp(s, w, k) && (s[k] == 0 || s[k] == ' ');
+}
+
+static bool ends_word(const char *s, size_t len, const char *w, size_t *cut)   // s[0..len) ends with " w" or is w
+{
+    size_t k = strlen(w);
+    if (len < k || strncmp(s + len - k, w, k)) return false;
+    if (len > k && s[len - k - 1] != ' ') return false;
+    *cut = len - k;
+    return true;
+}
+
+static const char *const YES[] = { "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "of course", "absolutely",
+    "uh huh", "yes please", "sure thing", "yeah sure", "ok sure", "okay sure", "yes yes", "definitely", "please", 0 };
+static const char *const NO[]  = { "no", "nope", "nah", "no thanks", "no thank you", "no way", "not now", 0 };
+
+static bool in_list(const char *s, const char *const *l) { for (; *l; l++) if (!strcmp(s, *l)) return true; return false; }
+
+// "yes please" / "sure thing" / "no thanks" are chat.c phrases already; the rest collapse to yes / no
+static void fold_answer(char *s, size_t n)
+{
+    const char *to = NULL;
+    if (in_list(s, YES)) to = strcmp(s, "yes please") && strcmp(s, "sure thing") ? "yes" : NULL;
+    else if (in_list(s, NO)) to = strcmp(s, "no thanks") ? "no" : NULL;
+    if (to && n > strlen(to)) strcpy(s, to);
+}
+
+int text_clean(const char *in, char *out, size_t n)
+{
+    if (!n) return 0;
+    // 1. lower-case; anything but letters, digits and apostrophes becomes one space
+    size_t k = 0;
+    for (const char *p = in; *p && k + 1 < n; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c == 0xE2 && (unsigned char)p[1] == 0x80 && (unsigned char)p[2] == 0x99) { out[k++] = '\''; p += 2; continue; }   // ’
+        if (isalnum(c) || c == '\'') out[k++] = (char)tolower(c);
+        else if (k && out[k - 1] != ' ') out[k++] = ' ';
+    }
+    while (k && out[k - 1] == ' ') k--;
+    out[k] = 0;
+
+    int flags = 0;
+    for (char *m = out; (m = strstr(m, "muffin")); m++)
+        if (m == out || m[-1] == ' ') { flags |= TC_WAKE; break; }
+
+    // 2. whole-answer folding first ("okay" alone is a yes, but "okay muffin dance" is a command)
+    fold_answer(out, n);
+    if (!strcmp(out, "yes") || !strcmp(out, "no") || !strcmp(out, "yes please") || !strcmp(out, "sure thing") || !strcmp(out, "no thanks"))
+        return flags;
+
+    // 3. strip leading wake words and filler, repeatedly
+    static const char *const LEAD[] = { "hey muffin", "hi muffin", "hello muffin", "okay muffin", "ok muffin", "yo muffin",
+        "muffins", "muffin", "hey", "um", "uh", "umm", "uhh", "so", "okay", "ok", "now", "please", "can you please",
+        "could you please", "can you", "could you", "would you", "will you", "i want you to", "go ahead and", "i said",
+        "i need you to", "you should", 0 };
+    char *s = out;
+    for (bool again = true; again; ) {
+        again = false;
+        for (const char *const *l = LEAD; *l; l++) {
+            if (word_at(s, *l)) {
+                size_t w = strlen(*l);
+                // a lone "hey" / "okay" isn't filler, it's the whole thing they said
+                if (s[w] == 0 && (!strcmp(*l, "hey") || !strcmp(*l, "okay") || !strcmp(*l, "ok"))) continue;
+                s += w;
+                while (*s == ' ') s++;
+                again = true;
+                break;
+            }
+        }
+    }
+    // 4. strip trailing politeness / name
+    size_t len = strlen(s), cut;
+    for (bool again = true; again; ) {
+        again = false;
+        static const char *const TAIL[] = { "please", "muffin", "muffins", "now", "thanks", 0 };
+        for (const char *const *l = TAIL; *l; l++)
+            if (len > strlen(*l) && ends_word(s, len, *l, &cut)) { len = cut; while (len && s[len - 1] == ' ') len--; again = true; }
+    }
+    memmove(out, s, len);
+    out[len] = 0;
+    fold_answer(out, n);
+    return flags;
+}
+
+bool text_junk(const char *t)
+{
+    static const char *const J[] = { "", "you", "thanks for watching", "thank you for watching", "please subscribe",
+        "subscribe", "music", "applause", "silence", "the end", "bye bye bye", 0 };
+    return in_list(t, J);
 }

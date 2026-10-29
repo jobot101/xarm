@@ -48,6 +48,23 @@ menu "xArm Voice"
         int "Weak matches count only if the VAD heard a voice within this many ms"
         default 3000
 
+    config XARM_STT_URL
+        string "Cloud ears: OpenAI-compatible speech-to-text endpoint"
+        default "https://api.groq.com/openai/v1/audio/transcriptions"
+        help
+            Whisper over HTTPS after "Hey Muffin". The API key is pasted in the web app (stored in NVS,
+            never in the build). Groq's free tier is the default.
+
+    config XARM_STT_MODEL
+        string "Cloud ears: model"
+        default "whisper-large-v3-turbo"
+
+    config XARM_STT_DAILY_MAX
+        int "Cloud ears: most requests per day (then on-board only until the day rolls over)"
+        default 1800
+        help
+            Groq's free tier allows about 2000 requests a day.
+
     config XARM_UPDATE_URL
         string "Auto-update base URL (manifest.json + xarm-voice.bin, trailing slash)"
         default "https://jobot101.github.io/xarm/fw/"
