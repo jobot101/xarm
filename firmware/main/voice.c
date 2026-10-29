@@ -213,7 +213,7 @@ static void seg_feed(const int16_t *d, int n, bool speech, int64_t now)
     s_sent_at = now;
     if (!cloud_submit(&c)) {
         if (s_seg_fb[0]) run_text(s_seg_fb, s_seg_fbp, "");      // still waiting on the last one: use MultiNet's guess
-        else note("(too fast)", 0, "still thinking about the last one");
+        else note("(too fast)", 0, "cloud still busy with the last one");
     }
 }
 

@@ -30,6 +30,8 @@ static bool s_on = true, s_key_bad;
 static volatile bool s_busy;
 static int64_t s_backoff_until, s_day_start;
 static int s_today, s_ms;
+static volatile int64_t s_started;
+static const char *volatile s_phase = "";
 static char s_status[72] = "", s_last[96] = "";
 static cloud_clip_t s_job;
 static int16_t *s_pcm;
@@ -117,6 +119,8 @@ void cloud_diag(bool *on, char *key_hint, size_t nk, char *st, size_t ns, char *
     else if (s_key_bad)          strlcpy(st, "Groq turned the key down — check it and paste it again", ns);
     else if (!net_online())      strlcpy(st, "no internet — using the on-board ears", ns);
     else if (s_today >= CONFIG_XARM_STT_DAILY_MAX) strlcpy(st, "daily limit reached — on-board ears until tomorrow", ns);
+    else if (s_busy && now - s_started > 3000000)
+        snprintf(st, ns, "%s… %d s", s_phase[0] ? s_phase : "working", (int)((now - s_started) / 1000000));
     else if (now < s_backoff_until) snprintf(st, ns, "%s — on-board ears for %d s", s_status, (int)((s_backoff_until - now) / 1000000));
     else { portENTER_CRITICAL(&s_mux); strlcpy(st, s_status[0] ? s_status : "ready", ns); portEXIT_CRITICAL(&s_mux); }
     portENTER_CRITICAL(&s_mux);
@@ -195,10 +199,12 @@ static int attempt(const int16_t *pcm, int n, int *got)
     int total = npre + 44 + n * 2 + (int)sizeof post - 1;
 
     int code = -1;
-    if (esp_http_client_open(h, total) == ESP_OK
+    s_phase = "connecting to Groq";
+    if (esp_http_client_open(h, total) == ESP_OK && (s_phase = "sending", true)
         && write_all(h, pre, npre) && write_all(h, (const char *)wav, 44)
         && write_all(h, (const char *)pcm, n * 2) && write_all(h, post, sizeof post - 1)
-        && esp_http_client_fetch_headers(h) >= 0) {
+        && (s_phase = "waiting for Groq", true) && esp_http_client_fetch_headers(h) >= 0) {
+        s_phase = "reading answer";
         code = esp_http_client_get_status_code(h);
         int r, k = 0;
         while (k < RESP_MAX - 1 && (r = esp_http_client_read(h, s_resp + k, RESP_MAX - 1 - k)) > 0) k += r;
@@ -235,6 +241,7 @@ static void task(void *arg)
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         int64_t t0 = esp_timer_get_time();
+        s_started = t0;
         day_roll(t0);
         s_today++;
         int got = 0, code = attempt(s_job.pcm, s_job.n, &got);
@@ -258,8 +265,10 @@ static void task(void *arg)
             else { s_backoff_until = t1 + 20 * 1000000LL; char b[48]; snprintf(b, sizeof b, "Groq error %d", code); status(b); }
             ESP_LOGW(TAG, "request failed: %d %.200s", code, got ? s_resp : "");
         }
-        voice_cloud_heard(text, err, &s_job);
+        cloud_clip_t done = s_job;    // the next clip may land in s_job as soon as busy clears
+        s_phase = "";
         s_busy = false;
+        voice_cloud_heard(text, err, &done);
     }
 }
 
@@ -269,7 +278,8 @@ void cloud_init(void)
     s_pcm = heap_caps_malloc(MAX_SAMPLES * sizeof(int16_t), MALLOC_CAP_SPIRAM);
     s_resp = heap_caps_malloc(RESP_MAX, MALLOC_CAP_SPIRAM);
     if (!s_pcm || !s_resp) { ESP_LOGE(TAG, "no PSRAM for cloud buffers"); return; }
-    // TLS handshakes want a deep stack in internal RAM
-    if (xTaskCreatePinnedToCore(task, "cloud", 10240, NULL, 4, &s_task, 0) != pdPASS) s_task = NULL;
+    // TLS handshakes want a deep stack in internal RAM. Not pinned: core 0 is busy with the AFE (echo
+    // cancelling, VADNet) and WiFi, and a request pinned there starved — the same as the update task, which floats.
+    if (xTaskCreate(task, "cloud", 12288, NULL, 5, &s_task) != pdPASS) s_task = NULL;
     ESP_LOGI(TAG, "cloud ears: %s, %s", s_key[0] ? "key set" : "no key", s_on ? "on" : "off");
 }
