@@ -10,6 +10,7 @@
 #include "moves.h"
 #include "kids.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -146,14 +147,19 @@ static bool holding_check(void)
 static bool grab(int slot)
 {
     const char *name = g_cfg.slot_name[slot];
-    if (g_cfg.n_calib < 3) { set("need_calib", "teach at least 3 calibration points"); return false; }
+    if (g_cfg.n_calib < 3) { fx_say(SND_NEED_CALIB); set("need_calib", "teach at least 3 calibration points"); return false; }
     int tries = g_pick2.grab_check ? (g_pick2.grab_tries ? g_pick2.grab_tries : 1) : 1;
 
     for (int t = 1; t <= tries; t++) {
+        if (t == 1) fx_say_color(SND_SEARCH_C_RED, SND_SEARCH, name);
         set("searching", t == 1 ? "looking for %s" : "looking for %s again (try %d)", name, t);
         float px, py;
         int off;
-        if (!find(slot, &px, &py, &off)) { if (!s_abort) set("not_found", "can't see %s", name); return false; }
+        if (!find(slot, &px, &py, &off)) {
+            if (!s_abort) { fx_say_color(SND_NOT_FOUND_C_RED, SND_NOT_FOUND, name); set("not_found", "can't see %s", name); }
+            return false;
+        }
+        fx_maybe(SND_FOUND, 70);
 
         // calibration was taught from the look pose; turning the base just rotates the whole picture
         uint16_t grasp[NSERVO], hover[NSERVO];
@@ -168,19 +174,22 @@ static bool grab(int slot)
         set("moving", "%s at (%.0f,%.0f)%s", name, px, py, twist ? ", wrist turned" : "");
         if (!go(hover, g_cfg.move_ms)) return false;
         if (!go(grasp, g_cfg.move_ms / 2)) return false;
+        fx_maybe(SND_GRAB, 35);
         set("grasping", "%s", name);
         if (!grip(g_cfg.grip_close)) return false;
         if (holding_check()) {
             s_holding = true;
+            fx_say(SND_GOT);
             hover[0] = held();
             return go(hover, g_cfg.move_ms / 2);
         }
         // missed: open, back off, look again
         set("grasping", "missed %s — retrying", name);
-        fx_event(FX_ERROR);
+        fx_say(SND_MISSED);
         if (!grip(g_cfg.grip_open)) return false;
         if (!go(hover, g_cfg.move_ms / 2)) return false;
     }
+    fx_say(SND_ERROR);
     set("not_found", "couldn't get a grip on %s", name);
     return false;
 }
@@ -211,6 +220,7 @@ static void do_pick(int slot)
 
 static void do_drop(void)
 {
+    fx_say(SND_DROP);
     set("dropping", "to drop pose");
     uint16_t p[NSERVO];
     pose(p, g_cfg.drop, 0, held());
@@ -225,6 +235,7 @@ static void do_drop(void)
 static void do_give(void)
 {
     if (!s_holding) { set("idle", "nothing to give — grab something first"); return; }
+    fx_say(SND_GIVE);
     set("giving", "here you go");
     uint16_t p[NSERVO];
     pose(p, g_cfg.give, 0, held());
@@ -232,6 +243,7 @@ static void do_give(void)
     if (!wait_ms(700)) return;
     if (!grip(g_cfg.grip_open)) return;
     s_holding = false;
+    fx_say(SND_GIVEN);
     if (!wait_ms(500) || !go_home()) return;
     set("idle", "handed over");
 }
@@ -255,6 +267,7 @@ static void do_sort(void)
         done++;
     }
     if (!go_home()) return;
+    fx_say(done ? SND_SORTED : SND_NOTHING);
     set(done ? "idle" : "not_found", done ? "sorted %d" : "nothing to sort", done);
 }
 
@@ -282,6 +295,7 @@ static void do_sort_size(void)
         done++;
     }
     if (!go_home()) return;
+    fx_say(done ? SND_SORTED : SND_NOTHING);
     set(done ? "idle" : "not_found", done ? "sorted %d by size" : "nothing to sort", done);
 }
 
@@ -290,6 +304,7 @@ static bool beat(uint16_t p[NSERVO], int ms) { return go(p, ms); }
 
 static void do_wave(void)
 {
+    fx_say(SND_WAVE);
     set("waving", "hello!");
     uint16_t p[NSERVO];
     pose(p, g_cfg.home, 0.6f, g_cfg.grip_open);              // a bit raised
@@ -305,6 +320,7 @@ static void do_wave(void)
 
 static void do_bow(void)
 {
+    fx_say(SND_BOW);
     set("bowing", "thank you!");
     uint16_t p[NSERVO];
     pose(p, g_cfg.home, -0.8f, hand());                      // opposite of lift = lean forward/down
@@ -316,6 +332,7 @@ static void do_bow(void)
 
 static void do_dance(void)
 {
+    fx_say(SND_DANCE);
     set("dancing", "♪");
     uint16_t p[NSERVO];
     static const int8_t base[8] = {1, -1, 1, -1, 2, -2, 0, 0}, wrist[8] = {1, 1, -1, -1, 1, -1, 1, 0};
@@ -332,6 +349,7 @@ static void do_dance(void)
 // hover over the bell, strike 3 times
 static void do_bell(void)
 {
+    fx_say(SND_BELL);
     set("ringing", "ding!");
     uint16_t up[NSERVO], hit[NSERVO];
     pose(up, g_cfg.bell, 0.5f, g_cfg.grip_close);
@@ -350,6 +368,7 @@ static void do_bell(void)
 // ---- third hand: present the open gripper at the helper spot; then grip / nudge / let go by voice
 static void do_helper(void)
 {
+    fx_say(SND_HELPER);
     set("helping", "put it in my hand, then say \"hold it\"");
     uint16_t p[NSERVO];
     pose(p, g_cfg.helper, 0, hand());
@@ -381,7 +400,7 @@ static void do_nudge(int dir)
 static void do_stack(void)
 {
     if (s_holding) { set("holding", "drop what I'm holding first"); return; }
-    if (g_cfg.n_calib < 3) { set("need_calib", "teach at least 3 calibration points"); return; }
+    if (g_cfg.n_calib < 3) { fx_say(SND_NEED_CALIB); set("need_calib", "teach at least 3 calibration points"); return; }
     int level = 0;
     for (; level < 10; level++) {
         int slot = -1, off = 0;
@@ -411,12 +430,13 @@ static void do_stack(void)
         if (!grip(g_cfg.grip_open)) return;
         s_holding = false;
         place[0] = above[0] = g_cfg.grip_open;
+        fx_say_n(SND_STACK_N_1, level + 1);
         if (!go(above, g_cfg.move_ms / 2)) return;
     }
     if (!go_home()) return;
-    kids_score("tower", level);
+    fx_say(level ? SND_TOWER : SND_NOTHING);
+    kids_score("tower", level);                // a new best also cheers (kids.c)
     set(level ? "idle" : "not_found", level ? "tower of %d!" : "no blocks to stack", level);
-    if (level) fx_event(FX_CHEER);
 }
 
 // replay a recorded move: glide to its start, then follow a smooth curve through the frames in real
@@ -426,6 +446,7 @@ static void do_play(int idx)
     static uint16_t f[MOVE_FRAMES][NSERVO];
     int n = moves_load(idx, f, MOVE_FRAMES);
     if (n < 2) { set("idle", "that move is empty"); return; }
+    fx_say(SND_PLAY);
     set("playing", "%s", moves_name(idx));
     if (!go(f[0], g_cfg.move_ms)) return;
     const int sub = 4, seg_ms = 1000 / MOVE_HZ / sub;
@@ -468,12 +489,13 @@ static void task(void *arg)
         case OP_HOME: {
             uint16_t p[NSERVO]; memcpy(p, g_cfg.home, sizeof p);
             p[0] = s_holding ? held() : g_cfg.grip_open;
+            fx_maybe(SND_HOME, 50);
             set("moving", "home");
             if (go(p, g_cfg.move_ms)) set(s_holding ? "holding" : "idle", "home");
             break;
         }
-        case OP_OPEN:  set("moving", "open"); if (grip(g_cfg.grip_open)) { s_holding = false; set("idle", "hand open"); } break;
-        case OP_CLOSE: set("moving", "close"); if (grip(g_cfg.grip_close)) { s_holding = true; set("holding", "hand closed"); } break;
+        case OP_OPEN:  fx_say(strcmp(s_state, "helping") ? SND_OK : SND_RELEASED); set("moving", "open"); if (grip(g_cfg.grip_open)) { s_holding = false; set("idle", "hand open"); } break;
+        case OP_CLOSE: fx_say(strcmp(s_state, "helping") ? SND_OK : SND_HELP_HOLD); set("moving", "close"); if (grip(g_cfg.grip_close)) { s_holding = true; set("holding", "hand closed"); } break;
         }
         if (s_abort) set("stopped", "stopped");
         s_busy = false;
@@ -488,7 +510,13 @@ void pick_init(void)
 
 bool pick_run(op_t op, int slot, char *msg, size_t n)
 {
-    if (s_busy || uxQueueMessagesWaiting(s_q)) { snprintf(msg, n, "busy (%s) — say stop", s_state); return false; }
+    if (s_busy || uxQueueMessagesWaiting(s_q)) {
+        static int64_t said;
+        int64_t now = esp_timer_get_time();
+        if (now - said > 4000000) { said = now; fx_say(SND_BUSY); }
+        snprintf(msg, n, "busy (%s) — say stop", s_state);
+        return false;
+    }
     job_t j = {op, slot};
     xQueueSend(s_q, &j, 0);
     snprintf(msg, n, "ok");

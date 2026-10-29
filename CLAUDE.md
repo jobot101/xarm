@@ -42,7 +42,9 @@ The first flash happens from the phone over USB-C using **`flasher/`**, a one-ta
 
 **Head-mounted camera (done, default):** `cfg.cam_on_head`. Picks start from the taught **Look** pose, then sweep `scan[]` base offsets. Calibration is taught from Look, and a base offset just rotates the picture, so it gets added to the grasp base.
 
-**Ragamuffin Hall theme:** rose-window LED ring in stained-glass jewels, bell and organ sounds (`fx.c`), and oak/brass/jewel UI. Keep new features in that voice.
+**Ragamuffin Hall theme:** rose-window LED ring in stained-glass jewels, bell and organ sounds, a talking robot, and oak/brass/jewel UI. Keep new features in that voice.
+
+**Sound + voice (done):** everything the robot says or plays is pre-rendered by `tools/make_sounds.py`: Piper neural TTS (offline, no API; voice set by `VOICE`), church bells / pipe organ with hall reverb, mastered for the speaker, packed as IMA ADPCM into `firmware/main/sounds.bin` + `sounds_gen.h` (both generated, gitignored). CI renders it before every firmware build. Lines live in `LINES` (variants per group; `{c}` = per camera color, `{n}` = per number). Firmware says them with `fx_say(SND_X)` / `fx_say_color()` / `fx_say_n()`, mostly from `pick.c` where the context is. The bank must stay under `BUDGET` (it shares the 4 MB app slot). The `voice-preview` branch renders WAVs of candidate voices and every clip, committed back to that branch.
 
 **Camera firmware (done):** `cam/xarm_color` is Hiwonder's color sketch (originals in `cam/hiwonder`, fetched by `fetch-cam.yml`), patched with:
 - the two arm colors set in `colors.h` (0 red, 1 yellow, 2 green, 3 blue, 4 purple), on regs 0x00/0x01, plus all five colors on 0x10–0x14;

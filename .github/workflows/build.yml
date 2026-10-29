@@ -29,6 +29,25 @@ jobs:
         working-directory: firmware/test
         run: cc -I../main test_core.c ../main/core.c -lm -o t && ./t
 
+      # voice + bells + organ: rendered offline with Piper (open-source neural TTS) into the sound bank
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: voice model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/piper
+          key: piper-${{ hashFiles('tools/make_sounds.py') }}
+          restore-keys: piper-
+
+      - name: render sound bank
+        run: |
+          pip install -q piper-tts numpy scipy
+          V=$(python3 -c "import sys; sys.path.insert(0,'tools'); import make_sounds as m; print(m.VOICE)")
+          python3 -m piper.download_voices "$V" --download-dir ~/.cache/piper
+          python3 tools/make_sounds.py | tail -3
+
       - name: stamp version (board compares this to manifest.json to auto-update)
         run: echo "${GITHUB_SHA::7}" > firmware/version.txt
 

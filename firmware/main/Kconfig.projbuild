@@ -60,4 +60,8 @@ menu "xArm Voice"
         int "Speaker volume 0-100 (robot sounds)"
         default 70
 
+    config XARM_CHATTER_MIN
+        int "Idle chatter: say something this many minutes after play stops (0 = never)"
+        default 5
+
 endmenu
