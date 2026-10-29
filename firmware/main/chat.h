@@ -14,3 +14,7 @@ void chat_idle(void);                    // idle nudge: a line, or a question it
 void chat_show_done(int op, int slot);   // a trick finished: maybe offer an encore, count milestones
 void chat_stopped(void);                 // someone said stop
 int  chat_mood(void);                    // -3 grumpy .. 3 delighted
+void chat_lesson_done(int lesson);       // offers the next lesson
+// Teaching: "teach me about robots" / "tell me more" walk the lessons in order (each one demonstrated on
+// the arm, pick.c do_teach); "what is a servo", "how do you see"... jump to one; "fun fact"; "quiz me"
+// asks three true/false questions and keeps score.

@@ -440,6 +440,100 @@ static void do_stack(void)
     set(level ? "idle" : "not_found", level ? "tower of %d!" : "no blocks to stack", level);
 }
 
+// ---- teaching: Muffin explains a bit of robotics, sentence by sentence, moving the part it's talking about.
+// The words come from LESSONS in tools/make_sounds.py; the moves are matched here by lesson + sentence.
+static bool wait_quiet(void)                  // until the current sentence has finished playing
+{
+    for (int t = 0; t < 30000; t += 40) {
+        if (s_abort) return false;
+        if (!fx_speaking()) return wait_raw(220);
+        vTaskDelay(pdMS_TO_TICKS(40));
+    }
+    return !s_abort;
+}
+
+// one joint out and back around Home, eased
+static bool wiggle(int i, int amt)
+{
+    uint16_t p[NSERVO];
+    pose(p, g_cfg.home, 0, hand());
+    p[i] = clamp_pos(g_cfg.home[i] + amt);
+    if (!go(p, 600)) return false;
+    p[i] = clamp_pos(g_cfg.home[i] - amt);
+    if (!go(p, 900)) return false;
+    p[i] = g_cfg.home[i];
+    return go(p, 600);
+}
+
+static bool teach_move(int lesson, int k)
+{
+    uint16_t p[NSERVO];
+    switch (lesson) {
+    case LESSON_ROBOT:
+        if (k == 2 && g_cfg.cam_on_head) return look_at(0);                       // "I sense with my camera"
+        if (k == 4) {                                                              // "I act... like this"
+            if (!go_home()) return false;
+            return wiggle(1, 150);
+        }
+        if (k == 5) return go_home();
+        break;
+    case LESSON_SERVO:
+        if (k == 2) return wiggle(5, 150);                                         // the base finds its spot
+        break;
+    case LESSON_JOINTS: {                                                          // "One. My base spins." ...
+        static const int8_t idx[7] = {-1, 5, 4, 3, 2, 1, 0};
+        static const int16_t amt[7] = {0, 120, 60, 60, 90, 160, 0};
+        if (k >= 1 && k <= 5) return wiggle(idx[k], amt[k]);
+        if (k == 6) return grip(g_cfg.grip_open) && grip(g_cfg.grip_close) && grip(g_cfg.grip_open);
+        break;
+    }
+    case LESSON_GRIPPER:
+        if (k == 0) return grip(g_cfg.grip_open);
+        if (k == 1) return grip(g_cfg.grip_close);                                // closes, then eases off (grip_settle)
+        if (k == 3) return grip(g_cfg.grip_open);
+        break;
+    case LESSON_VISION:
+        if (k == 0) return look_at(0);
+        if (k == 4) return go_home();
+        break;
+    case LESSON_SMOOTH:
+        pose(p, g_cfg.home, 0, hand());
+        if (k == 0) {                                                              // the bad way: constant speed, hard stops
+            p[5] = clamp_pos(g_cfg.home[5] + 150); arm_move_lin(p, 260); if (!wait_raw(420)) return false;
+            p[5] = clamp_pos(g_cfg.home[5] - 150); arm_move_lin(p, 380); if (!wait_raw(540)) return false;
+            p[5] = g_cfg.home[5];                  arm_move_lin(p, 260); return wait_raw(420);
+        }
+        if (k == 2) {                                                              // the good way: eased
+            p[5] = clamp_pos(g_cfg.home[5] + 150); if (!go(p, 900)) return false;
+            p[5] = clamp_pos(g_cfg.home[5] - 150); if (!go(p, 1300)) return false;
+            p[5] = g_cfg.home[5];                  return go(p, 900);
+        }
+        break;
+    case LESSON_REACH:
+        if (k == 0 && g_cfg.n_calib > 0) {                                        // reach over a taught spot
+            pose(p, g_cfg.calib[0].pos, 1.0f, hand());
+            return go(p, g_cfg.move_ms);
+        }
+        if (k == 3) return go_home();
+        break;
+    }
+    return true;
+}
+
+static void do_teach(int lesson)
+{
+    if (lesson < 0 || lesson >= LESSON_COUNT) lesson = 0;
+    set("teaching", "lesson %d of %d", lesson + 1, LESSON_COUNT);
+    if (!go_home()) return;
+    for (int k = 0; k < LESSON[lesson].n; k++) {
+        fx_say(LESSON[lesson].first + k);
+        if (!teach_move(lesson, k) || !wait_quiet()) return;
+    }
+    if (!go_home()) return;
+    set(s_holding ? "holding" : "idle", "lesson done");
+    chat_lesson_done(lesson);
+}
+
 // replay a recorded move: glide to its start, then follow a smooth curve through the frames in real
 // time (Catmull-Rom, 4 constant-speed sub-steps per recorded frame — no stops between frames)
 static void do_play(int idx)
@@ -496,6 +590,7 @@ static void task(void *arg)
         case OP_HELPER: do_helper(); break;
         case OP_STACK: do_stack(); break;
         case OP_NUDGE: do_nudge(j.slot); break;
+        case OP_TEACH: do_teach(j.slot); break;
         case OP_HOME: {
             uint16_t p[NSERVO]; memcpy(p, g_cfg.home, sizeof p);
             p[0] = s_holding ? held() : g_cfg.grip_open;

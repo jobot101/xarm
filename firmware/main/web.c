@@ -334,7 +334,7 @@ static esp_err_t h_i2c(httpd_req_t *r)
 // ---------- GET /api/phrases -> ["stop","go home",...] — everything voice listens for ----------
 static esp_err_t h_phrases(httpd_req_t *r)
 {
-    enum { MAXP = 128 };
+    enum { MAXP = 200 };
     char (*ph)[48] = malloc(MAXP * 48);
     if (!ph) return reply(r, false, "no memory");
     int n = router_phrases(ph, MAXP);

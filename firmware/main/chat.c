@@ -9,7 +9,13 @@
 #define ANSWER_US 9000000                // how long a yes/no counts after it asks
 #define QUIET_MIN 10
 
+static bool teach(int lesson, char *msg, size_t n);
+static bool quiz_start(char *msg, size_t n);
+static bool quiz_answer(bool said_true, char *msg, size_t n);
+
 static int s_mood = 1;
+static int s_next_lesson;
+static struct { int8_t q[3]; int pos, score; int64_t until; } s_quiz = { {0}, -1, 0, 0 };
 static int s_tricks;
 static struct { int op, slot; int64_t until; } s_ask = { -1, 0, 0 };
 
@@ -55,6 +61,19 @@ bool chat_exec(const char *t, char *msg, size_t n)
         pick_run((op_t)op, slot, msg, n);
         return true;
     }
+    // ---- teaching
+    if (has(t, "that's true") || has(t, "thats true") || has(t, "that is true") || eq(t, "true")) return quiz_answer(true, msg, n);
+    if (has(t, "that's false") || has(t, "thats false") || has(t, "that is false") || eq(t, "false")) return quiz_answer(false, msg, n);
+    if (has(t, "quiz")) return quiz_start(msg, n);
+    if (has(t, "fact")) return reply(SND_FACT, msg, n, "fun fact");
+    if (has(t, "what is a robot")) return teach(LESSON_ROBOT, msg, n);
+    if (has(t, "servo")) return teach(LESSON_SERVO, msg, n);
+    if (has(t, "how do you move") || has(t, "joints")) return teach(LESSON_JOINTS, msg, n);
+    if (has(t, "how do you grab") || has(t, "gripper")) return teach(LESSON_GRIPPER, msg, n);
+    if (has(t, "how do you see") || has(t, "camera")) return teach(LESSON_VISION, msg, n);
+    if (has(t, "how do you hear")) return teach(LESSON_HEARING, msg, n);
+    if (has(t, "how do you think") || has(t, "brain")) return teach(LESSON_BRAIN, msg, n);
+    if (has(t, "teach me") || has(t, "tell me more") || has(t, "lesson")) return teach(s_next_lesson, msg, n);
     // ---- its name
     if (has(t, "muffin") && (eq(t, "muffin") || has(t, "hey") || has(t, "hi ") || has(t, "hello")))
         return reply(SND_HEY, msg, n, "you rang?");
@@ -92,6 +111,58 @@ bool chat_exec(const char *t, char *msg, size_t n)
         return true;
     }
     return false;
+}
+
+static bool teach(int lesson, char *msg, size_t n)
+{
+    fx_quiet(0);                              // asking for a lesson is asking it to talk
+    s_next_lesson = (lesson + 1) % LESSON_COUNT;
+    if (!pick_run(OP_TEACH, lesson, msg, n)) return true;
+    snprintf(msg, n, "lesson %d of %d", lesson + 1, LESSON_COUNT);
+    return true;
+}
+
+void chat_lesson_done(int lesson)
+{
+    s_next_lesson = (lesson + 1) % LESSON_COUNT;
+    ask(SND_ASK_LESSON, OP_TEACH, s_next_lesson);
+}
+
+static void quiz_ask(void)
+{
+    fx_say(QUIZ[s_quiz.q[s_quiz.pos]].q);
+    s_quiz.until = esp_timer_get_time() + 30000000;
+}
+
+static bool quiz_start(char *msg, size_t n)
+{
+    fx_quiet(0);
+    for (int i = 0; i < 3; i++) {             // three different questions
+        int q;
+        do { q = esp_random() % QUIZ_COUNT; } while ((i > 0 && q == s_quiz.q[0]) || (i > 1 && q == s_quiz.q[1]));
+        s_quiz.q[i] = q;
+    }
+    s_quiz.pos = 0; s_quiz.score = 0;
+    fx_say(SND_QUIZ_INTRO);
+    quiz_ask();
+    snprintf(msg, n, "quiz: question 1 of 3");
+    return true;
+}
+
+static bool quiz_answer(bool said_true, char *msg, size_t n)
+{
+    if (s_quiz.pos < 0 || esp_timer_get_time() > s_quiz.until) { s_quiz.pos = -1; snprintf(msg, n, "no quiz running"); return true; }
+    int q = s_quiz.q[s_quiz.pos];
+    bool right = said_true == (QUIZ[q].truth != 0);
+    fx_say(right ? SND_RIGHT : SND_WRONG);
+    fx_say(QUIZ[q].why);
+    if (right) { s_quiz.score++; mood(1); }
+    if (++s_quiz.pos < 3) { quiz_ask(); snprintf(msg, n, "%s — question %d of 3", right ? "right" : "wrong", s_quiz.pos + 1); return true; }
+    if (s_quiz.score) fx_say(SND_QUIZ_SCORE_1 + s_quiz.score - 1); else fx_say(SND_QUIZ_ZERO);
+    if (s_quiz.score == 3) fx_play(SND_S_CHEER);
+    snprintf(msg, n, "%d of 3 right", s_quiz.score);
+    s_quiz.pos = -1;
+    return true;
 }
 
 void chat_idle(void)

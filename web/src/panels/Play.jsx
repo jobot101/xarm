@@ -63,6 +63,22 @@ export default function Play({ s, online, run }) {
         <Recorder s={s} online={online} busy={busy} run={run} />
       </section>
 
+      <section className="card">
+        <h2>Learn with Muffin</h2>
+        <div className="acts">
+          <button disabled={!online || busy} onClick={() => say('teach me about robots')}>Teach me</button>
+          <button disabled={!online || busy} onClick={() => say('how do you move')}>How do you move?</button>
+          <button disabled={!online || busy} onClick={() => say('how do you see')}>How do you see?</button>
+          <button disabled={!online || busy} onClick={() => say('what is a servo')}>What's a servo?</button>
+          <button disabled={!online} onClick={() => say('fun fact')}>Fun fact</button>
+          <button disabled={!online} onClick={() => say('quiz me')}>Quiz me</button>
+        </div>
+        <div className="btns quiz-answers">
+          <button disabled={!online} onClick={() => say('thats true')}>True</button>
+          <button disabled={!online} onClick={() => say('thats false')}>False</button>
+        </div>
+      </section>
+
       <details className="card more">
         <summary>Players &amp; game</summary>
         <WhoIsPlaying s={s} online={online} run={run} />

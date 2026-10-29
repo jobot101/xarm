@@ -88,7 +88,9 @@ jobs:
           rows = sorted((int(off, 16), os.path.basename(p)) for off, p in fa["flash_files"].items())
           if not any(n == "srmodels.bin" for _, n in rows):       # esp-sr may flash it via its own target
               rows.append((0x810000, "srmodels.bin"))            # = "model" offset in partitions.csv
-          rows.append((0x810000 + 0x380000, "sounds.bin"))       # "model" + FX_BANK_OFF (fx.h)
+          rows.append((0x810000 + 0x2C0000, "sounds.bin"))       # "model" + FX_BANK_OFF (fx.h)
+          sr = os.path.getsize("release/srmodels.bin")
+          assert sr <= 0x2C0000, f"srmodels.bin ({sr} bytes) now runs into the sound bank: raise FX_BANK_OFF in fx.h + here"
           rows.sort()
           import hashlib
           snd = open("release/sounds.bin", "rb").read()

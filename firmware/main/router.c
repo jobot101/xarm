@@ -138,6 +138,11 @@ int router_phrases(char out[][48], int max)
     ADD("bad robot"); ADD("you are silly"); ADD("i love you"); ADD("are you alive"); ADD("are you a robot");
     ADD("sing a song"); ADD("good night"); ADD("good morning"); ADD("be quiet"); ADD("quiet please");
     ADD("you can talk again"); ADD("surprise me"); ADD("do a trick");
+    // teaching (chat.c + pick.c do_teach)
+    ADD("teach me about robots"); ADD("teach me something"); ADD("tell me more"); ADD("what is a robot");
+    ADD("what is a servo"); ADD("how do you move"); ADD("how do you see"); ADD("how do you hear");
+    ADD("how do you think"); ADD("how do you grab"); ADD("tell me a robot fact"); ADD("fun fact");
+    ADD("quiz me"); ADD("robot quiz"); ADD("thats true"); ADD("thats false");
     ADD("yes please"); ADD("sure thing"); ADD("no thanks");   // no bare yes/no: one syllable steals matches
     for (int i = 0; i < KIDS_MAX; i++) if (kids_get(i)) ADD("hi i'm %s", kids_get(i)->name);
     for (int i = 0; i < NSLOT; i++) {

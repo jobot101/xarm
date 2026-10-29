@@ -228,3 +228,4 @@ input, select, textarea { font-size: 16px; }                                    
 .heard li.skip { border-left-color: var(--warn); }
 .heard .pc { font-variant-numeric: tabular-nums; color: var(--dim); }
 .heard small { display: block; color: var(--dim); }
+.quiz-answers { margin-top: 8px; } .quiz-answers button { flex: 1; font-weight: 700; }

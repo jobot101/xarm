@@ -186,6 +186,7 @@ static void enqueue(int g, int pick, bool low)
 
 static void play(int g) { enqueue(g, -1, false); }
 void fx_play(int g) { play(g); }
+bool fx_speaking(void) { return s_talking || (s_sq && uxQueueMessagesWaiting(s_sq)); }
 
 static volatile int64_t s_quiet_until;
 void fx_quiet(int minutes) { s_quiet_until = minutes > 0 ? esp_timer_get_time() + (int64_t)minutes * 60000000 : 0; }
@@ -325,6 +326,7 @@ void fx_state(const char *st)
     else if (is(st, "bowing"))                                      { s_mode = L_PARTY;  play(SND_S_BOW); }
     else if (is(st, "dancing"))                                     { s_mode = L_PARTY;  play(SND_S_DANCE); }
     else if (is(st, "helping"))                                     { s_mode = L_HOLD; }
+    else if (is(st, "teaching"))                                    { s_mode = L_THINK; }
     else if (is(st, "ringing") || is(st, "playing"))                { s_mode = L_PARTY;  s_working = is(st, "playing"); }
     else if (is(st, "not_found") || is(st, "need_calib"))           { s_mode = L_WARN;   play(SND_S_SAD); }
     else if (is(st, "stopped"))                                     { s_mode = L_STOP;   fx_hush(); play(SND_S_STOP); fx_say(SND_STOPPED); }

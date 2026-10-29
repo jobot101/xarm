@@ -7,8 +7,8 @@
 #include <stdbool.h>
 #include "sounds_gen.h"
 
-#define FX_BANK_OFF 0x380000      // inside "model", after the speech models (srmodels.bin ~2.8 MB)
-#define FX_BANK_MAX 0x280000      // to the end of the 6 MB partition
+#define FX_BANK_OFF 0x2C0000      // inside "model", after the speech models (srmodels.bin ~2.76 MB; CI checks it fits)
+#define FX_BANK_MAX 0x340000      // to the end of the 6 MB partition
 
 typedef enum { FX_BOOT, FX_HEARD, FX_ERROR, FX_BELL, FX_CHEER,
                FX_UPDATED } fx_event_t;   // FX_UPDATED: first boot of a new firmware -> fanfare + "Ready to rumble!"
@@ -33,3 +33,4 @@ void fx_bank_release(void);                                     // before rewrit
 void fx_bank_reload(void);                                      // after
 void fx_quiet(int minutes);                                     // "be quiet": no talking for a while (0 = talk again)
 bool fx_is_quiet(void);
+bool fx_speaking(void);                                         // something is playing or queued
