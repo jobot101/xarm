@@ -26,3 +26,8 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 CONFIG_FREERTOS_HZ=1000
+
+# TLS buffers (~40 KB per HTTPS connection: auto-update, voice bank, cloud ears) live in PSRAM, not the
+# scarce internal RAM the AFE, WiFi and task stacks need
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y

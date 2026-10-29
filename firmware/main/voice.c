@@ -13,6 +13,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "router.h"
 #include "cloud.h"
 #include "core.h"
@@ -171,7 +172,7 @@ int voice_notes(voice_note_t *out, int max)
 #define SEG_MAX  (CLOUD_RATE * CLOUD_MAX_MS / 1000)
 #define PRE_N    (CLOUD_RATE * 320 / 1000)
 #define SEG_MIN  (CLOUD_RATE * 350 / 1000)
-static int16_t *s_seg, s_pre[PRE_N];
+static int16_t *s_seg, *s_pre;       // both in PSRAM
 static int s_seg_n, s_pre_i;
 static bool s_seg_on, s_seg_wake, s_seg_stopped;
 static int64_t s_seg_t0;
@@ -398,6 +399,8 @@ void voice_start(i2c_master_bus_handle_t bus)
     tune_apply();
     load_commands();
     s_seg = heap_caps_malloc(SEG_MAX * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    s_pre = heap_caps_calloc(PRE_N, sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    if (!s_pre) { free(s_seg); s_seg = NULL; }
     cloud_init();
     s_ok = true;
     ESP_LOGI(TAG, "listening (%s, %s VAD, %s), gain %d dB, threshold %d%%, %s", name, s_vad,

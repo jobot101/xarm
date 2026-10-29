@@ -226,7 +226,7 @@ static esp_err_t h_state(httpd_req_t *r)
     cJSON *fw = cJSON_AddObjectToObject(j, "fw");
     cJSON_AddStringToObject(fw, "version", ver);
     cJSON_AddStringToObject(fw, "partition", part);
-    char latest[16], ust[64];
+    char latest[16], ust[112];
     update_status(latest, sizeof latest, ust, sizeof ust);
     cJSON_AddStringToObject(fw, "latest", latest);
     cJSON_AddStringToObject(fw, "update", ust);

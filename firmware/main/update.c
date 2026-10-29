@@ -9,6 +9,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "esp_partition.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -23,7 +24,7 @@
 static const char *TAG = "update";
 static TaskHandle_t s_task;
 static bool s_auto = true;
-static char s_latest[16] = "", s_status[64] = "waiting for internet";
+static char s_latest[16] = "", s_status[112] = "waiting for internet";
 static char s_snd[24] = "";                 // sound bank version the manifest offers (hash of sounds.bin)
 static int s_snd_size;
 static char s_snd_tried[24] = "";           // last version tried, and when
@@ -58,6 +59,8 @@ static void nvs_str(const char *key, char *val, size_t n, bool write)
 }
 
 // GET <base>manifest.json -> "version". Query string busts the GitHub Pages CDN cache (~10 min).
+static char s_why[48];       // why the last check failed, shown in the app
+
 static bool fetch_latest(char *ver, size_t n)
 {
     char url[160];
@@ -67,8 +70,10 @@ static bool fetch_latest(char *ver, size_t n)
     bool ok = false;
     const int cap = 4096;
     char *buf = malloc(cap);
-    if (buf && esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0
-        && esp_http_client_get_status_code(h) == 200) {
+    esp_err_t oe = ESP_FAIL;
+    int code = 0;
+    if (buf && (oe = esp_http_client_open(h, 0)) == ESP_OK && esp_http_client_fetch_headers(h) >= 0
+        && (code = esp_http_client_get_status_code(h)) == 200) {
         int len = 0, r;
         while (len < cap - 1 && (r = esp_http_client_read(h, buf + len, cap - 1 - len)) > 0) len += r;
         buf[len] = 0;
@@ -79,6 +84,8 @@ static bool fetch_latest(char *ver, size_t n)
         if (cJSON_IsString(sv) && cJSON_IsNumber(ss)) { strlcpy(s_snd, sv->valuestring, sizeof s_snd); s_snd_size = ss->valueint; }
         cJSON_Delete(j);
     }
+    if (!ok) snprintf(s_why, sizeof s_why, "%s, %u KB free", oe != ESP_OK ? esp_err_to_name(oe) : code ? "bad reply" : "no reply",
+                      (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024));
     free(buf);
     esp_http_client_cleanup(h);
     return ok;
@@ -177,7 +184,7 @@ static void task(void *arg)
         } else {
             char latest[16];
             if (!fetch_latest(latest, sizeof latest)) {
-                status("couldn't reach update server");
+                status("couldn't reach update server (%s)", s_why);
             } else {
                 strlcpy(s_latest, latest, sizeof s_latest);
                 // sounds first: they don't reboot, and they belong to the same build as the app on offer
