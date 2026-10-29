@@ -39,7 +39,8 @@ static model_iface_data_t *s_mnd;
 static char s_phr[MAX_PHRASES][48];
 static volatile bool s_ok, s_reload;
 static char s_last[48] = "", s_status[64] = "starting";
-static volatile int s_level;          // mic level 0..100 (dBFS mapped, peak-hold), after AEC/AGC
+static volatile int s_level;          // raw mic level 0..100 (dBFS mapped, peak-hold)
+static float s_peak;
 static volatile float s_prob;         // confidence of the last recognized phrase
 static volatile int64_t s_speech_us;  // last time the VAD said "speech"
 static int s_gain = CONFIG_XARM_MIC_GAIN_DB, s_thresh = CONFIG_XARM_VOICE_THRESHOLD;
@@ -137,6 +138,15 @@ static void feed_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
+        // level meter on the raw mic (channel 0 of the interleaved frame): it's what the gain slider moves.
+        // RMS in dBFS, -60..0 dB -> 0..100, peak hold with a slow fall
+        int ch = s_afe->get_feed_channel_num(s_afed), m = n / ch;
+        double acc = 0;
+        for (int i = 0; i < m; i++) acc += (double)buf[i * ch] * buf[i * ch];
+        float db = 10.0f * log10f((float)(acc / (m ? m : 1)) / (32768.0f * 32768.0f) + 1e-9f);
+        float lv = (db + 60.0f) * (100.0f / 60.0f);
+        s_peak = lv > s_peak ? lv : s_peak * 0.93f;
+        s_level = s_peak < 0 ? 0 : s_peak > 100 ? 100 : (int)s_peak;
         s_afe->feed(s_afed, buf);
     }
 }
@@ -147,20 +157,12 @@ static void detect_task(void *arg)
     int chunk = s_mn->get_samp_chunksize(s_mnd);
     int16_t *mbuf = heap_caps_malloc(chunk * sizeof(int16_t), MALLOC_CAP_INTERNAL);
     int fill = 0;
-    float peak = 0;
     for (;;) {
         afe_fetch_result_t *r = s_afe->fetch_with_delay(s_afed, portMAX_DELAY);
         if (!r || r->ret_value == ESP_FAIL || !r->data) continue;
         if (r->vad_state == VAD_SPEECH) s_speech_us = esp_timer_get_time();
         int n = r->data_size / (int)sizeof(int16_t);
 
-        // level meter: RMS in dBFS, -60..0 dB -> 0..100, with a slow fall
-        double acc = 0;
-        for (int i = 0; i < n; i++) acc += (double)r->data[i] * r->data[i];
-        float db = 10.0f * log10f((float)(acc / (n ? n : 1)) / (32768.0f * 32768.0f) + 1e-9f);
-        float lv = (db + 60.0f) * (100.0f / 60.0f);
-        peak = lv > peak ? lv : peak * 0.93f;
-        s_level = peak < 0 ? 0 : peak > 100 ? 100 : (int)peak;
 
         if (s_reload) { s_reload = false; load_commands(); }
 

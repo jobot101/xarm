@@ -17,6 +17,9 @@ export default function Voice({ s, run }) {
     <section className="card">
       <h2>Voice</h2>
       <p><b>{v.ok ? '● ' : '○ '}</b>{v.status || 'no voice info from the board'}</p>
+      {v.bank_status !== undefined && <p className={v.bank ? 'hint' : 'warn-line'}>
+        Muffin's voice: <b>{v.bank ? 'ready' : 'not loaded'}</b> — {v.bank_status}
+        {!v.bank && ' (needs home WiFi with internet; it downloads by itself)'}</p>}
       <div className="meter" title="mic level">
         <div style={{ width: `${lv}%`, height: 14, borderRadius: 7, transition: 'width 120ms',
           background: lv > 85 ? '#c0392b' : lv > 35 ? '#2e8b57' : '#b8860b' }} />

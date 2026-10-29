@@ -10,7 +10,7 @@ const st = {
     { name: 'blue', seen: false, x: 0, y: 0, w: 0, h: 0 } ] },
   calib: [{ px: 30, py: 30 }, { px: 210, py: 30 }, { px: 120, py: 200 }],
   voice: { ok: true, last: 'pick up the red', status: 'listening — 24 phrases', level: 12, prob: 0, gain: 24, thresh: 22,
-    heard: [{ p: 'dance robot', prob: 41, why: 'ok', ago: 3 }, { p: 'go home', prob: 27, why: 'Muffin was talking', ago: 12 }] },
+    bank: false, bank_status: 'downloading Muffin\'s voice… 40%', heard: [{ p: 'dance robot', prob: 41, why: 'ok', ago: 3 }, { p: 'go home', prob: 27, why: 'Muffin was talking', ago: 12 }] },
   moves: { recording: false, frames: 0, list: [{ i: 0, name: 'robot' }] },
   kids: { cur: -1, list: [{ i: 0, name: 'sam', emoji: '🦖', jewel: 1, visits: 3, best_bells: 5, best_tower: 4 }] },
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },

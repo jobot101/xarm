@@ -173,6 +173,10 @@ static esp_err_t h_state(httpd_req_t *r)
         cJSON_AddNumberToObject(v, "prob", (int)(pr * 100));
         cJSON_AddNumberToObject(v, "gain", g);
         cJSON_AddNumberToObject(v, "thresh", th);
+        char bs[72];
+        update_sound_status(bs, sizeof bs);
+        cJSON_AddBoolToObject(v, "bank", fx_bank_ok());
+        cJSON_AddStringToObject(v, "bank_status", bs);
         voice_note_t nt[8];
         int nn = voice_notes(nt, 8);
         cJSON *ev = cJSON_AddArrayToObject(v, "heard");

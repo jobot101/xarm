@@ -26,7 +26,19 @@ static bool s_auto = true;
 static char s_latest[16] = "", s_status[64] = "waiting for internet";
 static char s_snd[24] = "";                 // sound bank version the manifest offers (hash of sounds.bin)
 static int s_snd_size;
-static char s_snd_tried[24] = "";           // one try per version per boot
+static char s_snd_tried[24] = "";           // last version tried, and when
+static int64_t s_snd_tried_at;
+static char s_snd_status[72] = "waiting for internet";
+
+static void snd_status(const char *fmt, ...)
+{
+    va_list ap; va_start(ap, fmt);
+    vsnprintf(s_snd_status, sizeof s_snd_status, fmt, ap);
+    va_end(ap);
+    ESP_LOGI(TAG, "voice bank: %s", s_snd_status);
+}
+
+void update_sound_status(char *out, size_t n) { strlcpy(out, s_snd_status, n); }
 
 static void status(const char *fmt, ...)
 {
@@ -102,46 +114,56 @@ static bool sync_sounds(void)
 {
     char have[24];
     nvs_str("sndver", have, sizeof have, false);
-    bool want = s_snd[0] && s_snd_size > 0 && s_snd_size <= FX_BANK_MAX &&
-                (strcmp(have, s_snd) || !fx_bank_ok()) && strcmp(s_snd_tried, s_snd);
-    if (!want) return true;
+    int64_t now = esp_timer_get_time();
+    bool retry_ok = strcmp(s_snd_tried, s_snd) || now - s_snd_tried_at > 10LL * 60 * 1000000;   // a failed try: again in 10 min
+    bool want = s_snd[0] && s_snd_size > 0 && s_snd_size <= FX_BANK_MAX && (strcmp(have, s_snd) || !fx_bank_ok());
+    if (!want) { if (fx_bank_ok()) snd_status("ready (%s)", have); return true; }
+    if (!retry_ok) return false;
     strlcpy(s_snd_tried, s_snd, sizeof s_snd_tried);
+    s_snd_tried_at = now;
     const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "model");
-    if (!p || p->size < FX_BANK_OFF + FX_BANK_MAX) { status("no room for the sound bank"); return false; }
+    if (!p || p->size < FX_BANK_OFF + FX_BANK_MAX) { snd_status("no room in flash for the voice"); return false; }
 
     char url[160];
     snprintf(url, sizeof url, "%ssounds.bin?v=%s", CONFIG_XARM_UPDATE_URL, s_snd);
-    esp_http_client_config_t c = { .url = url, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 15000,
-                                   .buffer_size = 4096 };
+    esp_http_client_config_t c = { .url = url, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 20000,
+                                   .buffer_size = 4096, .keep_alive_enable = true };
     esp_http_client_handle_t h = esp_http_client_init(&c);
     uint8_t *buf = malloc(4096);
     bool ok = false;
+    int got = 0;
     if (buf && esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0
         && esp_http_client_get_status_code(h) == 200) {
-        status("downloading Muffin's voice…");
+        snd_status("downloading Muffin's voice…");
         fx_bank_release();
-        uint32_t erase = (s_snd_size + 4095) & ~4095u;
-        if (esp_partition_erase_range(p, FX_BANK_OFF, erase) == ESP_OK) {
-            int got = 0, r;
-            while (got < s_snd_size && (r = esp_http_client_read(h, (char *)buf, 4096)) > 0) {
-                if (got + r > s_snd_size) r = s_snd_size - got;
-                if (esp_partition_write(p, FX_BANK_OFF + got, buf, r) != ESP_OK) break;
-                got += r;
+        // erase 64 KB at a time just ahead of the data. Erasing the whole 2-3 MB first took ~20 s, long
+        // enough for the server to drop the idle connection, so the download died every time.
+        uint32_t erased = 0;
+        int r = 0;
+        while (got < s_snd_size && (r = esp_http_client_read(h, (char *)buf, 4096)) > 0) {
+            if (got + r > s_snd_size) r = s_snd_size - got;
+            while ((uint32_t)(got + r) > erased) {
+                if (esp_partition_erase_range(p, FX_BANK_OFF + erased, 0x10000) != ESP_OK) { r = -1; break; }
+                erased += 0x10000;
             }
-            char magic[4] = {0};
-            esp_partition_read(p, FX_BANK_OFF, magic, 4);
-            ok = got == s_snd_size && !memcmp(magic, "SNB2", 4);
-            if (!ok) status("sound bank download stopped at %d of %d bytes", got, s_snd_size);
+            if (r < 0 || esp_partition_write(p, FX_BANK_OFF + got, buf, r) != ESP_OK) break;
+            got += r;
+            if ((got & 0x3FFFF) < 4096) snd_status("downloading Muffin's voice… %d%%", (int)(got * 100LL / s_snd_size));
         }
+        char magic[4] = {0};
+        esp_partition_read(p, FX_BANK_OFF, magic, 4);
+        ok = got == s_snd_size && !memcmp(magic, "SNB2", 4);
         fx_bank_reload();
     }
     free(buf);
     esp_http_client_cleanup(h);
     if (ok) {
         nvs_str("sndver", s_snd, 0, true);
-        status("Muffin's voice updated (%s)", s_snd);
+        snd_status("ready (%s)", s_snd);
         fx_say(SND_UPDATED);
-    } else if (!fx_bank_ok()) status("couldn't get the sound bank — will retry after a reboot");
+    } else {
+        snd_status("download failed at %d of %d bytes — retrying in 10 min", got, s_snd_size);
+    }
     return ok;
 }
 
