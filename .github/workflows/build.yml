@@ -11,6 +11,12 @@ on:
 permissions:
   contents: write
 
+# a newer push makes an older build pointless (it has all the same changes and more): cancel it, so pushes in a
+# row don't run side by side re-recording the same new voice lines
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   firmware:
     runs-on: ubuntu-latest
