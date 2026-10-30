@@ -156,3 +156,5 @@ git push                              # CI builds + publishes release "latest"
 - Learning page top card = the one obvious next step: Next up (lesson + teaser + big Start, which runs class:
   warm-up then that lesson) / Paused (Keep going) / Now (the lesson being taught: /api/school `now`) / Free play /
   Tomorrow (asleep) / Offline. Only one primary button on the page; progress card sits below it.
+- One student (Jack). Workshop -> School -> Student's name: POST /api/school {student} -> set_student(): no kid
+  yet = add one and hand them the guest progress; else rename the first kid (kids_rename keeps progress).

@@ -65,7 +65,7 @@ export default function Learn({ online }) {
       </section>
 
       <section className="card learn-hero">
-        <h2>{kid ? `${kid.name[0].toUpperCase() + kid.name.slice(1)}'s Robot School` : "Muffin's Robot School"}</h2>
+        <h2>{kid && kid.name !== 'guest' ? `${kid.name[0].toUpperCase() + kid.name.slice(1)}'s Robot School` : "Muffin's Robot School"}</h2>
         <div className="learn-rank">{rank}</div>
         <div className="learn-bar"><i style={{ width: `${(done / total) * 100}%` }} /></div>
         <div className="learn-stats">

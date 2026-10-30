@@ -7,6 +7,7 @@ export default function School({ run }) {
   const [sc, setSc] = useState(null)
   const [min, setMin] = useState('')
   const [pass, setPass] = useState('')
+  const [student, setStudent] = useState('')
 
   const load = useCallback(async () => { try { setSc(await api.school()) } catch {} }, [])
   useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [load])
@@ -29,6 +30,9 @@ export default function School({ run }) {
         <input type="checkbox" checked={!!sc.tap} onChange={e => set({ tap: e.target.checked })} />
       </label>
       <div className="fields">
+        <label className="field">Student's name {sc.kids.find(k => k.i < 12) ? '' : '(not set)'}
+          <input value={student} placeholder={sc.kids.find(k => k.i < 12)?.name || 'e.g. Jack'} onChange={e => setStudent(e.target.value)} />
+        </label>
         <label className="field">Minutes per kid per day
           <input type="number" min="5" max="120" value={min} placeholder={String(sc.minutes)} onChange={e => setMin(e.target.value)} />
         </label>
@@ -37,8 +41,13 @@ export default function School({ run }) {
         </label>
       </div>
       <div className="btns">
-        <button className="primary" disabled={!min && !pass}
-          onClick={() => { const b = {}; if (min) b.minutes = +min; if (pass) b.pass = pass; set(b); setMin(''); setPass('') }}>Save</button>
+        <button className="primary" disabled={!min && !pass && !student.trim()}
+          onClick={async () => {
+            if (student.trim()) await set({ student: student.trim() })
+            const b = {}; if (min) b.minutes = +min; if (pass) b.pass = pass
+            if (Object.keys(b).length) await set(b)
+            setMin(''); setPass(''); setStudent('')
+          }}>Save</button>
         {sc.pass_set && <button onClick={() => set({ pass: '' })}>Clear passphrase</button>}
       </div>
       <p className="hint">Saying the passphrase to Muffin (a few plain words, 6+ letters) adds ten minutes, even after it's gone to sleep.</p>

@@ -53,6 +53,23 @@ int kids_add(const char *name, const char *emoji, int jewel)
     return -1;
 }
 
+static void clean_name(const char *name, char n[16])   // letters and spaces, lower case: it's also a voice word
+{
+    n[0] = 0;
+    for (int k = 0, j = 0; name[k] && j < 15; k++, n[j] = 0)
+        if (isalpha((unsigned char)name[k]) || name[k] == ' ') n[j++] = (char)tolower((unsigned char)name[k]);
+}
+
+bool kids_rename(int i, const char *name)
+{
+    char n[16];
+    clean_name(name, n);
+    if (!kids_get(i) || !n[0]) return false;
+    strlcpy(s_kids[i].name, n, sizeof s_kids[i].name);
+    save();
+    return true;
+}
+
 bool kids_remove(int i)
 {
     if (!kids_get(i)) return false;

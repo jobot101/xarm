@@ -52,7 +52,7 @@ bind('pv-lesson', 'pv-ln', v => (kid.lesson = v))
 bind('pv-stars', 'pv-sn', v => (kid.stars = v))
 bind('pv-streak', 'pv-kn', v => (kid.streak = v))
 bind('pv-used', 'pv-un', v => (kid.used_s = v * 60))
-$('pv-name').addEventListener('input', e => (kid.name = e.target.value.trim().toLowerCase() || 'sam'))
+$('pv-name').addEventListener('input', e => (kid.name = e.target.value.trim().toLowerCase() || 'jack'))
 $('pv-state').addEventListener('change', e => {
   offline = e.target.value === 'offline'
   if (offline) return

@@ -19,6 +19,7 @@ void kids_init(void);
 int  kids_count(void);
 const kid_t *kids_get(int i);             // NULL if empty slot
 int  kids_add(const char *name, const char *emoji, int jewel);   // index or -1
+bool kids_rename(int i, const char *name);   // keeps their progress
 bool kids_remove(int i);
 bool kids_select(int i);                  // sets current, counts a visit, greets
 int  kids_current(void);                  // -1 if nobody picked

@@ -998,7 +998,28 @@ static bool pick_lesson(int i, char *msg, size_t n)
     return true;
 }
 
-// {"on":bool, "tap":bool, "lesson":i, "minutes":5..120, "pass":"...", "more":kid, "reset_day":kid, "restart":kid}
+// Workshop -> School: the student's name. No kid yet: add them, and their guest progress becomes theirs.
+// One already: rename them (progress stays). Several (from the old Play page): the first one.
+static bool set_student(const char *name, char *msg, size_t n)
+{
+    int k = -1;
+    for (int i = 0; i < KIDS_MAX && k < 0; i++) if (kids_get(i)) k = i;
+    if (k >= 0) {
+        if (!kids_rename(k, name)) { snprintf(msg, n, "a name needs letters"); return false; }
+    } else {
+        k = kids_add(name, "\xF0\x9F\xA4\x96", 1);             // a robot face, sapphire
+        if (k < 0) { snprintf(msg, n, "a name needs letters"); return false; }
+        lock();
+        P[k] = P[GUEST];                     // what they did as "guest" is theirs now
+        memset(&P[GUEST], 0, sizeof P[GUEST]);
+        save();
+        unlock();
+    }
+    snprintf(msg, n, "student: %s", kids_get(k)->name);
+    return true;
+}
+
+// {"on":bool, "tap":bool, "student":"name", "lesson":i, "minutes":5..120, "pass":"...", "more":kid, "reset_day":kid, "restart":kid}
 bool school_set(const cJSON *b, char *msg, size_t n)
 {
     const cJSON *v;
@@ -1023,6 +1044,7 @@ bool school_set(const cJSON *b, char *msg, size_t n)
         strlcpy(s_pass, w, sizeof s_pass); changed = pass_changed = true;
     }
     if (changed) save_settings();
+    if (cJSON_IsString(v = cJSON_GetObjectItem(b, "student"))) return set_student(v->valuestring, msg, n);
     if (cJSON_IsNumber(v = cJSON_GetObjectItem(b, "lesson"))) return pick_lesson(v->valueint, msg, n);
     if (cJSON_IsNumber(v = cJSON_GetObjectItem(b, "more"))) grant(v->valueint);
     if (cJSON_IsNumber(v = cJSON_GetObjectItem(b, "reset_day")) && v->valueint >= 0 && v->valueint <= KIDS_MAX) {

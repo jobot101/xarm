@@ -11,12 +11,12 @@ export const st = {
     cloud: { on: true, ready: false, key: '', status: 'no key — paste your Groq key below', last: '', ms: 0, today: 0, max: 1800 },
     src: 'flash', sd: { card: true, card_status: '16.0 GB card, 9.4 GB free', on: false, status: 'off' }, bank: false, bank_status: 'downloading Muffin\'s voice… 40%', heard: [{ p: 'dance robot', prob: 41, why: 'ok', ago: 3 }, { p: 'go home', prob: 27, why: 'Muffin was talking', ago: 12 }, { p: 'wave hello', prob: 44, why: 'asleep - say Hey Muffin', ago: 20 }, { p: 'can you pick up the red one', prob: 100, why: '☁ picking up red', ago: 25 }] },
   moves: { recording: false, frames: 0, list: [{ i: 0, name: 'robot' }] },
-  kids: { cur: -1, list: [{ i: 0, name: 'sam', emoji: '🦖', jewel: 1, visits: 3, best_bells: 5, best_tower: 4 }] },
+  kids: { cur: -1, list: [{ i: 0, name: 'jack', emoji: '🦖', jewel: 1, visits: 3, best_bells: 5, best_tower: 4 }] },
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
   fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true, sounds: '' },
 }
 export const school = { on: true, tap: true, can_pick: true, now: -1, minutes: 20, pass_set: false, state: 'waiting', kid: '', clock: 'internet', lessons_ready: true, lesson_count: 53,
-  kids: [{ i: 0, name: 'sam', lesson: 4, stars: 19, streak: 3, used_s: 312, limit_s: 1200 }, { i: 12, name: 'guest', lesson: 0, stars: 0, streak: 0, used_s: 0, limit_s: 1200 }] }
+  kids: [{ i: 0, name: 'jack', lesson: 4, stars: 19, streak: 3, used_s: 312, limit_s: 1200 }, { i: 12, name: 'guest', lesson: 0, stars: 0, streak: 0, used_s: 0, limit_s: 1200 }] }
 // what Muffin is asking in class (school.c ask_json); the preview panel sets it
 export const ASKS = {
   tf: { kind: 'tf', q: 12, options: [{ label: 'True', say: 'true' }, { label: 'False', say: 'false' }] },
@@ -92,6 +92,7 @@ export function handle(method, url, body = {}) {
     case 'POST /api/school': {
       if (typeof body.on === 'boolean') school.on = body.on
       if (typeof body.tap === 'boolean') school.tap = body.tap
+      if (typeof body.student === 'string') { school.kids[0].name = body.student.toLowerCase(); return { ok: true, msg: `student: ${school.kids[0].name}` } }
       if (typeof body.lesson === 'number') {
         if (!school.can_pick || body.lesson > school.kids[0].lesson) return { ok: false, msg: "that lesson isn't open yet" }
         school.state = 'in class'; school.can_pick = false; school.now = body.lesson; delete school.ask
