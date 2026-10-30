@@ -33,20 +33,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/requirements.txt
 
-      - name: voice model cache
+      # voice models + every line already voiced (keyed by text + voice), so a build only voices new lines
+      - name: voice cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/piper
-          key: piper-${{ hashFiles('tools/make_sounds.py') }}
-          restore-keys: piper-
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/piper
+            ~/.cache/muffin-tts
+          key: tts-${{ hashFiles('tools/make_sounds.py') }}
+          restore-keys: tts-
 
       - name: render sound bank
         run: |
-          pip install -q piper-tts numpy scipy
+          sudo apt-get install -y -qq espeak-ng >/dev/null
+          pip install -q -r tools/requirements.txt
           V=$(python3 -c "import sys; sys.path.insert(0,'tools'); import make_sounds as m; print(m.VOICE)")
-          python3 -m piper.download_voices "$V" --download-dir ~/.cache/piper
-          python3 tools/make_sounds.py | tail -3
+          case "$V" in kokoro:*) ;; *) python3 -m piper.download_voices "${V#piper:}" --download-dir ~/.cache/piper ;; esac
+          python3 tools/make_sounds.py | tail -4
 
       - name: stamp version (board compares this to manifest.json to auto-update)
         run: echo "${GITHUB_SHA::7}" > firmware/version.txt
@@ -80,6 +87,7 @@ jobs:
           cp $B/xarm-voice.bin release/
           cp $B/srmodels/srmodels.bin release/
           cp firmware/main/sounds.bin release/        # Muffin's voice + bells: flashed after the speech models
+          cp firmware/main/sounds_hq.bin release/     # full quality, for the SD card (downloaded by the board, never flashed)
           # offsets straight from the build, so they can't drift
           python3 - <<'EOF'
           import json, os
@@ -108,6 +116,8 @@ jobs:
           json.dump({
               "name": "xarm-voice", "version": os.environ.get("GITHUB_SHA", "dev")[:7],
               "sounds": hashlib.sha256(snd).hexdigest()[:12], "sounds_size": len(snd),   # board syncs this over WiFi
+              "sounds_hq": hashlib.sha256(open("release/sounds_hq.bin", "rb").read()).hexdigest()[:12],
+              "sounds_hq_size": os.path.getsize("release/sounds_hq.bin"),
               "new_install_prompt_erase": True,
               "builds": [{"chipFamily": "ESP32-S3",
                           "parts": [{"path": n, "offset": o} for o, n in rows]}],

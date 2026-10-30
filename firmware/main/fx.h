@@ -41,6 +41,7 @@ void fx_say_n(int first, int n);                                // SND_X_1 + n-1
 void fx_hush(void);                                             // cut the current clip, drop the queue
 void fx_play(int group);                                        // a sound effect group (SND_S_*)
 bool fx_bank_ok(void);                                          // a matching sound bank is loaded
+const char *fx_bank_src(void);                                  // "sd" (full quality) / "flash" / "none"
 void fx_bank_release(void);                                     // before rewriting the bank in flash
 void fx_bank_reload(void);                                      // after
 void fx_quiet(int minutes);                                     // "be quiet": no talking for a while (0 = talk again)

@@ -6,6 +6,10 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "esp_partition.h"
+#include "esp_heap_caps.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "sd.h"
 #include "voice.h"
 #include "sounds_gen.h"
 #include "chat.h"
@@ -38,7 +42,13 @@ static const rgb_t JEWEL[4] = {RUBY, SAPPHIRE, EMERALD, GOLD};
 typedef struct __attribute__((packed)) { char magic[4]; uint32_t layout, ngroups, nclips, data; } bank_hdr_t;
 typedef struct __attribute__((packed)) { uint16_t first, n; } grp_t;
 typedef struct __attribute__((packed)) { uint32_t off, n; int16_t first; uint8_t idx, khz; } clip_t;
-static const uint8_t *s_bank;                 // mapped bank, NULL = silent
+static const uint8_t *s_bank;                 // mapped flash bank (ADPCM)
+// Full-quality bank on the TF card (sounds_hq.bin, 16-bit PCM, same groups): preferred when present.
+enum { SRC_NONE, SRC_FLASH, SRC_SD };
+static volatile int s_src;                    // which bank is playing; SRC_NONE = silent
+static FILE *s_sdf;
+static uint8_t *s_sd_tab;                     // group + clip tables read from the card (PSRAM)
+static volatile bool s_sd_bad;                // a read failed (card pulled?): fall back to flash
 static const grp_t *s_grp;
 static const clip_t *s_clip;
 static uint32_t s_nclips;
@@ -78,42 +88,96 @@ static int dec_next(dec_t *d)
     return d->pred;
 }
 
-// decode one clip straight to the speaker; slower clips (speech at 11/12 kHz) are resampled to 16 kHz
-// (linear) on the way
+// one clip's samples, from either bank: ADPCM out of mapped flash, or 16-bit PCM read from the card
+typedef struct { bool pcm; dec_t d; FILE *f; uint32_t left; int pos, len; int16_t fb[256]; } rd_t;
+
+static int rd_next(rd_t *r)
+{
+    if (!r->pcm) return dec_next(&r->d);
+    if (r->pos >= r->len) {
+        size_t want = r->left < 256 ? r->left : 256;
+        r->len = want ? (int)fread(r->fb, sizeof(int16_t), want, r->f) : 0;
+        r->pos = 0;
+        if (r->len <= 0) { if (want) s_sd_bad = true; r->len = 0; return 0; }
+        r->left -= r->len;
+    }
+    return r->fb[r->pos++];
+}
+
+// play one clip straight to the speaker; slower clips (speech at 11/12 kHz in the flash bank) are
+// resampled to 16 kHz (linear) on the way
 static void play_clip(uint32_t i)
 {
     const clip_t *c = &s_clip[i];
-    dec_t d = { s_bank + c->off, c->n, 0, c->first, c->idx };
+    static rd_t r;
+    memset(&r, 0, sizeof r);
+    int first;
+    if (s_src == SRC_SD) {
+        r.pcm = true; r.f = s_sdf; r.left = c->n;
+        if (fseek(s_sdf, c->off, SEEK_SET)) { s_sd_bad = true; return; }
+        first = rd_next(&r);
+    } else {
+        r.d = (dec_t){ s_bank + c->off, c->n, 0, c->first, c->idx };
+        first = r.d.pred;
+    }
     static int16_t buf[256];
     int k = 0;
     if (c->khz == AUDIO_RATE / 1000 || c->khz == 0) {
-        buf[k++] = (int16_t)d.pred;
-        for (uint32_t s = 1; s < c->n && !s_hush; s++) {
-            buf[k++] = (int16_t)dec_next(&d);
+        buf[k++] = (int16_t)first;
+        for (uint32_t s = 1; s < c->n && !s_hush && !s_sd_bad; s++) {
+            buf[k++] = (int16_t)rd_next(&r);
             if (k == 256) { audio_play(buf, k); k = 0; }
         }
     } else {                                  // output j sits at input j * khz/16, phase in 1/16ths
         const uint32_t step = c->khz, one = AUDIO_RATE / 1000;
-        int a = d.pred, b = c->n > 1 ? dec_next(&d) : a;
+        int a = first, b = c->n > 1 ? rd_next(&r) : a;
         uint32_t used = 2, ph = 0;
-        while (!s_hush) {
+        while (!s_hush && !s_sd_bad) {
             buf[k++] = (int16_t)(a + (b - a) * (int)ph / (int)one);
             ph += step;
             while (ph >= one) {
                 ph -= one; a = b;
                 if (used >= c->n) goto done;
-                b = dec_next(&d); used++;
+                b = rd_next(&r); used++;
             }
             if (k == 256) { audio_play(buf, k); k = 0; }
         }
     }
 done:
-    if (k && !s_hush) audio_play(buf, k);
+    if (k && !s_hush && !s_sd_bad) audio_play(buf, k);
+}
+
+// the full-quality bank on the card, if it's there and made for this build
+static bool sd_attach(void)
+{
+    if (!sd_ok() || !sd_voice_wanted()) return false;   // the card is used only once it's switched on
+    FILE *f = fopen(SD_BANK, "rb");
+    if (!f) return false;
+    bank_hdr_t h;
+    if (fread(&h, sizeof h, 1, f) != 1 || memcmp(h.magic, "SNP1", 4)) { fclose(f); return false; }
+    if (h.layout != SND_LAYOUT || h.ngroups != SND_GROUPS) {
+        ESP_LOGW(TAG, "SD voice is for a different build (layout %08x, want %08x)", (unsigned)h.layout, (unsigned)SND_LAYOUT);
+        fclose(f);
+        return false;
+    }
+    size_t gsz = h.ngroups * sizeof(grp_t), csz = h.nclips * sizeof(clip_t);
+    uint8_t *t = heap_caps_malloc(gsz + csz, MALLOC_CAP_SPIRAM);
+    if (!t || fread(t, 1, gsz + csz, f) != gsz + csz) { free(t); fclose(f); return false; }
+    setvbuf(f, NULL, _IOFBF, 4096);
+    s_sd_tab = t;
+    s_grp = (const grp_t *)t;
+    s_clip = (const clip_t *)(t + gsz);
+    s_nclips = h.nclips;
+    s_sdf = f;
+    s_src = SRC_SD;
+    ESP_LOGI(TAG, "sound bank: SD card, %u clips, full quality, voice %s", (unsigned)s_nclips, SND_VOICE);
+    return true;
 }
 
 // map the bank and check it matches this firmware's group list; anything off = stay quiet
 static void bank_attach(void)
 {
+    if (sd_attach()) return;
     const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "model");
     const void *m;
     if (!p || p->size < fx_bank_off(p->size) + FX_BANK_MAX ||
@@ -132,21 +196,26 @@ static void bank_attach(void)
     s_clip = (const clip_t *)(s_grp + h->ngroups);
     s_nclips = h->nclips;
     s_bank = m;
+    s_src = SRC_FLASH;
     ESP_LOGI(TAG, "sound bank: %u clips, voice %s", (unsigned)s_nclips, SND_VOICE);
 }
 
 static void bank_detach(void)
 {
+    s_src = SRC_NONE;
     s_bank = NULL;
+    if (s_sdf) { fclose(s_sdf); s_sdf = NULL; }
+    free(s_sd_tab); s_sd_tab = NULL;
     if (s_mapped) { esp_partition_munmap(s_map); s_mapped = false; }
 }
 
-bool fx_bank_ok(void) { return s_bank != NULL; }
+bool fx_bank_ok(void) { return s_src != SRC_NONE; }
+const char *fx_bank_src(void) { return s_src == SRC_SD ? "sd" : s_src == SRC_FLASH ? "flash" : "none"; }
 
 // update.c is about to rewrite the bank: cut any sound, wait for the player to let go, unmap
 void fx_bank_release(void)
 {
-    s_bank = NULL;
+    s_src = SRC_NONE;
     fx_hush();
     for (int i = 0; i < 100 && s_talking; i++) vTaskDelay(pdMS_TO_TICKS(10));
     bank_detach();
@@ -163,7 +232,13 @@ static void sound_task(void *arg)
         int64_t now = esp_timer_get_time();
         // narration that's fallen behind the arm is worse than silence
         if (now - r.at > (r.low ? 300000 : 2500000)) continue;
-        if (r.g >= SND_GROUPS || !s_bank) continue;
+        if (s_sd_bad) {                       // the card stopped answering: carry on from the flash bank
+            s_sd_bad = false;
+            ESP_LOGW(TAG, "SD card read failed — using the flash voice");
+            bank_detach();
+            bank_attach();
+        }
+        if (r.g >= SND_GROUPS || s_src == SRC_NONE) continue;
         int n = s_grp[r.g].n, v;
         if (n <= 0) continue;
         if (r.pick >= 0) v = r.pick % n;

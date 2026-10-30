@@ -13,3 +13,4 @@ firmware/version.txt
 firmware/main/sounds.bin
 firmware/main/sounds_gen.h
 preview/
+firmware/main/sounds_hq.bin

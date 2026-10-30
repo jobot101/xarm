@@ -15,3 +15,4 @@ void update_status(char *latest, size_t nl, char *status, size_t ns);
 void update_sound_status(char *out, size_t n);   // Muffin's voice bank: ready / downloading / failed
 void update_sound_version(char *out, size_t n);  // hash of the bank in flash ("" if never synced)
 esp_err_t update_sounds_upload(httpd_req_t *r);   // POST /api/sounds?v=<hash>, raw sounds.bin body
+void update_sd_status(char *out, size_t n);      // full-quality SD voice: off / downloading / ready / why not

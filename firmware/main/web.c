@@ -16,6 +16,7 @@
 #include "moves.h"
 #include "kids.h"
 #include "fx.h"
+#include "sd.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -204,6 +205,15 @@ static esp_err_t h_state(httpd_req_t *r)
         update_sound_status(bs, sizeof bs);
         cJSON_AddBoolToObject(v, "bank", fx_bank_ok());
         cJSON_AddStringToObject(v, "bank_status", bs);
+        cJSON_AddStringToObject(v, "src", fx_bank_src());
+        cJSON *sdj = cJSON_AddObjectToObject(v, "sd");
+        char sds[80];
+        sd_status(sds, sizeof sds);
+        cJSON_AddBoolToObject(sdj, "card", sd_ok());
+        cJSON_AddStringToObject(sdj, "card_status", sds);
+        cJSON_AddBoolToObject(sdj, "on", sd_voice_wanted());
+        update_sd_status(sds, sizeof sds);
+        cJSON_AddStringToObject(sdj, "status", sds);
         voice_note_t nt[8];
         int nn = voice_notes(nt, 8);
         cJSON *ev = cJSON_AddArrayToObject(v, "heard");
@@ -439,12 +449,19 @@ static esp_err_t h_voice(httpd_req_t *r)
 {
     cJSON *b = body(r);
     voice_tune(num(b, "gain", -1), num(b, "thresh", -1), num(b, "wake", -1));
-    int dual = num(b, "dual", -1), cl = num(b, "cloud", -1);
+    int dual = num(b, "dual", -1), cl = num(b, "cloud", -1), sdv = num(b, "sd", -1);
     cJSON *key = cJSON_GetObjectItem(b, "stt_key");
     bool keyed = cJSON_IsString(key);
     if (keyed) cloud_set_key(key->valuestring);
     if (cl == 0 || cl == 1) cloud_enable(cl);
     cJSON_Delete(b);
+    if (sdv == 0 || sdv == 1) {
+        sd_voice_set(sdv);
+        if (!sdv && !strcmp(fx_bank_src(), "sd")) fx_bank_reload();   // off: stop using the card (the file stays)
+        update_check_now();
+        if (!sdv) return reply(r, true, "voice from flash — the card copy is left where it is");
+        return reply(r, true, sd_ok() ? "downloading the full-quality voice to the card" : "no usable card in the slot");
+    }
     if (keyed) return reply(r, true, cloud_ready() ? "key saved — say “Hey Muffin”" : "key saved");
     if ((dual == 0 || dual == 1) && dual != audio_mic_dual()) {
         audio_mic_dual_save(dual);

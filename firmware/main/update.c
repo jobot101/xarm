@@ -21,6 +21,9 @@
 #include "net.h"
 #include "pick.h"
 #include "fx.h"
+#include "sd.h"
+#include <sys/stat.h>
+#include <unistd.h>
 #include "sdkconfig.h"
 
 static const char *TAG = "update";
@@ -28,6 +31,11 @@ static TaskHandle_t s_task;
 static bool s_auto = true;
 static char s_latest[16] = "", s_status[112] = "waiting for internet";
 static char s_snd[24] = "";                 // sound bank version the manifest offers (hash of sounds.bin)
+static char s_hq[24] = "";                  // full-quality bank for the SD card (hash of sounds_hq.bin)
+static int s_hq_size;
+static char s_hq_tried[24] = "";
+static int64_t s_hq_tried_at;
+static char s_sd_dl[80] = "off";
 static int s_snd_size;
 static char s_snd_tried[24] = "";           // last version tried, and when
 static bool s_bank_lock;                    // one writer at a time: the WiFi sync or a phone upload
@@ -85,6 +93,8 @@ static bool fetch_latest(char *ver, size_t n)
         if (cJSON_IsString(v)) { strlcpy(ver, v->valuestring, n); ok = true; }
         cJSON *sv = cJSON_GetObjectItem(j, "sounds"), *ss = cJSON_GetObjectItem(j, "sounds_size");
         if (cJSON_IsString(sv) && cJSON_IsNumber(ss)) { strlcpy(s_snd, sv->valuestring, sizeof s_snd); s_snd_size = ss->valueint; }
+        cJSON *hv = cJSON_GetObjectItem(j, "sounds_hq"), *hs = cJSON_GetObjectItem(j, "sounds_hq_size");
+        if (cJSON_IsString(hv) && cJSON_IsNumber(hs)) { strlcpy(s_hq, hv->valuestring, sizeof s_hq); s_hq_size = hs->valueint; }
         cJSON_Delete(j);
     }
     if (!ok) snprintf(s_why, sizeof s_why, "%s, %u KB free", oe != ESP_OK ? esp_err_to_name(oe) : code ? "bad reply" : "no reply",
@@ -223,6 +233,120 @@ static bool sync_sounds(void)
     return ok;
 }
 
+static void sd_dl(const char *fmt, ...)
+{
+    va_list ap; va_start(ap, fmt);
+    vsnprintf(s_sd_dl, sizeof s_sd_dl, fmt, ap);
+    va_end(ap);
+    ESP_LOGI(TAG, "SD voice: %s", s_sd_dl);
+}
+
+void update_sd_status(char *out, size_t n) { strlcpy(out, s_sd_dl, n); }
+
+static bool file_hash_is(const char *path, const char *want)
+{
+    FILE *f = fopen(path, "rb");
+    uint8_t *b = malloc(4096), d[32];
+    if (!f || !b) { if (f) fclose(f); free(b); return false; }
+    mbedtls_sha256_context c;
+    mbedtls_sha256_init(&c);
+    mbedtls_sha256_starts(&c, 0);
+    size_t r;
+    while ((r = fread(b, 1, 4096, f)) > 0) mbedtls_sha256_update(&c, b, r);
+    mbedtls_sha256_finish(&c, d);
+    mbedtls_sha256_free(&c);
+    fclose(f);
+    free(b);
+    char hex[13];
+    for (int i = 0; i < 6; i++) snprintf(hex + 2 * i, 3, "%02x", d[i]);
+    return !strncmp(hex, want, 12);
+}
+
+// Full-quality voice on the TF card (sounds_hq.bin, 16-bit PCM, ~15-25 MB). Only when "Store voice on SD
+// card" is on, and only inside /sdcard/muffin. Downloads to sounds.tmp next to the live bank (resuming a
+// partial one), checks the hash, then swaps it in. The flash voice keeps talking the whole time.
+static bool sync_sd(void)
+{
+    if (!sd_voice_wanted()) { sd_dl("off"); return true; }
+    if (!sd_ok()) { sd_dl("no usable card"); return false; }
+    if (!s_hq[0] || s_hq_size <= 0) { sd_dl("this build has no SD voice yet"); return true; }
+    char have[24];
+    nvs_str("hqver", have, sizeof have, false);
+    bool on_card = !strcmp(fx_bank_src(), "sd");
+    if (!strcmp(have, s_hq) && on_card) { sd_dl("ready — playing full quality from the card"); return true; }
+    int64_t now = esp_timer_get_time();
+    if (!strcmp(s_hq_tried, s_hq) && now - s_hq_tried_at < 60LL * 1000000) return false;   // a failed try: again in 1 min
+    strlcpy(s_hq_tried, s_hq, sizeof s_hq_tried);
+    s_hq_tried_at = now;
+
+    mkdir(SD_DIR, 0775);
+    // already on the card (copied by hand, or the swap was interrupted)? check it instead of downloading
+    struct stat st;
+    if (stat(SD_BANK, &st) == 0 && st.st_size == s_hq_size && file_hash_is(SD_BANK, s_hq)) {
+        nvs_str("hqver", s_hq, 0, true);
+        fx_bank_reload();
+        sd_dl(strcmp(fx_bank_src(), "sd") ? "file on the card doesn't match this build" : "ready — playing full quality from the card");
+        return true;
+    }
+    // resume a partial download of this same version
+    char tmpv[24];
+    nvs_str("hqtmp", tmpv, sizeof tmpv, false);
+    int got = 0;
+    if (!strcmp(tmpv, s_hq) && stat(SD_BANK_TMP, &st) == 0 && st.st_size <= s_hq_size) got = st.st_size;
+    else { unlink(SD_BANK_TMP); nvs_str("hqtmp", s_hq, 0, true); }
+    if (sd_free_bytes() < (uint64_t)(s_hq_size - got) + 1024 * 1024) { sd_dl("card is full — need %d MB free", s_hq_size / 1000000 + 1); return false; }
+
+    FILE *f = fopen(SD_BANK_TMP, got ? "ab" : "wb");
+    if (!f) { sd_dl("can't write to the card (locked?)"); return false; }
+    char url[160];
+    snprintf(url, sizeof url, "%ssounds_hq.bin?v=%s", CONFIG_XARM_UPDATE_URL, s_hq);
+    uint8_t *buf = malloc(4096);
+    int synced = got;
+    for (int attempt = 0; buf && attempt < 8 && got < s_hq_size; attempt++) {
+        if (attempt) vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_http_client_config_t c = { .url = url, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 20000,
+                                       .buffer_size = 4096 };
+        esp_http_client_handle_t h = esp_http_client_init(&c);
+        char range[32];
+        if (got) { snprintf(range, sizeof range, "bytes=%d-", got); esp_http_client_set_header(h, "Range", range); }
+        int code = 0;
+        if (esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0)
+            code = esp_http_client_get_status_code(h);
+        if (code == 200 || code == 206) {
+            int skip = code == 200 ? got : 0;            // server ignored Range: skip what we already have
+            int r = 0;
+            while (got < s_hq_size && (r = esp_http_client_read(h, (char *)buf, 4096)) > 0) {
+                int o = 0;
+                if (skip) { int k = r < skip ? r : skip; skip -= k; o = k; r -= k; if (!r) continue; }
+                if (got + r > s_hq_size) r = s_hq_size - got;
+                if ((int)fwrite(buf + o, 1, r, f) != r) { attempt = 99; break; }   // card fault: give up
+                got += r;
+                if (got - synced >= 1024 * 1024) { fflush(f); fsync(fileno(f)); synced = got; }   // resumable after a power cut
+                if ((got & 0x7FFFF) < 4096) sd_dl("downloading full-quality voice… %d%%", (int)(got * 100LL / s_hq_size));
+            }
+        }
+        esp_http_client_cleanup(h);
+        if (code && code != 200 && code != 206) break;  // 404 etc.: retrying won't help
+    }
+    free(buf);
+    fclose(f);
+    if (got != s_hq_size) { sd_dl("download stopped at %d%% — continuing in 1 min", (int)(got * 100LL / s_hq_size)); return false; }
+    if (!file_hash_is(SD_BANK_TMP, s_hq)) { unlink(SD_BANK_TMP); sd_dl("download was damaged — starting over in 1 min"); return false; }
+
+    // swap it in: the player lets go of the old file, the new one takes its name
+    if (__atomic_test_and_set(&s_bank_lock, __ATOMIC_ACQUIRE)) return false;
+    fx_bank_release();
+    unlink(SD_BANK);
+    bool ok = rename(SD_BANK_TMP, SD_BANK) == 0;
+    if (ok) nvs_str("hqver", s_hq, 0, true);
+    fx_bank_reload();
+    __atomic_clear(&s_bank_lock, __ATOMIC_RELEASE);
+    ok = ok && !strcmp(fx_bank_src(), "sd");
+    sd_dl(ok ? "ready — playing full quality from the card" : "saved, but the card copy wouldn't load");
+    if (ok) fx_say(SND_UPDATED);
+    return ok;
+}
+
 static void task(void *arg)
 {
     const char *running = esp_app_get_description()->version;
@@ -237,6 +361,7 @@ static void task(void *arg)
                 strlcpy(s_latest, latest, sizeof s_latest);
                 // sounds first: they don't reboot, and they belong to the same build as the app on offer
                 if (!pick_busy()) sync_sounds();
+                if (!pick_busy()) sync_sd();
                 char tried[16];
                 nvs_str("tried", tried, sizeof tried, false);
                 if (!strcmp(latest, running))            status("up to date (%s)", running);

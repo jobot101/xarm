@@ -14,6 +14,7 @@
 #include "update.h"
 #include "audio.h"
 #include "fx.h"
+#include "sd.h"
 #include "moves.h"
 #include "kids.h"
 #include "voice.h"
@@ -44,6 +45,7 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_new_master_bus(&bc, &bus));
 
     audio_init(bus);       // speaker + mics
+    sd_init(bus);          // TF card: Muffin's full-quality voice, if it's been stored there
     fx_start();            // LED ring + robot sounds
     fx_event(update_new_version() ? FX_UPDATED : FX_BOOT);   // fresh firmware: fanfare + "Ready to rumble!"
     arm_init();

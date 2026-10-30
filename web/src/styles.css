@@ -251,3 +251,4 @@ button.link { background: none; border: 0; padding: 4px 0; color: var(--bad); fo
 .sysbar i { display: block; height: 100%; }
 .systab { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
 .systab th, .systab td { text-align: left; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+.sdvoice { margin: 10px 0; padding: 10px; border: 1.5px dashed var(--line); border-radius: 10px; }

@@ -56,7 +56,18 @@ export default function Voice({ s, run }) {
       </div>}
       {v.bank_status !== undefined && <p className={v.bank ? 'hint' : 'warn-line'}>
         Muffin's voice: <b>{v.bank ? 'ready' : 'not loaded'}</b> — {v.bank_status}
-        {!v.bank && ' (needs home WiFi with internet; it downloads by itself)'}</p>}
+        {!v.bank && ' (needs home WiFi with internet; it downloads by itself)'}
+        {v.src === 'sd' && ' · playing full quality from the SD card'}</p>}
+      {v.sd && <div className="sdvoice">
+        <label className="check">
+          <input type="checkbox" checked={!!v.sd.on} disabled={!v.sd.card && !v.sd.on}
+            onChange={e => run(api.voice({ sd: e.target.checked ? 1 : 0 }))} />
+          Store Muffin's full-quality voice on the SD card
+        </label>
+        <p className="hint">Card: {v.sd.card_status}{v.sd.on ? ` · ${v.sd.status}` : ''}</p>
+        <p className="hint">Muffin only ever writes inside a <code>muffin</code> folder on the card and never formats it.
+          About 25 MB. The flash voice keeps playing until the download is checked and ready.</p>
+      </div>}
       <div className="meter" title="mic level">
         <div style={{ width: `${lv}%`, height: 14, borderRadius: 7, transition: 'width 120ms',
           background: lv > 85 ? '#c0392b' : lv > 35 ? '#2e8b57' : '#b8860b' }} />
