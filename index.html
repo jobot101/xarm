@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#121212" />
+  <title>Ragamuffin Flasher</title>
+  <script type="module" crossorigin src="./assets/index-kA2UqdAc.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-Nwsfk4kr.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="brand">Ragamuffin<span>flasher</span></div>
+      <div id="fw" class="fw">loading firmware…</div>
+    </header>
+
+    <section class="card notice" id="nousb" hidden>
+      <b>This browser can't reach USB</b>
+      <p>iPhone and iPad block USB for every browser, so installs here go over WiFi. A brand-new board needs one USB install first, from an Android phone (Chrome) or any computer with Chrome or Edge. Send them this page:</p>
+      <button id="share">Share this page</button>
+    </section>
+
+    <div class="usb">
+    <div class="boards">
+      <button class="board on" data-board="arm"><span>🦾</span>Arm brain<small>Waveshare, round</small></button>
+      <button class="board" data-board="cam"><span>👁️</span>Camera<small>Hiwonder module</small></button>
+    </div>
+
+    <section class="card">
+      <div id="modes">
+      <label class="mode"><input type="radio" name="mode" value="keep" checked />
+        <span><b>Full install, keep settings</b><small>everything incl. speech models + Muffin's voice. Keeps WiFi, tuning, kids + recorded moves.</small></span></label>
+      <label class="mode"><input type="radio" name="mode" value="full" />
+        <span><b>Full install, erase</b><small>first time, or if the board acts strange. Wipes everything.</small></span></label>
+      <label class="mode"><input type="radio" name="mode" value="app" />
+        <span><b>App only</b><small>xarm-voice.bin at 0x10000. Keeps settings + calibration.</small></span></label>
+      </div>
+      <button id="flash" class="big" disabled>Flash</button>
+      <div class="bar"><div id="bar"></div></div>
+      <div id="status" class="status">Plug the board into this phone with a USB-C data cable.</div>
+    </section>
+
+    <section class="card">
+      <button id="monitor">Boot log</button>
+      <p class="hint">If Flash can't find the board: hold <b>BOOT</b>, tap <b>RESET</b>, release <b>BOOT</b>, try again.
+        After flashing in that mode, tap <b>RESET</b> to start the new firmware.</p>
+    </section>
+
+    <pre id="log"></pre>
+    </div>
+
+    <section class="card wifi" id="wifi">
+      <h2>Update over WiFi <small>iPhone + Android</small></h2>
+      <p class="hint">For a board that's had its first install. Open Muffin, then tap <b>Install latest</b> — the phone fetches the newest build and hands it over.</p>
+      <a class="btn big" id="open-home" href="http://muffin.local/#update">Open Muffin <small>on home WiFi</small></a>
+      <a class="btn" id="open-ap" href="http://192.168.4.1/#update">Open Muffin <small>on Muffin's own WiFi</small></a>
+      <p class="hint">Muffin's own WiFi: join <b>Muffin</b> (password <b>ragamuffin</b>) in Settings first, keep mobile data on, then tap the button. If “home WiFi” doesn't open, try <b>http://muffin</b>, <b>http://muffin.local</b>, or Muffin's own WiFi.</p>
+      <a class="small-link" href="./fw/xarm-voice.bin" download>Save the app file (xarm-voice.bin) for a manual upload</a>
+    </section>
+  </main>
+</body>
+</html>

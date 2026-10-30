@@ -1,0 +1,8 @@
+Flash with https://espressif.github.io/esptool-js/  (add each file at its offset)
+
+0x000000  bootloader.bin
+0x008000  partition-table.bin
+0x00d000  ota_data_initial.bin
+0x010000  xarm-voice.bin
+0x710000  srmodels.bin
+0xa90000  sounds.bin
