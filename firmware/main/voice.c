@@ -251,16 +251,17 @@ static void run_cloud(const char *t, bool unsure)
     if (strstr(t, "stop") || strstr(t, "freeze") || strstr(t, "halt")) unsure = false;   // stop never waits on anything
     if (!unsure) {
         bool ok = router_exec(t, msg, sizeof msg);
-        if (ok || strcmp(msg, "unknown command")) { snprintf(why, sizeof why, "☁ %s", msg); note(t, 100, why); return; }
+        if (ok || strcmp(msg, "unknown command")) { strlcpy(why, "☁ ", sizeof why); strlcat(why, msg, sizeof why); note(t, 100, why); return; }
     }
     int k = cloud_intent(t, pick, sizeof pick);
     if (k == INTENT_COMMAND) {
         router_exec(pick, msg, sizeof msg);
-        snprintf(why, sizeof why, "☁→ %s: %s", pick, msg);
+        strlcpy(why, "☁→ ", sizeof why); strlcat(why, pick, sizeof why); strlcat(why, ": ", sizeof why); strlcat(why, msg, sizeof why);
     } else if (k == INTENT_LESSON) {
         int l = atoi(pick);
         school_explain(l, msg, sizeof msg);
-        snprintf(why, sizeof why, "☁→ lesson %d: %s", l + 1, msg);
+        snprintf(why, sizeof why, "☁→ lesson %d: ", l + 1);
+        strlcat(why, msg, sizeof why);
     } else if (k == INTENT_OFFTOPIC) {
         fx_say(SND_OFFTOPIC);
         strlcpy(why, "☁→ not robots/math/physics", sizeof why);
