@@ -146,7 +146,9 @@ git push                              # CI builds + publishes release "latest"
   "handoff" (reach toward the kid, hand open unless holding). Fetch: pop-up Clamp! (= "grab it", K_CLOSE), then
   pick_caught() reads the gripper: missed -> open, ask again (3 tries), then pretend. Giveback: pop-up Let go
   (K_OPEN); nobody takes it -> put it down at the drop spot. wrap() never sleeps holding something. Used in
-  lessons 7 (payload: close vs far), 8 (grip: friction), 10 (gravity: holding still).
+  lessons 5 torque, 6 balance, 7 payload, 8 grip, 9 inertia (smooth carry, jerky demo stays empty-handed),
+  10 gravity, 25 safety (safe handoff), 45 pick and place, 46 assembly line, 50 inspection, 53 teamwork.
+  Between fetch and giveback: no jerky/fast/dance acts (flinging); wave/dance/open acts skip while holding anyway.
 - Start lesson (Learning page): POST /api/school {lesson: i} -> pick_lesson(): any lesson the kid has reached
   (done ones replay: "Do it again" inside an opened lesson; the next one: "Start lesson"). When class is waiting
   it starts class straight into that lesson (no warm-up); in free play it ends play, runs it, then back to play.

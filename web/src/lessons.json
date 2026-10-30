@@ -245,11 +245,13 @@
       "Ever sat on a seesaw with someone bigger? You scoot back, they scoot forward, and you balance.",
       "That's torque. A twisting push. It equals force times distance from the pivot.",
       "Same weight, twice as far out, twice the twist.",
-      "My shoulder is a pivot. When I hold something close, it's easy.",
+      "Let's test it with something real. Hand me something small, put it between my fingers, and tap Clamp.",
+      "My shoulder is a pivot. When I hold your thing close, it's easy.",
       "When I reach way out, the same thing twists my shoulder much harder.",
       "Here's the sneaky part. My own arm weighs something too.",
       "So even holding nothing, reaching out makes my shoulder work. The heaviest thing I lift is me.",
       "Back home. Ahh. Much easier.",
+      "Here, take it back. Hold it, then tap Let go.",
       "Your turn. Say, a little down. My shoulder has to fight gravity the whole way."
      ]
     },
@@ -262,11 +264,13 @@
       "Stand up and lean forward slowly. At some point, you have to step, or you fall.",
       "That's when your center of mass goes past your feet.",
       "My base is my feet. When I reach out, my center of mass slides toward the edge.",
-      "Like this.",
+      "Give me something to carry, and I'll show you. Put it in my fingers, then tap Clamp.",
+      "Like this. Me, plus your thing, all sliding outward.",
       "Reach too far with something heavy, and over I go. Not a great look for a star.",
       "That's why my base is wide and heavy. A wide base is a big safe zone.",
       "It's also why a pyramid is hard to tip, and a pencil on its end falls over.",
       "Phew. Back to safety.",
+      "Thanks for the cargo. Hold it, then tap Let go.",
       "Your turn. Say, take a bow. Watch me lean without tipping."
      ]
     },
@@ -320,7 +324,10 @@
       "Momentum is how much keep going something has. Mass times speed.",
       "If I slam from still to full speed, I jerk and wobble. Like this.",
       "Ugly. Shaky. Beneath me.",
-      "So I ease in, cruise, and ease out. Like this.",
+      "If I were holding something, that jerk could fling it right across the room.",
+      "So let's carry something properly. Hand me something small, then tap Clamp.",
+      "Now I ease in, cruise, and ease out. Like this. Your thing stays put.",
+      "Safe delivery. Hold it, then tap Let go.",
       "My brain uses a recipe called minimum jerk. The gentlest start and the gentlest stop.",
       "Your arm does that on its own when you reach for a cup. You're welcome for noticing.",
       "Your turn. Say, lets dance. Watch how every move eases in and out."
@@ -607,6 +614,9 @@
       "Big factory robots have an emergency stop. A big mushroom button that cuts the power.",
       "Rule three. I move slowly and smoothly, so you can always see where I'm going.",
       "Fast robots work inside cages. Cobots like me go slow, and don't push hard.",
+      "Rule five. Handing things over. I come slowly, I wait, and I only squeeze when you say so.",
+      "Let's practice a safe handoff. Put something in my fingers, keep your fingers clear, then tap Clamp.",
+      "Now I give it back. Hold it, then tap Let go. I won't let go until you do.",
       "Rule four. Never stand where I'm about to reach. I can't always tell you're there.",
       "Let's practice. When I start dancing, shout stop!",
       "Perfect. You'd make a great safety officer."
@@ -960,8 +970,10 @@
       "Robots pack cookies into boxes, chips onto circuit boards, and boxes onto trucks.",
       "Some pick and place robots are so fast you can barely see them. Hundreds of picks a minute.",
       "I'm a little slower. I like to give the crowd time to admire me.",
-      "Your turn. Say, close your hand. That's the pick.",
-      "Now say, open your hand. That's the place."
+      "Your turn to run the factory. Hand me a part, put it between my fingers, and tap Clamp. That's the pick.",
+      "Carry it out.",
+      "And back.",
+      "Now the place. Hold out your hand, grab it, and tap Let go."
      ]
     },
     {
@@ -976,6 +988,11 @@
       "Each robot does one job, perfectly, all day.",
       "A hundred years ago, assembly lines made cars cheap enough for families to buy.",
       "Today robots and people work along the same lines, each doing what they're best at.",
+      "Let's build a tiny assembly line. You're station one. Hand me a part.",
+      "Put it in my fingers, then tap Clamp.",
+      "Station two. That's me. I give it a twist.",
+      "And a careful tilt.",
+      "Station three is you again. Take it, then tap Let go.",
       "Every station needs its moment to shine. Like me.",
       "Your turn. Say, a little up. Station one, lift."
      ]
@@ -1041,6 +1058,10 @@
       "People get tired after checking a thousand parts. A robot inspector checks a million the same way.",
       "It's the same idea from the seeing lesson. Dots, numbers, and rules.",
       "But it only works if the light stays the same. Shadows can fool robot eyes, just like mine.",
+      "Let's inspect something. Hand me a part, put it between my fingers, and tap Clamp.",
+      "Turn it around. Check every side.",
+      "Tilt it. Look underneath. No cracks. No missing pieces.",
+      "Passed! Hold it, then tap Let go.",
       "Home.",
       "Your turn. Say, a little right. Inspection complete."
      ]
@@ -1090,6 +1111,9 @@
       "That could be you. You already know about servos, sensors, wiring, and a multimeter.",
       "The best results come from teams. People bring ideas and care. Robots bring strength and patience.",
       "Like you and me. You bring the brains. I bring the good looks.",
+      "One last team move. Hand me something, then tap Clamp.",
+      "I'll hold it steady. That's my job. Steady, patient, and gorgeous.",
+      "And back to you. Hold it, then tap Let go. Teamwork.",
       "Thank you for coming to Muffin's Robot School.",
       "Your turn. Say, lets dance. Graduation party!"
      ]
