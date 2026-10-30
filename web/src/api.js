@@ -25,7 +25,8 @@ export const api = {
   voice:  (body)        => call('/api/voice', body),     // {gain:0..42 dB, thresh:5..90 %}
   limits: (i, min, max)  => call('/api/limits', { i, min, max }),
   i2c:    ()            => call('/api/i2c'),            // bus scan {found:'0x18 0x20 ...', cam:bool}
-  phrases: ()           => call('/api/phrases'),         // everything the voice listens for
+  phrases: ()           => call('/api/phrases'),
+  sys:    ()            => call('/api/sys'),            // CPU per task, memory (Workshop -> System)         // everything the voice listens for
   fx:     (body)        => call('/api/fx', body),        // {show:0..3} | {event:'sad'|'happy'}
 }
 

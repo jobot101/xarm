@@ -61,6 +61,7 @@ createServer((req, res) => {
         return send({ ok: true, msg: body.action === 'save' ? `saved "${body.name}"` : 'ok' })
       }
       case 'POST /api/drive': if (body.base) st.arm.pos[5] = Math.max(0, Math.min(1000, st.arm.pos[5] + body.base * body.step)); return send({ ok: true, msg: 'ok' })
+      case 'GET /api/sys': return send({ core0: 92, core1: 48, heap_kb: 41, heap_min_kb: 12, heap_block_kb: 22, psram_kb: 5100, uptime_s: 900, state_ms: 38, tasks: [{ name: 'AFE_fetch', cpu: 61, core: 0, prio: 5, stack_free: 900 }, { name: 'voice', cpu: 40, core: 1, prio: 5, stack_free: 2100 }, { name: 'wifi', cpu: 9, core: 0, prio: 23, stack_free: 1800 }, { name: 'httpd', cpu: 6, core: -1, prio: 5, stack_free: 3000 }] })
       case 'GET /api/phrases': return send(['stop', 'go home', 'dance robot', 'wave hello', 'thank you', 'move left', 'turn right'])
       case 'GET /api/i2c': return send({ found: '0x18 0x20 0x40 0x51 0x52', cam: true })
       case 'POST /api/limits': st.arm.lim[body.i] = [body.min, body.max]; return send({ ok: true, msg: 'limits saved' })

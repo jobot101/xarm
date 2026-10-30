@@ -5,6 +5,8 @@
 #include <string.h>
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include "cJSON.h"
 #include "arm.h"
 #include "cam.h"
@@ -88,8 +90,11 @@ static void read_arr(cJSON *o, const char *k, void *dst, bool sign)
 }
 
 // ---------- GET /api/state  (polled ~5 Hz by the app) ----------
+static volatile int s_state_ms;      // how long the last /api/state took to build + send (System panel)
+
 static esp_err_t h_state(httpd_req_t *r)
 {
+    int64_t t0 = esp_timer_get_time();
     cJSON *j = cJSON_CreateObject();
     char st[16], det[64], ip[16], buf[64];
     const char *mode;
@@ -234,7 +239,9 @@ static esp_err_t h_state(httpd_req_t *r)
     char sv[24];
     update_sound_version(sv, sizeof sv);
     cJSON_AddStringToObject(fw, "sounds", sv);
-    return send_json(r, j);
+    esp_err_t e = send_json(r, j);
+    s_state_ms = (int)((esp_timer_get_time() - t0) / 1000);
+    return e;
 }
 
 // ---------- POST /api/wifi {"ssid":"..","pass":".."} -> saved, reboot to join ----------
@@ -358,6 +365,54 @@ static esp_err_t h_i2c(httpd_req_t *r)
     esp_err_t e = httpd_resp_sendstr(r, txt);
     free(txt);
     return e;
+}
+
+// ---------- GET /api/sys -> where the CPU and memory go (Workshop -> System) ----------
+// CPU % per task since the previous call (the panel polls every 2 s), so it shows load right now.
+#define SYS_MAXT 40
+static struct { TaskHandle_t h; uint32_t rt; } s_prev[SYS_MAXT];
+static int s_nprev;
+static uint32_t s_prev_total;
+
+static esp_err_t h_sys(httpd_req_t *r)
+{
+    TaskStatus_t *ts = malloc(SYS_MAXT * sizeof *ts);
+    if (!ts) return reply(r, false, "no memory");
+    uint32_t total;
+    int n = uxTaskGetSystemState(ts, SYS_MAXT, &total);
+    uint32_t dt = total - s_prev_total;            // run-time ticks per core elapsed
+    cJSON *j = cJSON_CreateObject(), *a = cJSON_AddArrayToObject(j, "tasks");
+    float core[2] = {0, 0};
+    for (int i = 0; i < n; i++) {
+        uint32_t was = 0;
+        for (int k = 0; k < s_nprev; k++) if (s_prev[k].h == ts[i].xHandle) { was = s_prev[k].rt; break; }
+        float pct = s_prev_total && dt ? 100.0f * (ts[i].ulRunTimeCounter - was) / dt : 0;
+        int c = ts[i].xCoreID;                     // tskNO_AFFINITY for floating tasks
+        if (c == 0 || c == 1) { if (strncmp(ts[i].pcTaskName, "IDLE", 4)) core[c] += pct; }
+        else if (strncmp(ts[i].pcTaskName, "IDLE", 4)) { core[0] += pct / 2; core[1] += pct / 2; }
+        if (pct >= 0.5f || !s_prev_total) {
+            cJSON *o = cJSON_CreateObject();
+            cJSON_AddStringToObject(o, "name", ts[i].pcTaskName);
+            cJSON_AddNumberToObject(o, "cpu", (int)(pct * 10) / 10.0);
+            cJSON_AddNumberToObject(o, "core", c == 0 || c == 1 ? c : -1);
+            cJSON_AddNumberToObject(o, "prio", ts[i].uxCurrentPriority);
+            cJSON_AddNumberToObject(o, "stack_free", ts[i].usStackHighWaterMark);
+            cJSON_AddItemToArray(a, o);
+        }
+    }
+    s_nprev = n < SYS_MAXT ? n : SYS_MAXT;
+    for (int i = 0; i < s_nprev; i++) { s_prev[i].h = ts[i].xHandle; s_prev[i].rt = ts[i].ulRunTimeCounter; }
+    s_prev_total = total;
+    free(ts);
+    cJSON_AddNumberToObject(j, "core0", (int)(core[0] > 100 ? 100 : core[0]));
+    cJSON_AddNumberToObject(j, "core1", (int)(core[1] > 100 ? 100 : core[1]));
+    cJSON_AddNumberToObject(j, "heap_kb", (int)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024));
+    cJSON_AddNumberToObject(j, "heap_min_kb", (int)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
+    cJSON_AddNumberToObject(j, "heap_block_kb", (int)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
+    cJSON_AddNumberToObject(j, "psram_kb", (int)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
+    cJSON_AddNumberToObject(j, "uptime_s", (int)(esp_timer_get_time() / 1000000));
+    cJSON_AddNumberToObject(j, "state_ms", s_state_ms);
+    return send_json(r, j);
 }
 
 // ---------- GET /api/phrases -> ["stop","go home",...] — everything voice listens for ----------
@@ -641,6 +696,7 @@ bool web_start(void)
         {"/api/limits", HTTP_POST, h_limits},
         {"/api/i2c",    HTTP_GET,  h_i2c},
         {"/api/phrases",HTTP_GET,  h_phrases},
+        {"/api/sys",    HTTP_GET,  h_sys},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);
