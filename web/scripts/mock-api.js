@@ -15,7 +15,7 @@ export const st = {
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
   fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true, sounds: '' },
 }
-export const school = { on: true, tap: true, minutes: 20, pass_set: false, state: 'waiting', kid: '', clock: 'internet', lessons_ready: true, lesson_count: 53,
+export const school = { on: true, tap: true, can_pick: true, minutes: 20, pass_set: false, state: 'waiting', kid: '', clock: 'internet', lessons_ready: true, lesson_count: 53,
   kids: [{ i: 0, name: 'sam', lesson: 4, stars: 19, streak: 3, used_s: 312, limit_s: 1200 }, { i: 12, name: 'guest', lesson: 0, stars: 0, streak: 0, used_s: 0, limit_s: 1200 }] }
 // what Muffin is asking in class (school.c ask_json); the preview panel sets it
 export const ASKS = {
@@ -42,7 +42,7 @@ export function handle(method, url, body = {}) {
     case 'POST /api/cmd': {
       if (body.voice && school.ask) {
         const o = school.ask.options.find(x => x.say === body.text)
-        if (school.ask.kind === 'start') { school.state = 'in class'; delete school.ask }
+        if (school.ask.kind === 'start') { school.state = 'in class'; school.can_pick = false; delete school.ask }
         else if (school.ask.kind !== 'free') delete school.ask      // free play stays up: pick another trick
         return { ok: true, msg: o ? `answer: ${o.label}` : 'ok' }
       }
@@ -92,6 +92,11 @@ export function handle(method, url, body = {}) {
     case 'POST /api/school': {
       if (typeof body.on === 'boolean') school.on = body.on
       if (typeof body.tap === 'boolean') school.tap = body.tap
+      if (typeof body.lesson === 'number') {
+        if (!school.can_pick || body.lesson > school.kids[0].lesson) return { ok: false, msg: "that lesson isn't open yet" }
+        school.state = 'in class'; school.can_pick = false; delete school.ask
+        return { ok: true, msg: `lesson ${body.lesson + 1}` }
+      }
       if (body.minutes) school.minutes = body.minutes
       if (typeof body.pass === 'string') school.pass_set = !!body.pass
       const k = school.kids.find(x => x.i === (body.more ?? body.reset_day ?? body.restart))

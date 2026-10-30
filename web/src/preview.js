@@ -53,11 +53,18 @@ bind('pv-stars', 'pv-sn', v => (kid.stars = v))
 bind('pv-streak', 'pv-kn', v => (kid.streak = v))
 bind('pv-used', 'pv-un', v => (kid.used_s = v * 60))
 $('pv-name').addEventListener('input', e => (kid.name = e.target.value.trim().toLowerCase() || 'sam'))
-$('pv-state').addEventListener('change', e => { offline = e.target.value === 'offline'; if (!offline) school.state = e.target.value })
+$('pv-state').addEventListener('change', e => {
+  offline = e.target.value === 'offline'
+  if (offline) return
+  school.state = e.target.value
+  school.can_pick = school.state === 'waiting' || school.state === 'paused'
+  if (school.can_pick) school.ask = JSON.parse(JSON.stringify(ASKS.start)); else if (school.ask?.kind === 'start') delete school.ask
+})
 $('pv-ask').addEventListener('change', e => {
   const a = ASKS[e.target.value]
   if (a) { school.ask = JSON.parse(JSON.stringify(a)); school.state = a.kind === 'start' ? 'waiting' : 'in class'; $('pv-state').value = school.state; offline = false }
   else delete school.ask
+  school.can_pick = !a || a.kind === 'start' || a.kind === 'free'
 })
 setInterval(() => { if (!school.ask && $('pv-ask').value) $('pv-ask').value = '' }, 500)   // answered: back to nothing
 $('pv-mode').addEventListener('click', () => {

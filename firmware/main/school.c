@@ -199,6 +199,7 @@ static int s_asleep_kid = -1;
 static bool s_content;                       // lessons are on the card
 static int s_silent;                         // unanswered prompts in a row
 static bool s_said_tf_how;
+static volatile int s_want_lesson = -1;     // the kid tapped Start lesson on this one (Learning page)
 static volatile int s_q = -1;               // the true/false question being asked (Learning page pop-up)
 
 static int limit_s(int k) { return s_minutes * 60 + P[k].extra_s; }
@@ -473,7 +474,8 @@ static void rank_check(int before)
 // teach lesson i: false if interrupted (it starts over next time)
 static bool lesson(int i)
 {
-    say(SND_SC_NEW);
+    bool replay = i < P[s_kid].next;         // one they've done before (Start lesson on the Learning page)
+    if (!replay) say(SND_SC_NEW);
     int step = SCHOOL[i].step, end = SCHOOL[i].step + SCHOOL[i].nstep;
     while (step < end) {
         if (!job(OP_LESSON, step | end << 16)) return false;
@@ -485,15 +487,17 @@ static bool lesson(int i)
         if (kind != K_NONE && !turn(kind)) return false;
     }
     job(OP_HOME, 0);
-    int before = P[s_kid].next;
-    lock();
-    P[s_kid].next = (uint8_t)(i + 1);
-    P[s_kid].lessons_today++;
-    save();
-    unlock();
-    star();
-    rank_check(before);
-    if (P[s_kid].next >= SCHOOL_COUNT) { say(SND_SC_DONE_ALL); job(OP_CELEBRATE, 0); }
+    if (!replay) {                           // a replay keeps its place in the course; its quiz stars still count
+        int before = P[s_kid].next;
+        lock();
+        P[s_kid].next = (uint8_t)(i + 1);
+        P[s_kid].lessons_today++;
+        save();
+        unlock();
+        star();
+        rank_check(before);
+        if (P[s_kid].next >= SCHOOL_COUNT) { say(SND_SC_DONE_ALL); job(OP_CELEBRATE, 0); }
+    }
     // check: two of its three questions
     say(SND_SC_CHECK);
     int a = (int)(esp_random() % SCHOOL_QPER), b = (a + 1 + (int)(esp_random() % (SCHOOL_QPER - 1))) % SCHOOL_QPER;
@@ -507,7 +511,7 @@ static void free_play(void)
     if (s_content) say(TAP(SND_SC_FREE));
     s_heard_us = esp_timer_get_time();
     s_expect = E_FREE;
-    while (!s_wrap && s_on) {
+    while (!s_wrap && s_on && s_want_lesson < 0) {          // a Start lesson tap ends free play
         if (esp_timer_get_time() - s_heard_us > (int64_t)FREE_IDLE_S * 1000000 && pick_idle() && !fx_speaking()) {
             s_expect = E_NONE;
             say(TAP(SND_SC_AWAY));
@@ -614,7 +618,8 @@ static void session(void)
     }
     if (!s_content) { fx_say(SND_SC_NOCARD); free_play(); if (s_wrap) wrap(); return; }
 
-    if (P[k].next >= SCHOOL_COUNT) {         // finished the course: review, then play
+    if (s_want_lesson >= 0) { }              // they picked a lesson: straight to it (below), no warm-up
+    else if (P[k].next >= SCHOOL_COUNT) {    // finished the course: review, then play
         if (!P[k].warmed) { say(SND_SC_REVIEW); if (!warmup(3)) goto out; }
     } else {
         if (!P[k].warmed && P[k].next > 0) { say(SND_SC_WARMUP); if (!warmup(2)) goto out; }
@@ -630,8 +635,16 @@ static void session(void)
             if (a != A_YES) break;
         }
     }
-    if (!s_wrap) free_play();
+    while (!s_wrap) {                        // free play; a Start lesson tap runs that lesson, then back to play
+        int L = s_want_lesson;
+        s_want_lesson = -1;
+        if (L >= 0 && L <= P[k].next && L < SCHOOL_COUNT && fx_has(SCHOOL_STEP[SCHOOL[L].step].g) && !lesson(L)) goto out;
+        if (s_wrap) break;
+        free_play();
+        if (s_want_lesson < 0) break;        // walked away, or time's up
+    }
 out:
+    s_want_lesson = -1;
     if (s_wrap) wrap();
     else if (s_st == ST_RUN) pause_class();  // interrupted by "stop" or silence
 }
@@ -960,9 +973,26 @@ void school_json(cJSON *o)
     kid_json(arr, GUEST, "guest");
     unlock();
     ask_json(o);                             // after unlock: it takes the lock itself
+    cJSON_AddBoolToObject(o, "can_pick", class_left() || (s_st == ST_RUN && s_expect == E_FREE));   // Start lesson buttons
 }
 
-// {"on":bool, "tap":bool, "minutes":5..120, "pass":"...", "more":kid, "reset_day":kid, "restart":kid}
+// Start lesson (Learning page): lesson i if the kid has reached it (done, or the next one). Starts class when it's
+// waiting; in free play it ends the play and runs that lesson. Not mid-lesson.
+static bool pick_lesson(int i, char *msg, size_t n)
+{
+    int k = s_st == ST_RUN ? s_kid : default_kid();
+    if (k < 0) k = GUEST;
+    if (i < 0 || i >= SCHOOL_COUNT || i > P[k].next) { snprintf(msg, n, "that lesson isn't open yet"); return false; }
+    if (!fx_has(SCHOOL_STEP[SCHOOL[i].step].g)) { snprintf(msg, n, "that lesson isn't on the card yet"); return false; }
+    if (s_st == ST_RUN && s_expect == E_FREE) { s_want_lesson = i; s_heard_us = esp_timer_get_time(); snprintf(msg, n, "lesson %d", i + 1); return true; }
+    if (!class_left()) { snprintf(msg, n, s_st == ST_ASLEEP ? "Muffin is asleep" : "finish this part first"); return false; }
+    s_want_lesson = i;
+    s_start = true;
+    snprintf(msg, n, "lesson %d", i + 1);
+    return true;
+}
+
+// {"on":bool, "tap":bool, "lesson":i, "minutes":5..120, "pass":"...", "more":kid, "reset_day":kid, "restart":kid}
 bool school_set(const cJSON *b, char *msg, size_t n)
 {
     const cJSON *v;
@@ -987,6 +1017,7 @@ bool school_set(const cJSON *b, char *msg, size_t n)
         strlcpy(s_pass, w, sizeof s_pass); changed = pass_changed = true;
     }
     if (changed) save_settings();
+    if (cJSON_IsNumber(v = cJSON_GetObjectItem(b, "lesson"))) return pick_lesson(v->valueint, msg, n);
     if (cJSON_IsNumber(v = cJSON_GetObjectItem(b, "more"))) grant(v->valueint);
     if (cJSON_IsNumber(v = cJSON_GetObjectItem(b, "reset_day")) && v->valueint >= 0 && v->valueint <= KIDS_MAX) {
         lock(); P[v->valueint].used_s = P[v->valueint].extra_s = 0; P[v->valueint].lessons_today = 0; save(); unlock();

@@ -147,3 +147,7 @@ git push                              # CI builds + publishes release "latest"
   pick_caught() reads the gripper: missed -> open, ask again (3 tries), then pretend. Giveback: pop-up Let go
   (K_OPEN); nobody takes it -> put it down at the drop spot. wrap() never sleeps holding something. Used in
   lessons 7 (payload: close vs far), 8 (grip: friction), 10 (gravity: holding still).
+- Start lesson (Learning page): POST /api/school {lesson: i} -> pick_lesson(): any lesson the kid has reached
+  (done ones replay: "Do it again" inside an opened lesson; the next one: "Start lesson"). When class is waiting
+  it starts class straight into that lesson (no warm-up); in free play it ends play, runs it, then back to play.
+  Replays don't move progress or give the finish star (quiz stars count). /api/school can_pick says when.

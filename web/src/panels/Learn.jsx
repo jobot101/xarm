@@ -20,6 +20,8 @@ export default function Learn({ online }) {
 
   const ask = online ? sc?.ask : null
   const askKey = ask ? JSON.stringify(ask) : ''
+  const pick = async n => { try { await api.setSchool({ lesson: n - 1 }) } catch {} ; setOpen(null); load() }   // Start lesson
+  const canPick = online && sc?.can_pick
   const answer = async o => { setSent({ key: askKey, t: Date.now() }); try { await api.say(o.say) } catch {} ; load() }
   const start = ask && (ask.kind === 'start' || ask.kind === 'resume')     // taps only: class starts from the top card
   const popup = ask && !start && ask.options?.length > 0 && (askKey !== sent.key || Date.now() - sent.t > 4000)
@@ -89,11 +91,13 @@ export default function Learn({ online }) {
                       <span className="mark">✓</span><span>{l.n}. {l.title}</span><span className="chev">{isOpen ? '−' : '+'}</span>
                     </button>
                     {isOpen && <div className="story">{l.story.map((t, i) => <p key={i}>{t}</p>)}</div>}
+                    {isOpen && canPick && <button className="learn-go again" onClick={() => pick(l.n)}>▶ Do it again</button>}
                   </li>)
                 if (isNext) return (
                   <li key={l.n} className="next">
                     <div className="learn-row"><span className="mark">→</span><span>{l.n}. {l.title}</span><span className="tag">next</span></div>
                     <p className="teaser">{l.teaser}</p>
+                    {canPick && <button className="learn-go" onClick={() => pick(l.n)}>▶ Start lesson</button>}
                   </li>)
                 return (
                   <li key={l.n} className="later">
