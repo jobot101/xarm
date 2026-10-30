@@ -23,7 +23,7 @@ jobs:
 
       - name: build web app (embedded into firmware)
         working-directory: web
-        run: npm ci && npm run build
+        run: python3 ../tools/lessons_json.py && npm ci && npm run build
 
       - name: host tests
         working-directory: firmware/test

@@ -15,6 +15,7 @@ esp_codec_dev_handle_t audio_in(void);           // mic device (NULL if init fai
 // with both mics on, "MRM" (mic1, reference, mic2). TDM slot order is MIC1, MIC3(ref), MIC2, MIC4.
 const char *audio_in_format(void);
 int audio_in_channels(void);
+int audio_raw_channels(void);       // channels in each frame esp_codec_dev_read() returns (>= audio_in_channels())
 bool audio_mic_dual(void);                        // second mic in use (decided at boot)
 void audio_mic_dual_save(bool on);                // takes effect on the next boot
 void audio_mic_gain(float db);                    // analog gain on the mic(s) only, never the reference

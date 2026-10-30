@@ -9,6 +9,7 @@
 #include "core.h"
 #include "fx.h"
 #include "pick.h"
+#include "arm.h"
 #include "kids.h"
 #include "voice.h"
 #include "cloud.h"
@@ -34,6 +35,10 @@ static const char *TAG = "school";
 #define MAX_LESSONS    3            // new lessons a day: spacing beats cramming
 #define SILENT_PAUSE   2            // unanswered prompts in a row = they walked away: pause
 #define ASLEEP_SAY_US  60000000LL   // while asleep, say so at most once a minute
+#define WAKE_US        8000000LL    // power-on: settle this long, then wake up and say hi
+#define INVITE_US      240000000LL  // between classes, nobody talking this long: invite them back
+#define INVITE_MAX     3            // invites in a row before it lets itself get bored and nap
+#define OPEN_US        20000000LL   // after a hello or invite, ears stay open this long (no "Hey Muffin")
 
 // ---------------------------------------------------------------- progress, per kid (+ guest)
 typedef struct {
@@ -580,14 +585,46 @@ out:
     else if (s_st == ST_RUN) pause_class();  // interrupted by "stop" or silence
 }
 
+static int s_invites;
+static int64_t s_invite_us, s_open_until;
+
+static bool class_left(void)                 // can a class start now? (school on, time left today)
+{
+    if (!s_on || s_st != ST_IDLE) return false;
+    int k = default_kid();
+    if (k < 0) return true;                  // several kids: whoever answers
+    lock(); bool ok = has_time(k); unlock();
+    return ok;
+}
+
+// Muffin wants company: on power-on it wakes, waves and asks the kid to start; between classes it asks again
+// now and then. Any answer while its ears are open starts class (school_filter, ST_IDLE). No clock runs.
+static void reach_out(bool power_on)
+{
+    s_invite_us = esp_timer_get_time();
+    pick_attention();
+    job(OP_WAVE, 0);
+    if (class_left()) {
+        say(power_on ? SND_SC_WAKE : SND_SC_INVITE);
+        voice_hold_open(true);
+        s_open_until = esp_timer_get_time() + OPEN_US;
+    } else if (power_on && s_st != ST_ASLEEP) say(SND_GREET);
+}
+
 static void task(void *arg)
 {
     int64_t day_check = 0;
+    bool woke = false;
     for (;;) {
         nap(100);
-        if (s_start && s_on) { s_start = false; session(); continue; }
+        if (s_start && s_on) { s_start = false; s_open_until = 0; s_invites = 0; session(); s_invite_us = esp_timer_get_time(); continue; }
         s_start = false;
         int64_t now = esp_timer_get_time();
+        if (!woke && now > WAKE_US) { woke = true; reach_out(true); continue; }
+        if (s_open_until && now > s_open_until) { s_open_until = 0; if (s_st == ST_IDLE) voice_hold_open(false); }
+        if (s_heard_us > s_invite_us) { s_invites = 0; s_invite_us = s_heard_us; }   // someone talked: start over
+        if (woke && !s_open_until && s_invites < INVITE_MAX && now - s_invite_us > INVITE_US && class_left() &&
+            arm_manual_us() < now - INVITE_US) { s_invites++; reach_out(false); continue; }
         if (s_st == ST_ASLEEP && now - day_check > 30000000) {          // a new day wakes it up
             day_check = now;
             lock();

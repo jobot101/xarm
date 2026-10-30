@@ -1130,4 +1130,16 @@ SCHOOL_FLASH = {
     "sc_nocard":   ["My school book lives on my memory card, and I can't find it. Ask a grown up for help."],
     "sc_grownup":  ["Grown up detected. Ten more minutes, on the house."],
     "sc_out":      ["That's all for today. See you tomorrow!"],
+    "sc_wake":     ["Beep boop. I'm awake! Hello? Anybody there? Want to learn some robot science? Just say yes!",
+                    "I'm on! Good. I was dreaming about gears again. Ready for Robot School? Say, let's go!",
+                    "Systems online. Muffin is ready. Who wants to learn something amazing? Say yes!"],
+    "sc_invite":   ["Psst. I'm bored. Want to learn something cool? Say yes!",
+                    "Hey you. Yes, you. Want to see how a robot thinks? Just say, let's go!",
+                    "I just figured out something amazing. Want me to show you? Say yes!",
+                    "I can't find my snacks, so I might as well teach. Want a lesson? Say yes!"],
 }
+
+# The course's parts, for the Learning page (first lesson of each part, by name)
+PARTS = [("How Muffin is built", "servo"), ("Physics of the arm", "torque"), ("Motion and math", "forward"),
+         ("Senses and smarts", "pid"), ("The bigger picture", "power"), ("The brain chip and wiring", "chip"),
+         ("When things break", "meter"), ("Robots at work", "automation")]

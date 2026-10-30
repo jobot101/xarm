@@ -122,3 +122,14 @@ git push                              # CI builds + publishes release "latest"
 - **Open-vocabulary questions (next, not built):** BabyTalk (Citrinet-256, 4-bit, 6 MB, ESP-IDF C API) as a second ear for questions after "Hey Muffin", transcript fuzzy-matched to Muffin's answer lines. It doesn't fit 16 MB alongside two app slots + MultiNet + the sound bank; needs a storage decision first.
 - **LLM layer:** anything that can produce router text (xiaozhi MCP, a server) can drive the arm through `router_exec()`.
 - **Push instead of poll:** a websocket for `/api/state` if 4 Hz polling gets in the way.
+
+## Wakes up wanting company; Learning page
+- Power-on: ~8 s after boot Muffin perks up, waves, and (School on, time left) says a wake line (sc_wake) with its
+  ears open 20 s: any answer starts class. School off: wave + greet. Between classes, nobody talking for 4 min,
+  it invites them back (sc_invite), up to 3 times, then lets the boredom arc take it to a nap. No clock runs
+  until class starts; skipped while the app moved the arm recently. (school.c reach_out)
+- Voice pace: KOKORO_SPEED 0.92 (slowed for a kid).
+- App main page = Learning page (web/src/panels/Learn.jsx): course by part, progress, rank, done lessons open
+  to re-read, next lesson's teaser, later ones title only. No robot controls; STOP stays. Data comes from
+  tools/lessons_json.py -> web/src/lessons.json (CI runs it before the web build).
+- Both mics: the ES7210 opens all 4 TDM slots; voice.c drops slot 3 before the AFE (MRM).

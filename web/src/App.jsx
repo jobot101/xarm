@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from './api.js'
 import RoseWindow from './RoseWindow.jsx'
-import Play from './panels/Play.jsx'
+import Learn from './panels/Learn.jsx'
 import Status from './panels/Status.jsx'
 import Commands from './panels/Commands.jsx'
 import Joints from './panels/Joints.jsx'
@@ -72,13 +72,13 @@ export default function App() {
         </button>
         <div className="hall-name">
           <b>Muffin</b>
-          <small>Ragamuffin Hall · {mode === 'play' ? 'play' : 'workshop'}</small>
+          <small>Ragamuffin Hall · {mode === 'play' ? 'school' : 'workshop'}</small>
         </div>
-        {mode === 'workshop' && <button className="pill" onClick={() => switchMode('play')}>Back to play</button>}
+        {mode === 'workshop' && <button className="pill" onClick={() => switchMode('play')}>Back to lessons</button>}
       </header>
 
       {mode === 'play' ? (
-        <Play s={s} online={online} run={run} />
+        <Learn online={online} />
       ) : (
         <>
           <Status s={s} online={online} />

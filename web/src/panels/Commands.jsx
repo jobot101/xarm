@@ -4,7 +4,7 @@ import { api } from '../api.js'
 // same vocabulary as voice (firmware/main/router.c)
 export default function Commands({ s, run }) {
   const [text, setText] = useState('')
-  const names = s?.cam?.slots?.map(x => x.name) || []
+  const names = (s?.cam?.enabled && s?.cam?.ok && s?.cam?.slots?.map(x => x.name)) || []   // no camera: no picking
   const say = (t) => run(api.cmd(t))
 
   return (
@@ -22,7 +22,7 @@ export default function Commands({ s, run }) {
         <button type="submit">Send</button>
       </form>
       <p className="hint">
-        Voice: say <i>“pick up the {names[0] || 'red'}”</i>, <i>“drop it”</i>, <i>“go home”</i>, <i>“stop”</i>.
+        Voice: say {names[0] && <><i>“pick up the {names[0]}”</i>, </>}<i>“drop it”</i>, <i>“go home”</i>, <i>“stop”</i>.
         {s?.voice?.last && <> Last heard: <b>“{s.voice.last}”</b></>}
       </p>
     </section>

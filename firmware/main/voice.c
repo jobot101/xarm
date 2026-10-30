@@ -424,12 +424,18 @@ static void feed_task(void *arg)
 {
     int n = s_afe->get_feed_chunksize(s_afed) * s_afe->get_feed_channel_num(s_afed);
     int16_t *buf = heap_caps_malloc(n * sizeof(int16_t), MALLOC_CAP_INTERNAL);
+    int rc = audio_raw_channels(), fc = s_afe->get_feed_channel_num(s_afed);
+    int rn = s_afe->get_feed_chunksize(s_afed) * rc;
+    int16_t *raw = rc != fc ? heap_caps_malloc(rn * sizeof(int16_t), MALLOC_CAP_INTERNAL) : buf;
     for (;;) {
-        if (esp_codec_dev_read(s_in, buf, n * sizeof(int16_t)) != ESP_CODEC_DEV_OK) {
+        if (esp_codec_dev_read(s_in, raw, rn * sizeof(int16_t)) != ESP_CODEC_DEV_OK) {
             strlcpy(s_status, "mic read failing", sizeof s_status);
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
+        if (raw != buf)                      // both mics: 4 TDM slots in, the AFE's first `fc` out (MRM)
+            for (int i = 0, frames = rn / rc; i < frames; i++)
+                for (int c = 0; c < fc; c++) buf[i * fc + c] = raw[i * rc + c];
         // level meter on the raw mic (channel 0 of the interleaved frame): it's what the gain slider moves.
         // RMS in dBFS, -60..0 dB -> 0..100, peak hold with a slow fall
         int ch = s_afe->get_feed_channel_num(s_afed), m = n / ch;

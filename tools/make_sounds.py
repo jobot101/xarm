@@ -36,7 +36,7 @@ RATE_PLANS = [(16000, 16000, 16000), (12000, 12000, 16000), (12000, 11000, 16000
 # Voice: "kokoro:<id>" (Kokoro-82M, the most natural open TTS that runs on a CPU) or "piper:<name>".
 # Kokoro ids: am_* / bm_* = American / British male, af_* / bf_* = female. --preview renders the candidates.
 VOICE = "kokoro:am_puck"
-KOKORO_SPEED = 1.05                # 1 = Kokoro's natural pace
+KOKORO_SPEED = 0.92                # 1 = Kokoro's natural pace; a little slower for a kid
 VOICE_SPEED = 0.9                  # Piper length_scale: < 1 = brisker
 ROBOT_TINT = 0.0                   # 0 = clean voice; 0.1 = a faint metallic shimmer
 TTS_CACHE = os.path.expanduser("~/.cache/muffin-tts")   # raw TTS per (voice, text): unchanged lines aren't re-voiced

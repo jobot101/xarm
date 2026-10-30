@@ -1,0 +1,944 @@
+{
+ "parts": [
+  {
+   "title": "How Muffin is built",
+   "lessons": [
+    {
+     "n": 1,
+     "title": "The tiny guards inside my joints",
+     "teaser": "Next time: the tiny guards hiding inside my joints.",
+     "story": [
+      "I have six little guards living inside me, one in every joint. They're called servos.",
+      "Each guard has three parts. First, a motor. Fast like a hamster on a wheel, but weak.",
+      "So the motor turns a staircase of gears. Every step trades speed for strength.",
+      "By the bottom of the stairs, that zippy hamster has turned into a slow, mighty ox.",
+      "The third part is the clever one. A sensor that always knows where the joint is pointing.",
+      "My brain says, shoulder, go up. The guard checks. Not there yet. Push! Almost. Stop.",
+      "Checking and correcting like that is called feedback. It's why I don't flop like a noodle.",
+      "Your turn. Say, a little up. Then watch my guard do its job.",
+      "Every move you just saw was six guards checking and correcting, many times a second."
+     ]
+    },
+    {
+     "n": 2,
+     "title": "Six ways to wiggle",
+     "teaser": "Next time: count every way I can wiggle.",
+     "story": [
+      "Each different way a robot can move is called a degree of freedom. D O F for short.",
+      "One. My base spins.",
+      "Two. My shoulder lifts.",
+      "Three. My elbow bends.",
+      "Four. My wrist tilts.",
+      "Five. My wrist twists.",
+      "Six. My gripper opens and closes.",
+      "Your arm has seven, not counting fingers. Show off.",
+      "To put a hand anywhere and point it any way, a robot needs six. My gripper uses one of mine.",
+      "So some poses are just impossible for me. I prefer to call them beneath me.",
+      "Your turn. Say, turn left. That's one degree of freedom at work."
+     ]
+    },
+    {
+     "n": 3,
+     "title": "Bones and hinges",
+     "teaser": "Next time: my bones, my hinges, and a chain.",
+     "story": [
+      "Robots are built from two kinds of pieces. Links and joints.",
+      "Links are the stiff parts, like your bones. Joints are where they connect and move.",
+      "All my joints rotate, like a door hinge. Those are called revolute joints.",
+      "Some robots have joints that slide in a straight line, like a drawer. Those are prismatic joints.",
+      "A 3D printer is mostly sliding joints. Left, right, up, down.",
+      "My joints are stacked in a row, base to gripper. That's called a kinematic chain.",
+      "Every joint carries everything after it. When my base spins, my whole body rides along.",
+      "But when my wrist moves, only my gripper goes with it.",
+      "So my bottom joints work the hardest. They're carrying me. And I'm magnificent, so that's heavy.",
+      "Your turn. Say, tilt up. Watch which links ride along."
+     ]
+    },
+    {
+     "n": 4,
+     "title": "My brain gives orders",
+     "teaser": "Next time: the secret code my brain sends to my muscles.",
+     "story": [
+      "My brain is a chip called the E S P thirty two. About the size of your thumbnail.",
+      "When you talk to me, it's a relay race. My ears hear you. My brain works out what you meant.",
+      "Then my brain writes a message in secret code, and sends it down a wire to my servos.",
+      "The message starts with the same two numbers every time. It's like shouting, hey, listen!",
+      "Then it says which servos to move, where to go, and how long to take.",
+      "All six servos share one wire. That's called a bus.",
+      "Like a school bus that stops at every house, but only the kid whose number is called gets off.",
+      "Each servo has a number, one for my gripper, up to six for my base. They only listen for theirs.",
+      "Your turn. Say, turn right. Your words become a coded message on my bus.",
+      "Message sent. Message obeyed. I run a tight ship."
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Physics of the arm",
+   "lessons": [
+    {
+     "n": 5,
+     "title": "The seesaw problem",
+     "teaser": "Next time: why my shoulder is secretly a seesaw.",
+     "story": [
+      "Ever sat on a seesaw with someone bigger? You scoot back, they scoot forward, and you balance.",
+      "That's torque. A twisting push. It equals force times distance from the pivot.",
+      "Same weight, twice as far out, twice the twist.",
+      "My shoulder is a pivot. When I hold something close, it's easy.",
+      "When I reach way out, the same thing twists my shoulder much harder.",
+      "Here's the sneaky part. My own arm weighs something too.",
+      "So even holding nothing, reaching out makes my shoulder work. The heaviest thing I lift is me.",
+      "Back home. Ahh. Much easier.",
+      "Your turn. Say, a little down. My shoulder has to fight gravity the whole way."
+     ]
+    },
+    {
+     "n": 6,
+     "title": "Don't fall over",
+     "teaser": "Next time: how not to fall over. A skill I've mastered.",
+     "story": [
+      "Every object has a magic point where all its weight seems to sit. The center of mass.",
+      "Stand up and lean forward slowly. At some point, you have to step, or you fall.",
+      "That's when your center of mass goes past your feet.",
+      "My base is my feet. When I reach out, my center of mass slides toward the edge.",
+      "Like this.",
+      "Reach too far with something heavy, and over I go. Not a great look for a star.",
+      "That's why my base is wide and heavy. A wide base is a big safe zone.",
+      "It's also why a pyramid is hard to tip, and a pencil on its end falls over.",
+      "Phew. Back to safety.",
+      "Your turn. Say, take a bow. Watch me lean without tipping."
+     ]
+    },
+    {
+     "n": 7,
+     "title": "Riddle time. When does a block get heavier without changing at all",
+     "teaser": "Next time: a riddle about something that gets heavier without changing.",
+     "story": [
+      "Answer. When I hold it farther away.",
+      "Robot makers tell you a payload. That's the most a robot can carry.",
+      "But that number is always for a certain reach. Close in, I can lift more. Far out, less.",
+      "It's torque again, from lesson five.",
+      "If something's too heavy, my servos push as hard as they can, and still sag.",
+      "They get hot. Push too long, and they can wear out.",
+      "So a smart robot keeps heavy things close, and only reaches far with light things.",
+      "Think about it. Would you carry a full backpack on your back, or straight out in front of you?",
+      "Your turn. Say, go home. That's where I carry things best."
+     ]
+    },
+    {
+     "n": 8,
+     "title": "The squeeze game",
+     "teaser": "Next time: the squeeze game.",
+     "story": [
+      "My gripper doesn't hook things. It squeezes.",
+      "Then friction does the holding.",
+      "Friction is the grab between two surfaces. Rough surfaces grab hard. Slippery ones barely grab.",
+      "Ever tried holding a wet bar of soap? Same squeeze, way less friction.",
+      "The harder I squeeze, the more friction. But too hard, and I crush a paper cup.",
+      "So I squeeze, then ease off a tiny bit. Just enough.",
+      "And here's my trick. If my gripper closes almost all the way, I know I missed. Nothing was there.",
+      "That's why some grippers have rubber pads. Rubber means more friction.",
+      "Your turn. Say, close your hand.",
+      "Now say, open your hand."
+     ]
+    },
+    {
+     "n": 9,
+     "title": "The shopping cart problem",
+     "teaser": "Next time: the shopping cart problem.",
+     "story": [
+      "Push a heavy cart fast, then try to stop it. It keeps going.",
+      "That's inertia. Moving things want to keep moving. Still things want to stay still.",
+      "Momentum is how much keep going something has. Mass times speed.",
+      "If I slam from still to full speed, I jerk and wobble. Like this.",
+      "Ugly. Shaky. Beneath me.",
+      "So I ease in, cruise, and ease out. Like this.",
+      "My brain uses a recipe called minimum jerk. The gentlest start and the gentlest stop.",
+      "Your arm does that on its own when you reach for a cup. You're welcome for noticing.",
+      "Your turn. Say, lets dance. Watch how every move eases in and out."
+     ]
+    },
+    {
+     "n": 10,
+     "title": "Holding still is hard work",
+     "teaser": "Next time: why holding still is hard work.",
+     "story": [
+      "Hold your arm straight out to the side. Don't move it. Keep holding.",
+      "Getting tired? You're not moving. So why are your muscles working?",
+      "Because gravity pulls down every single second, and you push back every single second.",
+      "Same for me. When I hold my arm out, my servos fight gravity the whole time.",
+      "They use electricity even though I look perfectly still. Perfectly and gorgeously still.",
+      "Big factory robots are clever. Springs and counterweights do some of the holding.",
+      "That's called gravity compensation. The motors work less, and last longer.",
+      "Okay. You can put your arm down now. You did great.",
+      "Your turn. Say, a little up. Feel how my shoulder has to lift against gravity."
+     ]
+    },
+    {
+     "n": 11,
+     "title": "The bike gear secret",
+     "teaser": "Next time: the bike gear secret.",
+     "story": [
+      "On a bike, low gear makes hills easy. You pedal like crazy, but go slow.",
+      "High gear makes you fast, but it's hard to push. You're trading speed for strength.",
+      "That trade is called a gear ratio.",
+      "If a small gear turns a big gear with ten times the teeth, the small one spins ten times per turn.",
+      "Ten times slower. About ten times stronger.",
+      "Inside each of my servos, several gear pairs stack up. Multiply them together.",
+      "A four to one pair, then a five to one pair, makes twenty to one. Math. I love it.",
+      "One problem. Gears never fit perfectly. There's a tiny wiggle gap called backlash.",
+      "That's why my gripper can jiggle a tiny bit, even when I'm holding still.",
+      "Your turn. Say, turn left. Slow, strong, geared."
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Motion and math",
+   "lessons": [
+    {
+     "n": 12,
+     "title": "Where did my hand go",
+     "teaser": "Next time: a treasure map that finds my hand.",
+     "story": [
+      "Close your eyes. Bend your elbow. Lift your shoulder a bit. Now point to your hand.",
+      "You can do it without looking, because your brain does forward kinematics.",
+      "Forward kinematics means, if I know every joint angle, I can work out where my hand ends up.",
+      "It's like a treasure map. Start at the base. Go up. Turn. Walk ten more. Turn again.",
+      "Follow every step and you land on the X. That's where my gripper is.",
+      "Each step uses a little trigonometry. Sine and cosine turn an angle into how far across and how far up.",
+      "Watch. My shoulder moves.",
+      "My elbow moves. Every angle changes where my hand lands.",
+      "Your turn. Say, a little up. Then guess where my hand will end up."
+     ]
+    },
+    {
+     "n": 13,
+     "title": "Which way do I bend",
+     "teaser": "Next time: my secret cheat for hard math.",
+     "story": [
+      "Now the hard way around. You point to a spot. Which angles do I use to touch it?",
+      "That's inverse kinematics. A much harder puzzle.",
+      "Sometimes there are two answers. Elbow up, or elbow down. Like reaching over a wall, or under a table.",
+      "Sometimes there's no answer at all, because the spot is too far.",
+      "Want my secret? I cheat. A little.",
+      "My teacher showed me a few spots, and the exact pose to reach each one.",
+      "When you ask for somewhere new, I blend the poses of the closest spots I learned.",
+      "Closer examples count more. Farther ones count less.",
+      "Big factory robots solve it with full math. I learned from examples. Both work. Mine's more stylish.",
+      "Your turn. Say, go home. That's a pose I know by heart."
+     ]
+    },
+    {
+     "n": 14,
+     "title": "My bubble of reach",
+     "teaser": "Next time: the bubble of everywhere I can touch.",
+     "story": [
+      "Imagine I swing my arm every way I can.",
+      "The space my gripper can touch is shaped like a big lumpy dome. That's my workspace.",
+      "Outside the dome? Too far. Can't reach.",
+      "Here's the surprise. There's a hole in the middle too.",
+      "Right next to my base, my own links bump into each other. Those spots are dead zones.",
+      "At the very edge of the dome, my arm is stretched out straight.",
+      "There, I can barely move my hand in some directions. That's called a singularity.",
+      "Lock your elbow straight and try to push forward. No push left. Same idea.",
+      "Back to the comfy middle.",
+      "So the best spot for things I grab a lot is the middle of my dome. Not too close, not too far.",
+      "Your turn. Say, a little left."
+     ]
+    },
+    {
+     "n": 15,
+     "title": "The path between",
+     "teaser": "Next time: the path between here and there.",
+     "story": [
+      "Getting from here to there isn't just about the start and the end. It's the path in between.",
+      "That path, with timing, is called a trajectory.",
+      "The simple way, every joint moves to its new spot in the same time.",
+      "My gripper swoops in a curve, not a straight line.",
+      "To draw a straight line, my brain has to work out loads of tiny in between poses.",
+      "My dances are saved as a few poses, like frames in a flipbook.",
+      "I draw a smooth curve through all of them, called a spline, so I never jerk between frames.",
+      "I send my servos a fresh tiny target twenty five times every second.",
+      "Your turn. Say, wave hello. Watch the path flow from pose to pose."
+     ]
+    },
+    {
+     "n": 16,
+     "title": "Whose left is it",
+     "teaser": "Next time: whose left is it anyway?",
+     "story": [
+      "If I say go left, do I mean my left, or your left? Confusing.",
+      "Robots fix this with coordinate frames. A starting point, plus three arrows. X, Y and Z.",
+      "My world frame is the table. My base frame sits under my spinning base.",
+      "My tool frame rides on my gripper, pointing wherever my gripper points.",
+      "Robots with cameras have one more. A camera frame, where things are measured in dots on a picture.",
+      "To grab what a camera sees, the robot translates dots into turn this much, reach this far.",
+      "Converting between frames is half of all robot math. The other half is looking good.",
+      "Home again.",
+      "Your turn. Say, turn right. That's right in my frame. Is it your right too?"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Senses and smarts",
+   "lessons": [
+    {
+     "n": 17,
+     "title": "The three advisors",
+     "teaser": "Next time: the three advisors who whisper in my joints.",
+     "story": [
+      "Each of my joint guards has three advisors whispering to it. Together they're called P I D.",
+      "P is for proportional. It looks at how far off I am. Way off? Push hard. Almost there? Push gently.",
+      "I is for integral. The patient one, with a long memory.",
+      "It says, we've been a tiny bit short for a whole second. Gravity is cheating. Push a little extra.",
+      "D is for derivative. It watches how fast I'm moving.",
+      "It says, whoa, we're zooming at the target. Brake now, or we'll overshoot!",
+      "Only P, and I wobble back and forth. Add D, and I glide in and stop.",
+      "Add I, and I don't sag under weight. Engineers spend hours tuning all three.",
+      "When you catch a ball, your brain does all three. Without even thinking.",
+      "Your turn. Say, turn left. Watch me settle right on target."
+     ]
+    },
+    {
+     "n": 18,
+     "title": "How robots see",
+     "teaser": "Next time: how robots see the world in dots.",
+     "story": [
+      "Lots of robots have cameras for eyes. I'm a star of the ears and the stage, but let's talk eyes.",
+      "A camera picture is a grid of tiny dots called pixels. A small robot camera might be two hundred forty by two hundred forty.",
+      "That's more than fifty seven thousand dots. Every dot is a number for how red, green, and blue it is.",
+      "To find something red, the robot checks every dot. Is this one red enough?",
+      "Then it draws a box around the biggest clump of red dots, and works out where the middle is.",
+      "Here's the funny part. The robot doesn't know it's a block. It just knows there's a red blob.",
+      "Hold up a red shirt, and it thinks that's a block too.",
+      "Better robot eyes use learning, trained on thousands of pictures, so they can tell a cup from a cat.",
+      "Your turn. Say, tilt down. That's where a robot's eyes would look at the table."
+     ]
+    },
+    {
+     "n": 19,
+     "title": "From seeing to reaching",
+     "teaser": "Next time: how a robot turns what it sees into reaching.",
+     "story": [
+      "A robot's camera says, red at dot one fifty. Its arm doesn't speak dots. Somebody has to translate.",
+      "So people teach it with a game. Put a block down. The camera notes its dots.",
+      "Then move the arm by hand to grab it, and save that pose.",
+      "Do that at several spots, and the robot has a little dictionary. These dots mean this pose.",
+      "For new spots in between, it blends the nearest examples. That's called calibration.",
+      "Here's the rule nobody can break. Once it's calibrated, the camera can't move.",
+      "Bump it even a little, and every word in the dictionary is wrong.",
+      "That's why robot cameras are bolted on tight.",
+      "More calibration spots make better guesses. But each one takes time to teach.",
+      "Your turn. Say, a little left. Every taught spot starts with little moves like that."
+     ]
+    },
+    {
+     "n": 20,
+     "title": "How I hear you",
+     "teaser": "Next time: how I hear you, and why you say my name.",
+     "story": [
+      "Sound is air wiggling. When you talk, you push air back and forth, super fast.",
+      "The wiggles spread out like ripples in a pond.",
+      "My microphones are tiny drums. The wiggles shake them, and they turn the shaking into electricity.",
+      "A chip measures that electricity sixteen thousand times every second, and turns it into numbers.",
+      "My brain cleans out the noise, and even subtracts my own voice. Which is hard. It's a great voice.",
+      "Then it listens for one special pattern. Hey Muffin. That's my wake word.",
+      "Like hearing your own name in a noisy lunch room.",
+      "One word I always hear, instantly, no wake word needed. Stop.",
+      "Stop has to work fast, every time, so nobody gets pinched.",
+      "Your turn. When I start dancing, shout stop!"
+     ]
+    },
+    {
+     "n": 21,
+     "title": "Senses you can't see",
+     "teaser": "Next time: the hidden senses robots have.",
+     "story": [
+      "You have more than five senses. You can feel where your arms are with your eyes shut.",
+      "Robots have hidden senses too.",
+      "I can ask every servo, where are you right now? And they each answer. That's my body sense.",
+      "I can check how much power is feeding my servos. That's my hunger sense.",
+      "And I know when I missed a grab, because my gripper closed too far. That's my touch sense.",
+      "Bigger robots have even more.",
+      "Encoders count tiny ticks as a joint turns. Current sensors feel a motor straining.",
+      "Limit switches click when a part reaches the end of its track. C N C machines use them to find home.",
+      "Your turn. Say, close your hand. With nothing inside, my touch sense knows.",
+      "Open again."
+     ]
+    }
+   ]
+  },
+  {
+   "title": "The bigger picture",
+   "lessons": [
+    {
+     "n": 22,
+     "title": "The water pipe inside me",
+     "teaser": "Next time: the water pipe inside me.",
+     "story": [
+      "Electricity is like water in a pipe. Volts are the pressure. How hard it pushes.",
+      "Amps are the flow. How much moves through each second.",
+      "Watts are the work it can do. Pressure times flow.",
+      "I have two separate power systems. My muscles drink from a big power brick. Seven and a half volts.",
+      "My brain sips from a U S B cable. Five volts, then three point three inside the chip.",
+      "If seven and a half volts touched my brain, it would be a fire hose in a drinking straw. Pop.",
+      "When a servo gets stuck, it gulps tons of current. That's called stall current.",
+      "If my brain shared that power, it could black out and restart. That's a brownout.",
+      "My two systems do share one thing. Ground. The zero every voltage is measured from.",
+      "Your turn. Say, lets dance. Every move is my servos drinking current."
+     ]
+    },
+    {
+     "n": 23,
+     "title": "My big cousins",
+     "teaser": "Next time: meet my giant cousins.",
+     "story": [
+      "I have huge cousins in car factories. Some are taller than a grown up.",
+      "They can lift a whole car door. Show offs.",
+      "They're basically me, super sized. Six joints. Servos with giant motors.",
+      "People program them with a teach pendant. A big remote with a big red stop button.",
+      "The big difference is precision.",
+      "My cousins can go back to the same spot within a hair's width, thousands of times a day.",
+      "I'm happy if I'm within a few millimeters. I make up for it with personality.",
+      "C N C machines are cousins too, just a different shape.",
+      "They slide on straight rails instead of rotating. Super stiff, super exact.",
+      "Arms are flexible and reach around things. C N C machines are stiff and exact. Different jobs.",
+      "Your turn. Say, take a bow. For my hard working cousins."
+     ]
+    },
+    {
+     "n": 24,
+     "title": "My great great grandparents",
+     "teaser": "Next time: robots older than electricity.",
+     "story": [
+      "Robots are way older than electricity.",
+      "About eight hundred years ago, an inventor named Al Jazari built water powered machines.",
+      "Including a band of mechanical musicians that played at parties.",
+      "In the seventeen seventies, a watchmaker built a mechanical boy that could write with a quill pen.",
+      "It used a stack of shaped wheels called cams. Like a hidden program.",
+      "The word robot came from a play in nineteen twenty. From a word for forced work. Rude.",
+      "In nineteen sixty one, the first factory robot went to work, lifting hot metal parts.",
+      "Now there are cobots. Robots built to work right next to people, gently.",
+      "That's what I am. A cobot. A very famous cobot.",
+      "Your turn. Say, ring the bell, for Al Jazari's musicians."
+     ]
+    },
+    {
+     "n": 25,
+     "title": "Being a safe robot",
+     "teaser": "Next time: the rules that keep everybody safe.",
+     "story": [
+      "I'm small, but I can still pinch. So here are my safety rules.",
+      "Pinch points are anywhere two parts close together. Like my gripper.",
+      "Keep fingers out of gaps.",
+      "Rule two. Stop beats everything. Say stop, and I freeze right away, no matter what.",
+      "Big factory robots have an emergency stop. A big mushroom button that cuts the power.",
+      "Rule three. I move slowly and smoothly, so you can always see where I'm going.",
+      "Fast robots work inside cages. Cobots like me go slow, and don't push hard.",
+      "Rule four. Never stand where I'm about to reach. I can't always tell you're there.",
+      "Let's practice. When I start dancing, shout stop!",
+      "Perfect. You'd make a great safety officer."
+     ]
+    }
+   ]
+  },
+  {
+   "title": "The brain chip and wiring",
+   "lessons": [
+    {
+     "n": 26,
+     "title": "A city on a chip",
+     "teaser": "Next time: a whole city on a chip.",
+     "story": [
+      "Let's shrink down and fly into my brain chip. It's like a tiny city.",
+      "In the middle are two cores. Like two workers in the same office.",
+      "One can listen for my name while the other moves my arm. That's why I can hear you while I'm busy.",
+      "There's a library. Sixteen megabytes of flash memory, where my program and my voice live.",
+      "Flash remembers, even when I'm unplugged.",
+      "There's a big whiteboard called P S RAM, for scribbling fast notes. It gets wiped when I turn off.",
+      "And all around the edge are the city gates. Pins.",
+      "Pins are how my brain touches the outside world.",
+      "Every move you see starts as a signal leaving a pin.",
+      "Your turn. Say, wave hello. Two cores, working together."
+     ]
+    },
+    {
+     "n": 27,
+     "title": "The gates",
+     "teaser": "Next time: the gates around my brain.",
+     "story": [
+      "G P I O means general purpose input output. Each pin is a gate with two jobs.",
+      "As an output, it's a light switch. My brain sets it high, three point three volts, or low, zero.",
+      "On, or off.",
+      "As an input, it's a doorbell. My brain checks, is something pushing volts in here, or not?",
+      "Some gates are special. Two of my pins are my U S B cable's wires. Leave those alone.",
+      "A few others are strapping pins. When I wake up, I peek at them to decide how to start.",
+      "Like checking the weather before picking your shoes. Mess with them, and I might not start.",
+      "And never push five volts into a three point three volt gate.",
+      "That's like stuffing a basketball through a mail slot.",
+      "Your turn. Say, open your hand. A gate somewhere just went high."
+     ]
+    },
+    {
+     "n": 28,
+     "title": "The blinking trick",
+     "teaser": "Next time: the blinking trick.",
+     "story": [
+      "My pins can only be on, or off. So how could I make a light half bright? I cheat. With speed.",
+      "I flick it on and off thousands of times a second.",
+      "On half the time? Your eyes blur it into half bright. On a tenth of the time? A dim glow.",
+      "That trick is called P W M. Pulse width modulation.",
+      "The width is how long each on pulse lasts. Wider pulses, brighter light.",
+      "Lots of hobby servos steer with pulses too. Short pulse, one way. Long pulse, the other way.",
+      "My servos are fancier. They get coded messages on the bus instead.",
+      "And my rose window lights get a stream of colors down one wire, telling each light its jewel.",
+      "Ruby. Sapphire. Emerald. Gold. Gorgeous, if I say so myself. And I do.",
+      "Your turn. Say, ring the bell. Watch my jewels."
+     ]
+    },
+    {
+     "n": 29,
+     "title": "Passing notes",
+     "teaser": "Next time: passing notes between chips.",
+     "story": [
+      "U A R T is the simplest way for two chips to talk. Two wires. One to talk, one to listen.",
+      "It's like passing notes in class. My T X pin talks. It goes to my servo board's R X pin, which listens.",
+      "Its T X comes back to my R X. The wires cross over.",
+      "Hook T X to T X, and it's two people shouting, and nobody listening.",
+      "We agree on a speed first. Nine thousand six hundred bits every second.",
+      "Each letter takes ten bits, so that's about nine hundred sixty letters a second.",
+      "Plenty for telling six servos where to go.",
+      "If I talk at one speed and my servo board listens at another, it hears gibberish.",
+      "Your turn. Say, a little up. That just went down my note passing wire."
+     ]
+    },
+    {
+     "n": 30,
+     "title": "The party line, and the music wire",
+     "teaser": "Next time: the party line and the music wire.",
+     "story": [
+      "I two C is a party line. Two wires, lots of chips, all sharing.",
+      "One wire carries the data. The other is the clock, a drumbeat everyone marches to.",
+      "Every chip on the party line has an address, like an apartment number.",
+      "When I want my clock, I call its apartment, and only it answers.",
+      "My speaker chip, my microphone chip, my helper chip, and my clock all live on the same two wires.",
+      "I two S sounds similar, but it's a music wire. Built for streaming sound, nonstop.",
+      "It has its own beat clock, sound coming in from my microphones, and sound going out to my speaker.",
+      "Sixteen thousand times every second, in both directions. My voice rides on it right now.",
+      "Your turn. Say, ring the bell. That sound comes down my music wire."
+     ]
+    },
+    {
+     "n": 31,
+     "title": "Two hearts, one ground",
+     "teaser": "Next time: two hearts and one ground.",
+     "story": [
+      "Here's exactly how my power is wired.",
+      "My servos get a seven and a half volt brick, plugged into my servo board.",
+      "My brain board gets five volts from a U S B cable.",
+      "And the grounds are tied together. Servo board and brain board share one ground wire.",
+      "Without a shared ground, my notes on the wire turn into gibberish.",
+      "High and low only mean something when everybody agrees where zero is.",
+      "One more trick. If a signal is five volts but a pin wants three point three, two resistors can step it down.",
+      "That's called a voltage divider. A little staircase for electricity.",
+      "Your turn. Say, go home."
+     ]
+    },
+    {
+     "n": 32,
+     "title": "My wiring map",
+     "teaser": "Next time: a tour of every wire that makes me, me.",
+     "story": [
+      "Grab your imaginary flashlight. We're touring every wire that makes me, me.",
+      "Two wires carry notes to and from my servo board. Talk and listen.",
+      "One more wire is our shared ground. The zero.",
+      "Inside my board, printed wires run to my speaker chip, my microphone chip, and my memory card.",
+      "One wire runs to my rose window lights.",
+      "And a U S B cable brings power to my brain.",
+      "Notice something cool. My microphones, my speaker, and my clock share the same two wires inside.",
+      "Three wires out of me, and I can hear, speak, and move.",
+      "Home.",
+      "If I could talk but not move, which wires would you check? The three to my servo board.",
+      "Your turn. Say, tilt down."
+     ]
+    },
+    {
+     "n": 33,
+     "title": "Robot detective",
+     "teaser": "Next time: become a robot detective.",
+     "story": [
+      "Sometimes robots break. Then we need a detective.",
+      "Clue one. Watch me wake up. My lights glow and I chime.",
+      "No lights at all? Check my power. Lights but no sound? Check my speaker.",
+      "Say my name and no blue glow? Check my microphones.",
+      "Clue two. Ask me to do something. Say, wave hello.",
+      "If I answer but my arm won't move, check the wires to my servo board, and its power brick.",
+      "The usual suspects. Talk and listen wires hooked up straight instead of crossed. Grounds not shared.",
+      "A loose wire. Or weak power, so I restart when I lift something heavy.",
+      "Your turn. Say, go home. Let's see if all my parts work.",
+      "Everything works. Of course. I'm in peak condition."
+     ]
+    }
+   ]
+  },
+  {
+   "title": "When things break",
+   "lessons": [
+    {
+     "n": 34,
+     "title": "Meet my doctor",
+     "teaser": "Next time: meet my doctor, the multimeter.",
+     "story": [
+      "When a robot is sick, it doesn't need a thermometer. It needs a multimeter.",
+      "A multimeter is a doctor's kit for electricity. It measures volts, ohms, and amps.",
+      "Grown up rule. Always use a multimeter with a grown up, and only on batteries and robot parts.",
+      "Never a wall outlet. Ever.",
+      "The big dial picks what to measure. A V with a straight line is D C volts. Batteries, and me.",
+      "A V with a wavy line is wall power. We never use that one.",
+      "The two probes. Black always goes in the hole marked C O M. That's common. Our zero.",
+      "Red goes in the hole marked V for almost everything.",
+      "There's a separate red hole marked A, just for current. Red in the wrong hole is how meters get hurt.",
+      "Your turn. Say, a little right. Then ask a grown up to show you a real meter."
+     ]
+    },
+    {
+     "n": 35,
+     "title": "Taking my pulse",
+     "teaser": "Next time: taking my pulse with volts.",
+     "story": [
+      "Voltage is a difference between two points. Like the height between the top and bottom of a slide.",
+      "So you always touch two places. Black on ground. Red on the spot you're checking.",
+      "Set the dial to D C volts. Touch my five volt pin and my ground.",
+      "You should see about five. Anything from four point seven five to five point two five is healthy.",
+      "My power brick says seven and a half volts, but with nothing pulling on it, you might see a little more.",
+      "That's normal. Power supplies sag a little when they work.",
+      "Swap the probes, and you'll see a minus sign. Nothing breaks. You're just measuring backwards.",
+      "Always with a grown up. Always.",
+      "Your turn. Say, a little up. Somewhere in me, volts are pushing."
+     ]
+    },
+    {
+     "n": 36,
+     "title": "The beep test",
+     "teaser": "Next time: my favorite test. The beep.",
+     "story": [
+      "This is my favorite. First rule. The robot must be turned off. Always.",
+      "Set the dial to the beep symbol. Touch the two probes together. Beep!",
+      "That means electricity can flow from one probe to the other with almost nothing in the way.",
+      "That's called continuity.",
+      "Now be a wire detective. Touch one probe to each end of a wire. Beep? The wire is good.",
+      "Silence? The wire is broken inside, or a plug is loose.",
+      "Wires can break inside their rubber coats where you can't see.",
+      "Wiggle the wire while you test. If the beep cuts in and out, you found a cracked wire.",
+      "Grown up and power off, every time.",
+      "Your turn. Say, close your hand.",
+      "And open."
+     ]
+    },
+    {
+     "n": 37,
+     "title": "How hard is it to push through",
+     "teaser": "Next time: how hard is it to push through?",
+     "story": [
+      "Resistance is how hard it is for electricity to squeeze through something. It's measured in ohms.",
+      "A fat pipe is low resistance. A skinny straw is high resistance.",
+      "A resistor is a part made to have a certain resistance. A one K resistor is about one thousand ohms.",
+      "Most resistors are allowed to be off by a tiny bit. Five percent.",
+      "Remember my voltage divider? Two resistors in a row.",
+      "One K on top and two K on the bottom. Put five volts in, and the middle gets about three point three.",
+      "Just right for my brain's pins.",
+      "If a meter shows O L, that means over limit. So much resistance, it's basically a broken path.",
+      "Your turn. Say, a little left."
+     ]
+    },
+    {
+     "n": 38,
+     "title": "Counting the flow",
+     "teaser": "Next time: counting the flow, carefully.",
+     "story": [
+      "Current is the tricky one. To measure volts, you touch two spots from the outside.",
+      "To measure amps, electricity has to flow through the meter. The meter becomes part of the wire.",
+      "That job is for grown ups only.",
+      "Here's why. If the red probe is left in the A hole, and someone measures volts, it makes a shortcut.",
+      "Huge current rushes through. Pop goes the fuse inside the meter. Or worse.",
+      "So pros always move red back to the V hole when they're done. Some even say it out loud.",
+      "Fun fact. Holding my arm out takes more current than resting. Gravity again.",
+      "Like this. Every servo is drinking current right now.",
+      "Ahh. Resting.",
+      "Your turn. Say, lets dance. That's a lot of amps."
+     ]
+    },
+    {
+     "n": 39,
+     "title": "The sag",
+     "teaser": "Next time: catching a brownout in the act.",
+     "story": [
+      "Remember brownouts? When voltage drops so low a computer restarts?",
+      "A grown up can catch one in the act. Clip the meter to my servo power, on D C volts.",
+      "When I do something easy, the number stays steady.",
+      "When I lift at full reach, watch it dip.",
+      "A good power supply dips a tiny bit and bounces right back. A weak one dives.",
+      "If my brain shared that power, it might dive low enough to restart me.",
+      "That's why my brain gets its own U S B power.",
+      "Most meters only update a few times a second. Very fast dips can hide between readings.",
+      "Engineers use an oscilloscope for those. It draws voltage as a wiggly line over time.",
+      "Home.",
+      "Your turn. Say, take a bow."
+     ]
+    },
+    {
+     "n": 40,
+     "title": "Magic smoke",
+     "teaser": "Next time: the legend of the magic smoke.",
+     "story": [
+      "Engineers joke that every chip runs on magic smoke. Let the smoke out, and it stops working.",
+      "Parts die in a few ways. Too much voltage. Like seven and a half volts touching my brain.",
+      "Backwards power. Plus and minus swapped.",
+      "A short circuit. A stray wire connects power straight to ground, and things get hot, fast.",
+      "Too much heat. A servo stuck against something for too long can cook itself.",
+      "The nose knows. A hot, burnt smell means unplug everything, and get a grown up.",
+      "Protection parts help. A fuse is a skinny wire that burns out on purpose, to save everything else.",
+      "A part that breaks on purpose. Heroic. Almost as heroic as me.",
+      "Your turn. Say, wave hello, to all the brave fuses."
+     ]
+    },
+    {
+     "n": 41,
+     "title": "Fix it like a pro",
+     "teaser": "Next time: fix it like a pro.",
+     "story": [
+      "When something stops working, don't panic. Go in order, simplest first.",
+      "One. Is everything plugged in and switched on? You'd be amazed.",
+      "Two. Power check. Right voltage everywhere?",
+      "Three. Ground check. Are all the grounds connected?",
+      "Four. Wire check. Beep each wire, power off, wiggling while you test.",
+      "Five. Direction check. Talk wires crossed to listen wires.",
+      "Six. Ask the robot to do something, and see which part doesn't work.",
+      "Seven. Change only one thing at a time, then test.",
+      "Change three things at once, and you'll never know which one fixed it.",
+      "And write down what you found. Next time, you'll fix it twice as fast.",
+      "Your turn. Say, go home. Step six, testing."
+     ]
+    },
+    {
+     "n": 42,
+     "title": "The one way street",
+     "teaser": "Next time: the one way street.",
+     "story": [
+      "A diode is a one way street for electricity. Current goes in one end and out the other. Never back.",
+      "An L E D is a diode that glows. My rose window is full of them.",
+      "With a grown up, set the meter to the diode symbol.",
+      "Red on the long leg of an L E D, black on the short leg. It glows a little, and shows a number.",
+      "That number is how much voltage it needs to turn on. Around two for red. Closer to three for blue.",
+      "Flip the probes. Nothing. One way street.",
+      "Blue light carries more energy than red light, so blue L E Ds need more voltage.",
+      "Many circuit boards have a diode at the entrance, guarding against backwards power.",
+      "Your turn. Say, ring the bell. Watch my diodes glow."
+     ]
+    },
+    {
+     "n": 43,
+     "title": "Good battery, tired battery",
+     "teaser": "Next time: good battery, tired battery.",
+     "story": [
+      "Batteries don't go from full to empty all at once. They get tired slowly.",
+      "The voltage tells you how tired.",
+      "A fresh double A reads about one point six volts. Around one point two, it's getting tired.",
+      "Below one, it's done for most things.",
+      "Here's the sneaky part. A tired battery can read okay with nothing connected.",
+      "Then crash the moment something pulls on it. So the real test is under load.",
+      "Remember the sag test? Same idea.",
+      "My servo board can measure the voltage feeding my servos, and tell my brain. My hunger sense.",
+      "Dead batteries go to recycling. Never the trash. Robots care about the planet.",
+      "Your turn. Say, lets dance. One last dance for this lesson."
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Robots at work",
+   "lessons": [
+    {
+     "n": 44,
+     "title": "What is automation",
+     "teaser": "Next time: what automation really means.",
+     "story": [
+      "Automation means a machine does a job over and over, without a person telling it every step.",
+      "Your washing machine is automation. Fill, wash, rinse, spin. You press one button.",
+      "A robot does the same thing with moving parts. Sense, think, act. Then again. And again.",
+      "Watch. I'll do the same little job three times.",
+      "Two.",
+      "Three. Same every time. That's the whole point.",
+      "People are great at new problems. Robots are great at the same problem, a million times.",
+      "Factories, farms, warehouses, hospitals. Anywhere a job repeats, automation can help.",
+      "Your turn. Say, turn left. Then say it again. Now you're automating me."
+     ]
+    },
+    {
+     "n": 45,
+     "title": "Pick and place",
+     "teaser": "Next time: the most common robot job on Earth.",
+     "story": [
+      "The most common robot job in the whole world is pick and place.",
+      "Pick something up here. Put it down there. Thousands of times a day.",
+      "Like this. Reach out.",
+      "Grab.",
+      "Carry it home.",
+      "And let go.",
+      "Robots pack cookies into boxes, chips onto circuit boards, and boxes onto trucks.",
+      "Some pick and place robots are so fast you can barely see them. Hundreds of picks a minute.",
+      "I'm a little slower. I like to give the crowd time to admire me.",
+      "Your turn. Say, close your hand. That's the pick.",
+      "Now say, open your hand. That's the place."
+     ]
+    },
+    {
+     "n": 46,
+     "title": "The assembly line",
+     "teaser": "Next time: the assembly line.",
+     "story": [
+      "Imagine building a toy car. Wheels, body, paint, box.",
+      "One person doing everything is slow. But give each worker one job, and pass the car along.",
+      "That's an assembly line. A conveyor belt carries the work from station to station.",
+      "In a car factory, one robot welds. The next one paints. The next one puts in the windshield.",
+      "Each robot does one job, perfectly, all day.",
+      "A hundred years ago, assembly lines made cars cheap enough for families to buy.",
+      "Today robots and people work along the same lines, each doing what they're best at.",
+      "Every station needs its moment to shine. Like me.",
+      "Your turn. Say, a little up. Station one, lift."
+     ]
+    },
+    {
+     "n": 47,
+     "title": "Teach and repeat",
+     "teaser": "Next time: how you teach a robot by showing it.",
+     "story": [
+      "How do you tell a factory robot what to do? Often, you show it.",
+      "A person moves the robot through the job once, and saves each important pose.",
+      "Then the robot repeats those poses, exactly, as many times as you like.",
+      "That's called teach and repeat. My teacher did it with me. That's how I know where home is.",
+      "My dances are taught poses too. I glide smoothly from one saved pose to the next.",
+      "Watch me play some back.",
+      "Newer robots can even learn by watching people, or by practicing until they get it right.",
+      "But the idea is the same. Show me once. I'll remember forever.",
+      "Your turn. Say, wave hello. A move I learned, played back."
+     ]
+    },
+    {
+     "n": 48,
+     "title": "If this, then that",
+     "teaser": "Next time: if this, then that.",
+     "story": [
+      "A robot that only repeats is a bit boring. A smart robot makes decisions.",
+      "Robots decide with if, then rules.",
+      "If the block is red, put it on the left. If it's blue, put it on the right.",
+      "If a person walks too close, slow down. If someone says stop, freeze.",
+      "The if part comes from a sensor. A camera, a switch, a microphone.",
+      "The then part is the action.",
+      "Put hundreds of if, then rules together, and a robot looks pretty clever.",
+      "I have lots of them. If someone says ring the bell, then I ring the bell.",
+      "Let's test my rules. Say, ring the bell.",
+      "If you said ring the bell, then I rang it. Rule followed."
+     ]
+    },
+    {
+     "n": 49,
+     "title": "Robots that make things",
+     "teaser": "Next time: robots that make things.",
+     "story": [
+      "Some robots don't just move things. They make things.",
+      "A C N C machine carves metal, wood, or stone, following a path made on a computer.",
+      "It can cut the same part a thousand times, each one within a hair's width of the last.",
+      "A 3D printer builds things up, one thin layer at a time, like a robot stacking pancakes.",
+      "Welding robots join metal with bright, hot sparks. Painting robots spray perfectly even coats.",
+      "They all follow paths, made of coordinates. Go here. Go there. Cut. Lift. Move.",
+      "The same ideas you learned in my lessons. Joints, paths, speed, and feedback.",
+      "Maybe some of the parts in my own body were made by a robot. Robots making robots. Wild.",
+      "Your turn. Say, tilt up."
+     ]
+    },
+    {
+     "n": 50,
+     "title": "Quality inspectors",
+     "teaser": "Next time: the robot that never gets tired of checking.",
+     "story": [
+      "Factories use robot eyes to check every single part.",
+      "A camera takes a picture of each part as it zooms by on the belt.",
+      "A computer compares it to a perfect one. Wrong color? Missing piece? A tiny crack?",
+      "If it's bad, a puff of air or a little arm knocks it off the line.",
+      "People get tired after checking a thousand parts. A robot inspector checks a million the same way.",
+      "It's the same idea from the seeing lesson. Dots, numbers, and rules.",
+      "But it only works if the light stays the same. Shadows can fool robot eyes, just like mine.",
+      "Home.",
+      "Your turn. Say, a little right. Inspection complete."
+     ]
+    },
+    {
+     "n": 51,
+     "title": "Warehouse robots",
+     "teaser": "Next time: the robot army inside warehouses.",
+     "story": [
+      "When you order something online, robots might help pack it.",
+      "In big warehouses, little robots drive under whole shelves, lift them, and carry them to people.",
+      "Instead of people walking for miles, the shelves come to them.",
+      "Hundreds of robots zoom around without crashing, following codes on the floor and talking to a computer.",
+      "Other robot arms pick items out of bins and drop them in boxes. Pick and place again.",
+      "Self driving carts carry boxes to the trucks.",
+      "It's a whole team of robots. Each one does a small job, and together they do a huge one.",
+      "Like a dance. A very organized dance.",
+      "Your turn. Say, turn right. Shelf coming through."
+     ]
+    },
+    {
+     "n": 52,
+     "title": "Robots everywhere",
+     "teaser": "Next time: robots on farms, in hospitals, and on Mars.",
+     "story": [
+      "Robots aren't just in factories.",
+      "On farms, robots milk cows, pull weeds, and pick fruit gently enough not to bruise it.",
+      "In hospitals, surgeons use robot arms for tiny, steady cuts. The doctor is still in charge.",
+      "Underwater robots explore shipwrecks. Drones count wildlife and check bridges.",
+      "And in space, robots have done amazing things.",
+      "Rovers on Mars drive, take pictures, and drill into rocks, millions of miles from home.",
+      "Messages to Mars take minutes to arrive, so rovers have to make some decisions by themselves.",
+      "Automation, again. Sense, think, act. Even on another planet.",
+      "Home.",
+      "Your turn. Say, wave hello. To the Mars rovers."
+     ]
+    },
+    {
+     "n": 53,
+     "title": "Robots and people",
+     "teaser": "Next time: robots and people, working together.",
+     "story": [
+      "Do robots take people's jobs? Sometimes they do the work people used to do.",
+      "Usually it's the dull jobs, the dirty jobs, and the dangerous jobs. Those go to robots first.",
+      "Nobody misses lifting hot metal all day, or breathing paint fumes.",
+      "But robots also make new jobs. Someone has to design them, build them, program them, and fix them.",
+      "That could be you. You already know about servos, sensors, wiring, and a multimeter.",
+      "The best results come from teams. People bring ideas and care. Robots bring strength and patience.",
+      "Like you and me. You bring the brains. I bring the good looks.",
+      "Thank you for coming to Muffin's Robot School.",
+      "Your turn. Say, lets dance. Graduation party!"
+     ]
+    }
+   ]
+  }
+ ],
+ "ranks": [
+  "Robot Apprentice",
+  "Robot Tinkerer",
+  "Robot Builder",
+  "Robot Mechanic",
+  "Robot Engineer",
+  "Robot Inventor",
+  "Robot Scientist",
+  "Automation Expert",
+  "Factory Boss",
+  "Master Roboticist",
+  "Robot Legend"
+ ],
+ "rank_every": 5
+}
