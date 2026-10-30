@@ -116,6 +116,7 @@ static void load_commands(void)
 static bool is_stop(const char *p) { return strstr(p, "stop") || strstr(p, "freeze"); }
 // "hey muffin", "hi muffin", "hello muffin" — but not "stop muffin"
 static bool is_wake(const char *p) { return strstr(p, "muffin") && !is_stop(p); }
+static bool is_pass(const char *p) { return school_pass()[0] && pass_heard(p, school_pass()); }   // grown-up: always heard
 
 // The window: open after a wake phrase or command, and in a live conversation also while Muffin talks
 // and a few seconds after (so "yes please" to Muffin's question works without the name).
@@ -124,6 +125,7 @@ void voice_hold_open(bool on) { s_hold = on; if (on) voice_engage(); }
 
 static bool window_open(int64_t now)
 {
+    if (school_tap()) return false;          // taps only: nothing it hears gets through but "stop" (router_exec)
     if (s_hold || now < s_open_until) return true;
     return now - s_engaged < SESSION_US && now < audio_play_end_us() + FOLLOW_US;
 }
@@ -491,7 +493,7 @@ static void detect_task(void *arg)
                     const char *why = NULL;
                     if (!speech && pr < (th + 0.30f > 0.6f ? th + 0.30f : 0.6f)) why = "no voice heard";
                     else if (self && !is_stop(p) && pr < (th + 0.15f > 0.45f ? th + 0.15f : 0.45f)) why = "Muffin was talking";
-                    else if (s_wake && !is_stop(p) && !is_wake(p) && !window_open(now)) why = "asleep - say Hey Muffin";
+                    else if (s_wake && !is_stop(p) && !is_wake(p) && !is_pass(p) && !window_open(now)) why = school_tap() ? "taps only" : "asleep - say Hey Muffin";
                     if (why) {
                         note(p, pr, why);
                         ESP_LOGI(TAG, "ignored \"%s\" (p=%.2f): %s", p, pr, why);

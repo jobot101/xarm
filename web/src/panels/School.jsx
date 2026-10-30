@@ -24,6 +24,10 @@ export default function School({ run }) {
         <span>Daily class by voice: lesson, quiz, free play, then Muffin sleeps until tomorrow</span>
         <input type="checkbox" checked={sc.on} onChange={e => set({ on: e.target.checked })} />
       </label>
+      <label className="autoup">
+        <span>Taps only: Muffin's ears are off in school, the kid answers with the buttons on the lessons page ("stop" and the passphrase still work by voice)</span>
+        <input type="checkbox" checked={!!sc.tap} onChange={e => set({ tap: e.target.checked })} />
+      </label>
       <div className="fields">
         <label className="field">Minutes per kid per day
           <input type="number" min="5" max="120" value={min} placeholder={String(sc.minutes)} onChange={e => setMin(e.target.value)} />

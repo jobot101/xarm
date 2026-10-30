@@ -5,12 +5,14 @@ import course from '../lessons.json'
 // The main page: Muffin's Robot School, to read. No robot controls here (class happens by voice);
 // lessons already learned open to re-read their story, the next one shows its teaser, later ones are a title.
 // When Muffin asks something in class (true/false, yes/no, "your turn"), a pop-up offers the answers as
-// buttons: a tap goes in as if the kid said it (api.say), so it counts the same as speaking.
+// buttons: a tap goes in as if the kid said it (api.say), so it counts the same as speaking. With taps only
+// (School setting, the default) the ears are off and these are the only way in: class starts from a button on
+// the top card, and free play is a pop-up of tricks.
 export default function Learn({ online }) {
   const [sc, setSc] = useState(null)
   const [open, setOpen] = useState(null)
 
-  const [sent, setSent] = useState('')     // the question just answered by tap: hide it until Muffin moves on
+  const [sent, setSent] = useState({ key: '', t: 0 })   // just tapped: hide that pop-up a few seconds while Muffin acts
 
   const load = useCallback(async () => { try { setSc(await api.school()) } catch {} }, [])
   const fast = sc?.state === 'in class'
@@ -18,8 +20,9 @@ export default function Learn({ online }) {
 
   const ask = online ? sc?.ask : null
   const askKey = ask ? JSON.stringify(ask) : ''
-  useEffect(() => { if (!askKey) setSent('') }, [askKey])
-  const answer = async o => { setSent(askKey); try { await api.say(o.say) } catch {} ; load() }
+  const answer = async o => { setSent({ key: askKey, t: Date.now() }); try { await api.say(o.say) } catch {} ; load() }
+  const start = ask && (ask.kind === 'start' || ask.kind === 'resume')     // taps only: class starts from the top card
+  const popup = ask && !start && ask.options?.length > 0 && (askKey !== sent.key || Date.now() - sent.t > 4000)
 
   const kid = sc?.kids?.[0]
   const total = course.parts.reduce((a, p) => a + p.lessons.length, 0)
@@ -44,11 +47,14 @@ export default function Learn({ online }) {
           {!online ? 'Muffin is offline.'
             : asleep ? 'Muffin is asleep. School opens again tomorrow.'
             : sc?.state === 'in class' ? 'Class is on! Listen to Muffin.'
+            : start ? (ask.kind === 'resume' ? 'Ready to keep going?' : 'Ready when you are.')
+            : sc?.tap ? 'Muffin is getting ready.'
             : <>Say <b>“Hey Muffin, let's go!”</b> to start class.</>}
         </p>
+        {start && <button className="learn-start" onClick={() => answer(ask.options[0])}>{ask.options[0].label}</button>}
       </section>
 
-      {ask && askKey !== sent && ask.options?.length > 0 && (
+      {popup && (
         <div className="ask-back" role="dialog" aria-modal="true">
           <div className={`ask ask-${ask.kind}`}>
             <div className="ask-who">Muffin asks</div>
@@ -57,11 +63,12 @@ export default function Learn({ online }) {
               : ask.kind === 'yn' ? 'Another lesson?'
               : ask.kind === 'kid' ? "Who's here today?"
               : ask.kind === 'stop' ? 'Tell Muffin to stop!'
+              : ask.kind === 'free' ? 'Free play! Pick one:'
               : 'Your turn! Tell Muffin:'}</p>
             <div className="ask-opts">
               {ask.options.map(o => <button key={o.say} className={`ask-btn ${o.say}`} onClick={() => answer(o)}>{o.label}</button>)}
             </div>
-            <p className="ask-hint">Tap one, or just say it.</p>
+            {!sc?.tap && <p className="ask-hint">Tap one, or just say it.</p>}
           </div>
         </div>
       )}

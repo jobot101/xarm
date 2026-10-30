@@ -137,3 +137,8 @@ git push                              # CI builds + publishes release "latest"
   stop"), /api/school carries `ask` {kind, q, options[{label, say}]} (school.c ask_json) and the Learning page pops
   up those buttons. A tap posts /api/cmd {text: say, voice: true}: router_exec_ex(app=false), so it goes through
   school_filter/school_allow exactly like speech. STOP stays above the pop-up.
+- Taps only (School setting `tap`, NVS sc_tap, default ON): with School on, the ears are shut (voice.c window_open
+  false; router_exec drops everything but "stop" and the passphrase); the kid only uses the Learning page.
+  Idle/paused: ask {kind start|resume} -> a Start class / Keep going button on the top card. Free play: ask
+  {kind free} -> a pop-up of tricks. Lines with a _tap twin (sc_tf_how, sc_turn_again, sc_more, sc_free, sc_away,
+  sc_wake, sc_invite) say "tap" instead of "say" (TAP() in school.c). Lesson stories still say "say, a little up".

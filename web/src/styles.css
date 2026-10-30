@@ -294,3 +294,6 @@ button.link { background: none; border: 0; padding: 4px 0; color: var(--bad); fo
 .ask-turn .ask-btn { background: var(--brass); color: #fff; }
 .ask-hint { margin: 12px 0 0; color: var(--dim); font-size: 13px; text-align: center; }
 @keyframes ask-in { from { opacity: 0 } to { opacity: 1 } }
+.learn-start { display: block; width: 100%; margin-top: 12px; padding: 18px; font-size: 22px; font-weight: 800; border-radius: 14px;
+  border-width: 2px; background: var(--emerald); color: #fff; }
+.ask-free .ask-btn { background: var(--amethyst); color: #fff; font-size: 18px; }

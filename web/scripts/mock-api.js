@@ -15,7 +15,7 @@ export const st = {
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
   fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true, sounds: '' },
 }
-export const school = { on: true, minutes: 20, pass_set: false, state: 'waiting', kid: '', clock: 'internet', lessons_ready: true, lesson_count: 53,
+export const school = { on: true, tap: true, minutes: 20, pass_set: false, state: 'waiting', kid: '', clock: 'internet', lessons_ready: true, lesson_count: 53,
   kids: [{ i: 0, name: 'sam', lesson: 4, stars: 19, streak: 3, used_s: 312, limit_s: 1200 }, { i: 12, name: 'guest', lesson: 0, stars: 0, streak: 0, used_s: 0, limit_s: 1200 }] }
 // what Muffin is asking in class (school.c ask_json); the preview panel sets it
 export const ASKS = {
@@ -24,7 +24,10 @@ export const ASKS = {
   turn: { kind: 'turn', options: [{ label: 'Turn left', say: 'turn left' }, { label: 'Turn right', say: 'turn right' }] },
   nudge: { kind: 'turn', options: [{ label: 'Up', say: 'a little up' }, { label: 'Down', say: 'a little down' }, { label: 'Left', say: 'a little left' }, { label: 'Right', say: 'a little right' }] },
   stop: { kind: 'stop', options: [{ label: 'Stop!', say: 'stop' }] },
+  free: { kind: 'free', options: [{ label: 'Dance!', say: 'lets dance' }, { label: 'Wave hello', say: 'wave hello' }, { label: 'Ring the bell', say: 'ring the bell' }, { label: 'Take a bow', say: 'take a bow' }, { label: 'Open hand', say: 'open your hand' }, { label: 'Close hand', say: 'close your hand' }] },
+  start: { kind: 'start', options: [{ label: 'Start class', say: 'lets go' }] },
 }
+school.ask = JSON.parse(JSON.stringify(ASKS.start))   // taps only, waiting: the Start class button
 export const cfg = { home: [500, 500, 500, 500, 500, 500], drop: [500, 500, 500, 500, 500, 800],
   lift: [0, 0, 0, 0, -120, 0], reach: [0, 0, 0, -90, 90, 0], pick2: { align_axis: 1, align_turn: 375, grab_check: true, grab_margin: 40, grab_tries: 3, size_split: 900 }, grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'], cam_on_head: true, scan: [0, -200, 200], stack_pct: 30 }
 
@@ -35,7 +38,12 @@ export function handle(method, url, body = {}) {
   switch (`${method} ${url}`) {
     case 'GET /api/state': return (st)
     case 'POST /api/cmd': {
-      if (body.voice && school.ask) { const o = school.ask.options.find(x => x.say === body.text); delete school.ask; return { ok: true, msg: o ? `answer: ${o.label}` : 'ok' } }
+      if (body.voice && school.ask) {
+        const o = school.ask.options.find(x => x.say === body.text)
+        if (school.ask.kind === 'start') { school.state = 'in class'; delete school.ask }
+        else if (school.ask.kind !== 'free') delete school.ask      // free play stays up: pick another trick
+        return { ok: true, msg: o ? `answer: ${o.label}` : 'ok' }
+      }
       const t = body.text, map = { 'build a tower': 'stacking', 'hold this': 'helping', 'dance': 'dancing', 'wave hello': 'waving', 'take a bow': 'bowing', 'ring the bell': 'ringing', 'sort everything': 'sorting', 'give it to me': 'giving' }
       if (t === 'stop') { st.state = 'stopped'; st.busy = false; return ({ ok: true, msg: 'stopped' }) }
       st.state = map[t] || (t.startsWith('pick') ? 'searching' : 'moving'); st.busy = true; st.detail = t
@@ -81,6 +89,7 @@ export function handle(method, url, body = {}) {
     case 'GET /api/school': return (school)
     case 'POST /api/school': {
       if (typeof body.on === 'boolean') school.on = body.on
+      if (typeof body.tap === 'boolean') school.tap = body.tap
       if (body.minutes) school.minutes = body.minutes
       if (typeof body.pass === 'string') school.pass_set = !!body.pass
       const k = school.kids.find(x => x.i === (body.more ?? body.reset_day ?? body.restart))

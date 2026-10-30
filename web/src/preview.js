@@ -38,7 +38,7 @@ el.innerHTML = `<summary>Preview ▾</summary><div class="b">
  <label>Days in a row: <b id="pv-kn">${kid.streak}</b><input type="range" id="pv-streak" min="0" max="30" value="${kid.streak}"></label>
  <label>Minutes used today: <b id="pv-un">${Math.round(kid.used_s / 60)}</b><input type="range" id="pv-used" min="0" max="20" value="${Math.round(kid.used_s / 60)}"></label>
  <label>Muffin is <select id="pv-state"><option>waiting</option><option>in class</option><option>paused</option><option>asleep</option><option value="offline">offline</option></select></label>
- <label>Muffin asks <select id="pv-ask"><option value="">nothing</option><option value="tf">a true/false question</option><option value="yn">another lesson?</option><option value="turn">your turn: turn</option><option value="nudge">your turn: any nudge</option><option value="stop">shout stop!</option></select></label>
+ <label>Muffin asks <select id="pv-ask"><option value="">nothing</option><option value="tf">a true/false question</option><option value="yn">another lesson?</option><option value="turn">your turn: turn</option><option value="nudge">your turn: any nudge</option><option value="stop">shout stop!</option><option value="free">free play</option><option value="start">waiting: start class</option></select></label>
  <div class="row"><button id="pv-mode">Open Workshop</button></div>
 </div>`
 const style = document.createElement('style'); style.textContent = css
@@ -56,7 +56,7 @@ $('pv-name').addEventListener('input', e => (kid.name = e.target.value.trim().to
 $('pv-state').addEventListener('change', e => { offline = e.target.value === 'offline'; if (!offline) school.state = e.target.value })
 $('pv-ask').addEventListener('change', e => {
   const a = ASKS[e.target.value]
-  if (a) { school.ask = JSON.parse(JSON.stringify(a)); school.state = 'in class'; $('pv-state').value = 'in class'; offline = false }
+  if (a) { school.ask = JSON.parse(JSON.stringify(a)); school.state = a.kind === 'start' ? 'waiting' : 'in class'; $('pv-state').value = school.state; offline = false }
   else delete school.ask
 })
 setInterval(() => { if (!school.ask && $('pv-ask').value) $('pv-ask').value = '' }, 500)   // answered: back to nothing

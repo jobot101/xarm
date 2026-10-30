@@ -28,6 +28,7 @@ void school_note_stop(void);                                   // someone said s
 const char *school_pass(void);                                 // grown-up passphrase ("" = none) for MultiNet
 
 bool school_explain(int lesson, char *msg, size_t n);    // a robots/math/physics question: tell that lesson (not mid-class)
+bool school_tap(void);           // taps only: voice.c keeps its ears shut, the Learning page's pop-ups answer
 bool school_asleep(void);         // pick.c idle life: head down
 bool school_wrap_due(void);       // pick.c: time's up, finish the sentence and stop
 bool school_chatter_ok(void);     // fx.c: idle chatter only outside class and sleep

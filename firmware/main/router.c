@@ -8,6 +8,7 @@
 #include "kids.h"
 #include "chat.h"
 #include "school.h"
+#include "core.h"
 #include "cam.h"
 #include "fx.h"
 
@@ -26,7 +27,14 @@ static int find_slot(const char *t)
 // RUN(kind, call): run the action unless School says it's not the moment.
 #define RUN(kind, call) ((app || school_allow((kind), msg, n)) ? (call) : false)
 
-bool router_exec(const char *text, char *msg, size_t n) { return router_exec_ex(text, msg, n, false); }
+// what the ears heard. Taps only (School setting): its ears are off, all but "stop" and the passphrase
+bool router_exec(const char *text, char *msg, size_t n)
+{
+    if (school_tap() && !strstr(text, "stop") && !(school_pass()[0] && pass_heard(text, school_pass()))) {
+        snprintf(msg, n, "ears off: taps only"); return false;   // ("stop" and the grown-up passphrase still work)
+    }
+    return router_exec_ex(text, msg, n, false);
+}
 
 bool router_exec_ex(const char *text, char *msg, size_t n, bool app)
 {

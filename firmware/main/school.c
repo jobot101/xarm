@@ -62,6 +62,7 @@ static struct { uint32_t magic; prog_t p[KIDS_MAX + 1]; } s_save;
 static SemaphoreHandle_t s_mx;
 
 static bool s_on = true;
+static bool s_tap = true;                    // taps only (default): Muffin's ears are off, the kid answers on the Learning page
 static uint8_t s_minutes = CONFIG_XARM_SCHOOL_MIN;
 static char s_pass[48];
 
@@ -93,6 +94,7 @@ static void load(void)
         uint8_t v;
         if (nvs_get_u8(h, "sc_on", &v) == ESP_OK) s_on = v;
         if (nvs_get_u8(h, "sc_min", &v) == ESP_OK && v >= 5) s_minutes = v;
+        if (nvs_get_u8(h, "sc_tap", &v) == ESP_OK) s_tap = v;
         size_t n = sizeof s_pass;
         if (nvs_get_str(h, "sc_pass", s_pass, &n) != ESP_OK) s_pass[0] = 0;
         nvs_close(h);
@@ -105,6 +107,7 @@ static void save_settings(void)
     if (nvs_open("xarm", NVS_READWRITE, &h) != ESP_OK) return;
     nvs_set_u8(h, "sc_on", s_on);
     nvs_set_u8(h, "sc_min", s_minutes);
+    nvs_set_u8(h, "sc_tap", s_tap);
     nvs_set_str(h, "sc_pass", s_pass);
     nvs_commit(h);
     nvs_close(h);
@@ -246,6 +249,8 @@ static void say(int g)
     for (int t = 0; t < 30000 && fx_speaking(); t += 50) nap(50);
 }
 
+#define TAP(g) (s_tap && fx_has(g##_TAP) ? g##_TAP : g)   // the tap-mode wording of a line, if it's on the card
+
 static void say_n(int first, int n) { if (n >= 1 && n <= SND_N_NUMBERS) say(first + n - 1); }
 
 // run an arm job to the end; false if someone said stop during it
@@ -340,10 +345,10 @@ static void star(void)
 static int question(int q)
 {
     say(SCHOOL_QUIZ[q].q);
-    if (!s_said_tf_how) { s_said_tf_how = true; say(SND_SC_TF_HOW); }
+    if (!s_said_tf_how) { s_said_tf_how = true; say(TAP(SND_SC_TF_HOW)); }
     s_q = q;
     int a = await(E_TF, ANSWER_S);
-    if (a == A_NONE && !s_wrap) { say(SND_SC_TF_HOW); a = await(E_TF, AGAIN_S); }
+    if (a == A_NONE && !s_wrap) { say(TAP(SND_SC_TF_HOW)); a = await(E_TF, AGAIN_S); }
     s_q = -1;
     if (a == A_STOP || s_wrap) return -1;
     if (a == A_NONE) {
@@ -401,7 +406,7 @@ static bool turn(int kind)
     }
     s_turn_kind = kind;
     int a = await(E_TURN, ANSWER_S);
-    if (a == A_NONE && !s_wrap) { say(SND_SC_TURN_AGAIN); a = await(E_TURN, AGAIN_S); }
+    if (a == A_NONE && !s_wrap) { say(TAP(SND_SC_TURN_AGAIN)); a = await(E_TURN, AGAIN_S); }
     if (a == A_STOP) return false;
     if (a == A_TURN_OK) {
         nap(300);                            // the router queues the command right after letting it through
@@ -457,13 +462,13 @@ static bool lesson(int i)
 
 static void free_play(void)
 {
-    if (s_content) say(SND_SC_FREE);
+    if (s_content) say(TAP(SND_SC_FREE));
     s_heard_us = esp_timer_get_time();
     s_expect = E_FREE;
     while (!s_wrap && s_on) {
         if (esp_timer_get_time() - s_heard_us > (int64_t)FREE_IDLE_S * 1000000 && pick_idle() && !fx_speaking()) {
             s_expect = E_NONE;
-            say(SND_SC_AWAY);
+            say(TAP(SND_SC_AWAY));
             pause_class();
             return;
         }
@@ -576,7 +581,7 @@ static void session(void)
             if (!lesson(P[k].next)) goto out;
             if (s_wrap || P[k].next >= SCHOOL_COUNT || P[k].lessons_today >= MAX_LESSONS || left_s(k) < MORE_MIN_S ||
                 !fx_has(SCHOOL_STEP[SCHOOL[P[k].next].step].g)) break;
-            say(SND_SC_MORE);
+            say(TAP(SND_SC_MORE));
             int a = await(E_YN, ANSWER_S);
             if (a == A_STOP) goto out;
             if (a != A_YES) break;
@@ -608,7 +613,7 @@ static void reach_out(bool power_on)
     pick_attention();
     job(OP_WAVE, 0);
     if (class_left()) {
-        say(power_on ? SND_SC_WAKE : SND_SC_INVITE);
+        say(power_on ? TAP(SND_SC_WAKE) : TAP(SND_SC_INVITE));
         voice_hold_open(true);
         s_open_until = esp_timer_get_time() + OPEN_US;
     } else if (power_on && s_st != ST_ASLEEP) say(SND_GREET);
@@ -828,6 +833,20 @@ static void turn_opts(cJSON *a, int k)
 static void ask_json(cJSON *o)
 {
     int e = s_expect;
+    if (s_tap && class_left()) {            // taps only: the pop-up is how class starts
+        cJSON *ask = cJSON_AddObjectToObject(o, "ask");
+        cJSON_AddStringToObject(ask, "kind", s_paused ? "resume" : "start");
+        opt(cJSON_AddArrayToObject(ask, "options"), s_paused ? "Keep going" : "Start class", "lets go");
+        return;
+    }
+    if (s_tap && s_st == ST_RUN && e == E_FREE) {   // free play: the tricks
+        cJSON *ask = cJSON_AddObjectToObject(o, "ask");
+        cJSON_AddStringToObject(ask, "kind", "free");
+        cJSON *a = cJSON_AddArrayToObject(ask, "options");
+        opt(a, "Dance!", "lets dance"); opt(a, "Wave hello", "wave hello"); opt(a, "Ring the bell", "ring the bell");
+        opt(a, "Take a bow", "take a bow"); opt(a, "Open hand", "open your hand"); opt(a, "Close hand", "close your hand");
+        return;
+    }
     if (s_st != ST_RUN || e == E_NONE || e == E_FREE) return;
     cJSON *ask = cJSON_AddObjectToObject(o, "ask");
     cJSON *a = cJSON_AddArrayToObject(ask, "options");
@@ -890,14 +909,15 @@ void school_json(cJSON *o)
     cJSON_AddStringToObject(o, "clock", s_clock_ok ? s_clock_src : "none");
     cJSON_AddBoolToObject(o, "lessons_ready", fx_has(SCHOOL_STEP[0].g));
     cJSON_AddNumberToObject(o, "lesson_count", SCHOOL_COUNT);
-    ask_json(o);
+    cJSON_AddBoolToObject(o, "tap", s_tap);
     cJSON *arr = cJSON_AddArrayToObject(o, "kids");
     for (int k = 0; k < KIDS_MAX; k++) if (kids_get(k)) kid_json(arr, k, kids_get(k)->name);
     kid_json(arr, GUEST, "guest");
     unlock();
+    ask_json(o);                             // after unlock: it takes the lock itself
 }
 
-// {"on":bool, "minutes":5..120, "pass":"...", "more":kid, "reset_day":kid, "restart":kid}
+// {"on":bool, "tap":bool, "minutes":5..120, "pass":"...", "more":kid, "reset_day":kid, "restart":kid}
 bool school_set(const cJSON *b, char *msg, size_t n)
 {
     const cJSON *v;
@@ -906,6 +926,7 @@ bool school_set(const cJSON *b, char *msg, size_t n)
         s_on = cJSON_IsTrue(v); changed = true;
         if (!s_on) { s_wrap = false; voice_hold_open(false); if (s_st == ST_ASLEEP) { s_st = ST_IDLE; fx_sleep(false); } }
     }
+    if (cJSON_IsBool(v = cJSON_GetObjectItem(b, "tap"))) { s_tap = cJSON_IsTrue(v); changed = true; voice_hold_open(false); }
     if (cJSON_IsNumber(v = cJSON_GetObjectItem(b, "minutes"))) {
         int m = v->valueint < 5 ? 5 : v->valueint > 120 ? 120 : v->valueint;
         s_minutes = (uint8_t)m; changed = true;
@@ -932,3 +953,5 @@ bool school_set(const cJSON *b, char *msg, size_t n)
     snprintf(msg, n, "ok");
     return true;
 }
+
+bool school_tap(void) { return s_on && s_tap; }   // School off: ears work as usual

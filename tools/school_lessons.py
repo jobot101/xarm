@@ -1120,6 +1120,12 @@ SCHOOL_LINES = {
     "sc_minutes":   ["{n} minutes left today."],
     "sc_last":      ["Only a minute or two left today. Let's make it count."],
     "sc_rank_up":   ["Big news. You earned a new rank!"],
+    # taps only (School setting): the same moments, worded for the Learning page's buttons
+    "sc_tf_how_tap":     ["Tap true, or false."],
+    "sc_turn_again_tap": ["Go on. Tap it. I'm very patient, for a robot.", "Your turn. Tap the button."],
+    "sc_more_tap":       ["We've still got time. Want another lesson? Tap yes, or no."],
+    "sc_free_tap":       ["Free play! Pick something on the screen, and I'll do it."],
+    "sc_away_tap":       ["Are you still there? I'll wait. Tap the screen when you're back."],
 }
 SCHOOL_LINES.update({f"sc_rank_{i}": [f"You are now a {r}!"] for i, r in enumerate(RANKS)})
 
@@ -1133,6 +1139,11 @@ SCHOOL_FLASH = {
     "sc_wake":     ["Beep boop. I'm awake! Hello? Anybody there? Want to learn some robot science? Just say yes!",
                     "I'm on! Good. I was dreaming about gears again. Ready for Robot School? Say, let's go!",
                     "Systems online. Muffin is ready. Who wants to learn something amazing? Say yes!"],
+    "sc_wake_tap": ["Beep boop. I'm awake! Want to learn some robot science? Tap, start class!",
+                    "I'm on! I was dreaming about gears again. Ready for Robot School? Tap the button!"],
+    "sc_invite_tap": ["Psst. I'm bored. Want to learn something cool? Tap the button!",
+                      "I can't find my snacks, so I might as well teach. Tap the button for a lesson!",
+                      "I just figured out something amazing. Tap the screen and I'll show you!"],
     "sc_invite":   ["Psst. I'm bored. Want to learn something cool? Say yes!",
                     "Hey you. Yes, you. Want to see how a robot thinks? Just say, let's go!",
                     "I just figured out something amazing. Want me to show you? Say yes!",
