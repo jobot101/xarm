@@ -9,7 +9,7 @@ export default function Learn({ online }) {
   const [open, setOpen] = useState(null)
 
   const load = useCallback(async () => { try { setSc(await api.school()) } catch {} }, [])
-  useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t) }, [load])
+  useEffect(() => { load(); const t = setInterval(load, 2000); return () => clearInterval(t) }, [load])
 
   const kid = sc?.kids?.[0]
   const total = course.parts.reduce((a, p) => a + p.lessons.length, 0)

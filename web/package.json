@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/embed.js",
-    "mock": "node scripts/mock.js"
+    "mock": "node scripts/mock.js",
+    "preview:build": "VITE_PREVIEW=1 vite build --outDir dist-preview"
   },
   "dependencies": {
     "react": "18.3.1",
