@@ -35,3 +35,5 @@ CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
 # per-task CPU load for the Workshop System panel (/api/sys)
 CONFIG_FREERTOS_USE_TRACE_FACILITY=y
 CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+# TaskStatus_t.xCoreID for the System panel (web.c /api/sys)
+CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
