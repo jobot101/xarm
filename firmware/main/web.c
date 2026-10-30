@@ -121,6 +121,7 @@ static esp_err_t h_state(httpd_req_t *r)
 
     cJSON *cam = cJSON_AddObjectToObject(j, "cam");
     cJSON_AddBoolToObject(cam, "ok", cam_ok());
+    cJSON_AddStringToObject(cam, "link", cam_link());
     cam_raw_hex(buf, sizeof buf);
     cJSON_AddStringToObject(cam, "raw", buf);
     cJSON *slots = cJSON_AddArrayToObject(cam, "slots");

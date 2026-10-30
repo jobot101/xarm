@@ -17,7 +17,7 @@ export default function Vision({ s }) {
 
   return (
     <section className="card">
-      <h2>Camera <small>{s?.cam?.ok ? `${calib.length} calib pts` : 'not responding'}</small></h2>
+      <h2>Camera <small>{s?.cam?.ok ? `${s.cam.link === 'wifi' ? 'wireless' : 'wired'} · ${calib.length} calib pts` : 'not responding'}</small></h2>
       <svg className="cam" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
         <rect width={W} height={H} className="cam-bg" />
         {calib.map((c, i) => (
@@ -44,7 +44,7 @@ export default function Vision({ s }) {
       {scan && !scan.busy && (scan.err ? <p className="hint">{scan.err}</p> : <>
         <p><b>{scan.cam ? 'Camera found at 0x52 ✓' : 'Camera NOT on the bus ✗'}</b></p>
         <p className="hint">{(scan.found || 'nothing answered').split(' ').map(a => KNOWN[a] ? `${a} ${KNOWN[a]}` : a).join(' · ')}</p>
-        {!scan.cam && <p className="hint">Check: camera 5V + GND, its SDA→board SDA (IO11), SCL→board SCL (IO10), and that the camera was flashed with the color firmware.</p>}
+        {!scan.cam && <p className="hint">{s?.cam?.link === 'wifi' ? 'Not on the wires — that\'s fine, it\'s talking over WiFi.' : 'Wireless: power the camera and give it ~10 s to join Muffin\'s WiFi (it needs the current camera firmware). Wired: camera 5V + GND, its SDA→board SDA (IO11), SCL→board SCL (IO10).'}</p>}
       </>)}
       <details><summary>raw I2C</summary><code>{s?.cam?.raw}</code></details>
     </section>

@@ -57,6 +57,8 @@ The first flash happens from the phone over USB-C using **`flasher/`** (modes: *
 
 The CI `camera` job builds it with arduino-esp32 2.0.17 (bundled esp-dl), 4 MB flash, huge_app, for both quad and octal PSRAM. The flasher's **Camera** button handles it. HSV thresholds live in `color_detection.cpp`.
 
+**Wireless camera (done):** the cam firmware also joins the board's own AP ("Muffin" / `ragamuffin`, `cam/xarm_color/muffin_link.h`; keep in step with `net.c` / `XARM_AP_PASS`) and sends one UDP packet per frame (≤ 25/s) to its gateway (the board, 192.168.4.1) on port 4747: `"MUF1"`, u16 seq, slot0 color, slot1 color, 5 × (x, y, w, h). `cam.c udp_task` listens on all interfaces; data younger than 500 ms wins over I2C, otherwise the I2C poll is used. `/api/state` `cam.link` = `wifi` / `wired` / `none`. The AP takes up to 6 clients (phones + camera). The board's AP is up in both AP-only and APSTA modes, so this works with or without home WiFi.
+
 **4. Hardware bring-up:** work through the unverified list below with the owner.
 
 The phone gets its files from the `latest` release.

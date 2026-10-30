@@ -2,6 +2,7 @@
 #include "iic_data_send.hpp"
 #include "Wire.h"
 #include "colors.h"
+#include "muffin_link.h"
 
 #define I2C_SLAVE_ADDRESS 0x52
 
@@ -50,12 +51,15 @@ static void task_process_handler(void *arg)
   Wire.onReceive(iic_receive);
   /* 注册请求数据的回调函数 */
   Wire.onRequest(iic_request);
+  /* xarm: wireless too — join Muffin's WiFi and send each frame over UDP (muffin_link.cpp) */
+  link_begin();
 
   while (true)
   {
 
     if (xQueueReceive(xQueueResultI, &color_data, portMAX_DELAY))
     {
+      link_send(color_data);
     //  switch(rec){
     //   case 0x00:
     //     printf("red:%d",rec);
