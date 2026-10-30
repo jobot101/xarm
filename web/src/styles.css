@@ -301,3 +301,22 @@ button.link { background: none; border: 0; padding: 4px 0; color: var(--bad); fo
   border-width: 2px; background: var(--emerald); color: #fff; }
 .ask-fetch .ask-btn, .ask-giveback .ask-btn { background: var(--gold); color: var(--ink); font-size: 24px; padding: 22px 12px; }
 .ask-free .ask-btn { background: var(--amethyst); color: #fff; font-size: 18px; }
+
+/* the one obvious next step (top of the Learning page) */
+.learn-next { border-width: 3px; padding: 18px; }
+.learn-next h2 { font-size: 24px; line-height: 1.2; margin: 4px 0 6px; }
+.learn-next p { margin: 0; font-size: 16px; line-height: 1.4; color: var(--dim); }
+.learn-next small { display: block; text-align: center; margin-top: 8px; color: var(--dim); font-size: 13px; }
+.learn-eyebrow { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--brass); }
+.learn-next.go { background: #f3f8ec; border-color: var(--ok); }
+.learn-next.go .learn-eyebrow { color: var(--ok); }
+.learn-next.now { background: #eef4fb; }
+.learn-next.sleep { background: #f1eef7; }
+.learn-next.sleep .learn-eyebrow { color: var(--amethyst); }
+.learn-next.off .learn-eyebrow { color: var(--bad); }
+.learn-start { font-size: 26px; padding: 20px; }
+.pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--brass); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1) } 50% { opacity: .35; transform: scale(.7) } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none } }
+.learn-hero h2 { font-size: 18px; }

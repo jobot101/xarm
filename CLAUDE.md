@@ -153,3 +153,6 @@ git push                              # CI builds + publishes release "latest"
   (done ones replay: "Do it again" inside an opened lesson; the next one: "Start lesson"). When class is waiting
   it starts class straight into that lesson (no warm-up); in free play it ends play, runs it, then back to play.
   Replays don't move progress or give the finish star (quiz stars count). /api/school can_pick says when.
+- Learning page top card = the one obvious next step: Next up (lesson + teaser + big Start, which runs class:
+  warm-up then that lesson) / Paused (Keep going) / Now (the lesson being taught: /api/school `now`) / Free play /
+  Tomorrow (asleep) / Offline. Only one primary button on the page; progress card sits below it.

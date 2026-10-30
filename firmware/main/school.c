@@ -199,6 +199,7 @@ static int s_asleep_kid = -1;
 static bool s_content;                       // lessons are on the card
 static int s_silent;                         // unanswered prompts in a row
 static bool s_said_tf_how;
+static volatile int s_now_lesson = -1;      // the lesson being taught right now (Learning page)
 static volatile int s_want_lesson = -1;     // the kid tapped Start lesson on this one (Learning page)
 static volatile int s_q = -1;               // the true/false question being asked (Learning page pop-up)
 
@@ -472,9 +473,13 @@ static void rank_check(int before)
 }
 
 // teach lesson i: false if interrupted (it starts over next time)
-static bool lesson(int i)
+static bool lesson_run(int i);
+static bool lesson(int i) { bool ok = lesson_run(i); s_now_lesson = -1; return ok; }
+
+static bool lesson_run(int i)
 {
     bool replay = i < P[s_kid].next;         // one they've done before (Start lesson on the Learning page)
+    s_now_lesson = i;
     if (!replay) say(SND_SC_NEW);
     int step = SCHOOL[i].step, end = SCHOOL[i].step + SCHOOL[i].nstep;
     while (step < end) {
@@ -973,6 +978,7 @@ void school_json(cJSON *o)
     kid_json(arr, GUEST, "guest");
     unlock();
     ask_json(o);                             // after unlock: it takes the lock itself
+    cJSON_AddNumberToObject(o, "now", s_st == ST_RUN ? s_now_lesson : -1);   // lesson being taught, -1 = none
     cJSON_AddBoolToObject(o, "can_pick", class_left() || (s_st == ST_RUN && s_expect == E_FREE));   // Start lesson buttons
 }
 

@@ -32,9 +32,38 @@ export default function Learn({ online }) {
   const rank = course.ranks[Math.min(Math.floor(done / course.rank_every), course.ranks.length - 1)]
   const left = kid ? Math.max(0, kid.limit_s - kid.used_s) : null
   const asleep = sc?.state === 'asleep'
+  const lessons = course.parts.flatMap(p => p.lessons)
+  const nextL = lessons[done] || null                        // null = finished the course
+  const teaser = l => { const t = l.teaser.replace(/^Next time:\s*/i, ''); return t[0].toUpperCase() + t.slice(1) }
+  const nowL = sc?.now >= 0 ? lessons[sc.now] : null
+  const inClass = sc?.state === 'in class'
+
+  // the one obvious next step, for whatever moment this is
+  const step = !online ? { cls: 'off', eyebrow: 'Offline', title: "Can't reach Muffin", note: 'Check that Muffin is switched on and on the WiFi.' }
+    : asleep ? { cls: 'sleep', eyebrow: 'Tomorrow', title: nextL ? `Lesson ${nextL.n}: ${nextL.title}` : 'Review day',
+                 note: 'Muffin is asleep. School opens again tomorrow.' }
+    : inClass ? (ask?.kind === 'free' ? { cls: 'now', eyebrow: 'Now', title: 'Free play', note: 'Pick a trick for Muffin.' }
+               : { cls: 'now', eyebrow: 'Now', title: nowL ? `Lesson ${nowL.n}: ${nowL.title}` : 'Warm-up',
+                   note: 'Listen to Muffin. Buttons pop up when it\'s your turn.' })
+    : start ? { cls: 'go', eyebrow: ask.kind === 'resume' ? 'Paused' : 'Next up',
+                title: nextL ? `Lesson ${nextL.n}: ${nextL.title}` : 'Review time',
+                note: nextL ? teaser(nextL) : 'You finished every lesson! Muffin will quiz you on the best ones.',
+                btn: ask.kind === 'resume' ? '▶ Keep going' : '▶ Start', go: () => answer(ask.options[0]),
+                sub: ask.kind !== 'resume' && done > 0 && nextL ? 'A quick warm-up first, then the new lesson.' : null }
+    : sc?.tap === false ? { cls: 'go', eyebrow: 'Next up', title: nextL ? `Lesson ${nextL.n}: ${nextL.title}` : 'Review time',
+                            note: <>Say <b>“Hey Muffin, let's go!”</b> to start.</> }
+    : { cls: 'wait', eyebrow: 'One moment', title: 'Muffin is getting ready', note: 'The Start button shows up in a second.' }
 
   return (
     <main className="learn">
+      <section className={`card learn-next ${step.cls}`} aria-live="polite">
+        <div className="learn-eyebrow">{step.cls === 'now' && <i className="pulse" />}{step.eyebrow}</div>
+        <h2>{step.title}</h2>
+        {step.note && <p>{step.note}</p>}
+        {step.btn && <button className="learn-start" onClick={step.go}>{step.btn}</button>}
+        {step.sub && <small>{step.sub}</small>}
+      </section>
+
       <section className="card learn-hero">
         <h2>{kid ? `${kid.name[0].toUpperCase() + kid.name.slice(1)}'s Robot School` : "Muffin's Robot School"}</h2>
         <div className="learn-rank">{rank}</div>
@@ -45,15 +74,6 @@ export default function Learn({ online }) {
           {kid?.streak > 1 && <span><b>{kid.streak}</b> days in a row</span>}
           {left != null && !asleep && <span><b>{Math.ceil(left / 60)}</b> min left today</span>}
         </div>
-        <p className="learn-say">
-          {!online ? 'Muffin is offline.'
-            : asleep ? 'Muffin is asleep. School opens again tomorrow.'
-            : sc?.state === 'in class' ? 'Class is on! Listen to Muffin.'
-            : start ? (ask.kind === 'resume' ? 'Ready to keep going?' : 'Ready when you are.')
-            : sc?.tap ? 'Muffin is getting ready.'
-            : <>Say <b>“Hey Muffin, let's go!”</b> to start class.</>}
-        </p>
-        {start && <button className="learn-start" onClick={() => answer(ask.options[0])}>{ask.options[0].label}</button>}
       </section>
 
       {popup && (
@@ -88,16 +108,17 @@ export default function Learn({ online }) {
                 if (isDone) return (
                   <li key={l.n} className="done">
                     <button className="learn-row" onClick={() => setOpen(isOpen ? null : l.n)} aria-expanded={isOpen}>
-                      <span className="mark">✓</span><span>{l.n}. {l.title}</span><span className="chev">{isOpen ? '−' : '+'}</span>
+                      <span className="mark">✓</span><span>{l.n}. {l.title}</span>
+                      {nowL?.n === l.n && <span className="tag">now</span>}<span className="chev">{isOpen ? '−' : '+'}</span>
                     </button>
                     {isOpen && <div className="story">{l.story.map((t, i) => <p key={i}>{t}</p>)}</div>}
                     {isOpen && canPick && <button className="learn-go again" onClick={() => pick(l.n)}>▶ Do it again</button>}
                   </li>)
                 if (isNext) return (
                   <li key={l.n} className="next">
-                    <div className="learn-row"><span className="mark">→</span><span>{l.n}. {l.title}</span><span className="tag">next</span></div>
+                    <div className="learn-row"><span className="mark">→</span><span>{l.n}. {l.title}</span>
+                      <span className="tag">{nowL?.n === l.n ? 'now' : 'next'}</span></div>
                     <p className="teaser">{l.teaser}</p>
-                    {canPick && <button className="learn-go" onClick={() => pick(l.n)}>▶ Start lesson</button>}
                   </li>)
                 return (
                   <li key={l.n} className="later">

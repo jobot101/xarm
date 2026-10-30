@@ -58,6 +58,8 @@ $('pv-state').addEventListener('change', e => {
   if (offline) return
   school.state = e.target.value
   school.can_pick = school.state === 'waiting' || school.state === 'paused'
+  school.now = school.state === 'in class' ? kid.lesson : -1
+  if (school.state === 'paused') school.ask = { kind: 'resume', options: [{ label: 'Keep going', say: 'lets go' }] }
   if (school.can_pick) school.ask = JSON.parse(JSON.stringify(ASKS.start)); else if (school.ask?.kind === 'start') delete school.ask
 })
 $('pv-ask').addEventListener('change', e => {
@@ -65,6 +67,7 @@ $('pv-ask').addEventListener('change', e => {
   if (a) { school.ask = JSON.parse(JSON.stringify(a)); school.state = a.kind === 'start' ? 'waiting' : 'in class'; $('pv-state').value = school.state; offline = false }
   else delete school.ask
   school.can_pick = !a || a.kind === 'start' || a.kind === 'free'
+  school.now = a && a.kind !== 'start' && a.kind !== 'free' ? kid.lesson : -1
 })
 setInterval(() => { if (!school.ask && $('pv-ask').value) $('pv-ask').value = '' }, 500)   // answered: back to nothing
 $('pv-mode').addEventListener('click', () => {
