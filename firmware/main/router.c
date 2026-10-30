@@ -38,7 +38,7 @@ bool router_exec_ex(const char *text, char *msg, size_t n, bool app)
     // class, sleep, grown-up passphrase, quiz answers
     if (!app && school_filter(t, msg, n)) return true;
     // Muffin's conversation (name, small talk, jokes, yes/no answers...) — before the tricks, which match loosely
-    if (chat_exec(t, msg, n)) return true;
+    if ((app || !school_in_lesson()) && chat_exec(t, msg, n)) return true;
     // third hand
     if (has(t, "hold this") || has(t, "help me") || has(t, "third hand"))  return RUN(K_HOLD, pick_run(OP_HELPER, 0, msg, n));
     if (has(t, "hold it") || has(t, "grip") || has(t, "grab it") || has(t, "squeeze")) return RUN(K_CLOSE, pick_run(OP_CLOSE, 0, msg, n));

@@ -30,7 +30,8 @@ const char *school_pass(void);                                 // grown-up passp
 bool school_explain(int lesson, char *msg, size_t n);    // a robots/math/physics question: tell that lesson (not mid-class)
 bool school_asleep(void);         // pick.c idle life: head down
 bool school_wrap_due(void);       // pick.c: time's up, finish the sentence and stop
-bool school_chatter_ok(void);     // fx.c: idle chatter only outside class and sleep
+bool school_chatter_ok(void);
+bool school_in_lesson(void);      // router.c: in class and not free play (chat's own tricks and lessons wait)     // fx.c: idle chatter only outside class and sleep
 void school_kid_reset(int kid);   // kids.c: a kid slot was freed or reused
 
 // web.c: GET /api/school, POST /api/school

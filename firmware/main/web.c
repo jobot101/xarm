@@ -512,6 +512,7 @@ static esp_err_t h_cmd(httpd_req_t *r)
 // ---------- POST /api/jog {"id":6,"pos":420,"ms":150}  or {"pos":[...6],"ms":800} ----------
 static esp_err_t h_jog(httpd_req_t *r)
 {
+    arm_manual_mark();
     if (pick_busy()) return reply(r, false, "busy");
     cJSON *b = body(r);
     cJSON *pos = cJSON_GetObjectItem(b, "pos");
@@ -564,6 +565,7 @@ static esp_err_t h_torque(httpd_req_t *r)
 // ---------- POST /api/teach {"what": home|drop|calib_mark|calib_add|calib_undo|calib_clear|test_lift} ----------
 static esp_err_t h_teach(httpd_req_t *r)
 {
+    arm_manual_mark();
     if (pick_busy()) return reply(r, false, "busy");
     cJSON *b = body(r);
     cJSON *w = cJSON_GetObjectItem(b, "what");

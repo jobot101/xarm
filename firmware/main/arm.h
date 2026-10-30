@@ -15,7 +15,8 @@ bool arm_read(uint16_t out[NSERVO]);                      // real positions from
 void arm_torque(bool on);       // off = limp for hand-teaching, on = hold where it is
 void arm_hold(void);            // brake to rest where it is (used by stop); from limp: power up in place
 bool arm_torque_on(void);
-int64_t arm_manual_us(void);   // when someone last jogged, drove or limped the arm (esp_timer us; 0 = never)
+int64_t arm_manual_us(void);
+void arm_manual_mark(void);    // the app moved the arm: idle life leaves it alone until the next job   // when someone last jogged, drove or limped the arm (esp_timer us; 0 = never)
 void arm_last(uint16_t out[NSERVO]);   // where each joint is headed (its target), or where it is if idle
 int  arm_battery_mv(void);
 bool arm_link_ok(void);

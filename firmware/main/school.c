@@ -212,7 +212,7 @@ static int default_kid(void)
 }
 
 // ---------------------------------------------------------------- time keeping (school task)
-static int64_t s_tick_us, s_saved_us;
+static int64_t s_tick_us, s_saved_us, s_acc;
 
 static void tick(void)
 {
@@ -221,10 +221,9 @@ static void tick(void)
     s_tick_us = now;
     int k = s_kid;
     if (s_st != ST_RUN || k < 0 || s_paused) return;
-    static int64_t acc;
-    acc += dt;
+    s_acc += dt;
     lock();
-    while (acc >= 1000000) { acc -= 1000000; if (P[k].used_s < 65000) P[k].used_s++; }
+    while (s_acc >= 1000000) { s_acc -= 1000000; if (P[k].used_s < 65000) P[k].used_s++; }
     if (P[k].used_s >= limit_s(k)) s_wrap = true;
     if (now - s_saved_us > 30000000) { s_saved_us = now; save(); }
     unlock();
@@ -290,7 +289,7 @@ static int await(int expect, int secs)
     s_expect = expect;
     hint_for(expect);
     int64_t until = esp_timer_get_time() + (int64_t)secs * 1000000, eng = 0;
-    while (esp_timer_get_time() < until && s_ans == A_NONE && !s_wrap) {
+    while (esp_timer_get_time() < until && s_ans == A_NONE && !s_wrap && s_on) {
         if (s_stops != stops && expect != E_STOP) { s_ans = A_STOP; break; }
         if (esp_timer_get_time() - eng > 4000000 && !fx_speaking()) { voice_engage(); eng = esp_timer_get_time(); }
         nap(50);
@@ -379,7 +378,7 @@ static bool turn(int kind)
         uint32_t stops = s_stops;
         char msg[64];
         s_expect = E_STOP;
-        pick_run(OP_DANCE, 0, msg, sizeof msg);
+        pick_run(pick_holding() ? OP_BOW : OP_DANCE, 0, msg, sizeof msg);   // dancing opens the hand
         nap(150);
         for (int t = 0; t < 20000 && s_stops == stops && !pick_idle() && !s_wrap; t += 50) {
             if (t % 4000 == 0) voice_engage();
@@ -453,7 +452,7 @@ static void free_play(void)
     if (s_content) say(SND_SC_FREE);
     s_heard_us = esp_timer_get_time();
     s_expect = E_FREE;
-    while (!s_wrap) {
+    while (!s_wrap && s_on) {
         if (esp_timer_get_time() - s_heard_us > (int64_t)FREE_IDLE_S * 1000000 && pick_idle() && !fx_speaking()) {
             s_expect = E_NONE;
             say(SND_SC_AWAY);
@@ -507,8 +506,11 @@ static void open_day(int k)
 
 static void session(void)
 {
-    bool resume = s_paused && s_kid >= 0 && P[s_kid].day == today();   // paused earlier today: pick up again
-    int k = s_want_kid >= 0 ? s_want_kid : resume ? s_kid : default_kid();
+    int prev = s_kid;
+    bool resume = s_paused && prev >= 0 && P[prev].day == today();   // paused earlier today: pick up again
+    int k = s_want_kid >= 0 ? s_want_kid : resume ? prev : default_kid();
+    s_kid = -1;                              // nobody's clock runs until we know whose class it is
+    s_acc = 0;
     s_want_kid = -1;
     s_paused = false;
     s_wrap = false;
@@ -522,7 +524,7 @@ static void session(void)
     s_content = fx_has(SCHOOL_STEP[0].g);
     job(OP_HOME, 0);
 
-    if (resume && k == s_kid) say(SND_SC_BACK);
+    if (resume && k == prev) say(SND_SC_BACK);
     else {
         s_said_tf_how = false;
         bool newbie = k >= 0 && P[k].next == 0 && P[k].stars == 0;
@@ -639,7 +641,8 @@ static void grant(int k)                     // grown-up: ten more minutes
     lock();
     if (P[k].day != today()) { P[k].streak = streak_next(P[k].day, today(), P[k].streak); P[k].day = today();
                                P[k].used_s = P[k].extra_s = 0; P[k].lessons_today = P[k].stars_today = P[k].warmed = 0; }
-    P[k].extra_s = P[k].extra_s + EXTRA_S > 60000 ? 60000 : P[k].extra_s + EXTRA_S;
+    int cap = 64000 - s_minutes * 60;        // used_s counts to 65000: the limit has to stay below that
+    P[k].extra_s = (uint16_t)(P[k].extra_s + EXTRA_S > cap ? cap : P[k].extra_s + EXTRA_S);
     save();
     unlock();
     s_wrap = false;
@@ -734,6 +737,7 @@ void school_note_stop(void)
 bool school_explain(int i, char *msg, size_t n)
 {
     if (i < 0 || i >= SCHOOL_COUNT) return false;
+    if (s_on && s_st != ST_RUN) { snprintf(msg, n, "not in class"); return false; }   // asleep or waiting: the limit holds
     if (!school_allow(K_PLAY, msg, n)) return false;            // not in the middle of a lesson or a question
     if (!fx_has(SCHOOL_STEP[SCHOOL[i].step].g)) { fx_say(SND_SC_NOCARD); snprintf(msg, n, "lessons are on the card"); return false; }
     fx_say(SND_EXPLAIN);
@@ -744,6 +748,7 @@ bool school_explain(int i, char *msg, size_t n)
 bool school_wrap_due(void) { return s_wrap; }
 bool school_asleep(void) { return s_on && s_st == ST_ASLEEP; }
 bool school_chatter_ok(void) { return !s_on || s_st == ST_IDLE; }
+bool school_in_lesson(void) { return s_on && s_st == ST_RUN && s_expect != E_FREE; }
 
 // ---------------------------------------------------------------- web
 static const char *state_name(void)

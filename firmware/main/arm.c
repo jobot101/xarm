@@ -336,6 +336,7 @@ void arm_hold(void)
 
 bool arm_torque_on(void) { return s_torque; }
 int64_t arm_manual_us(void) { return s_manual_us; }
+void arm_manual_mark(void) { s_manual_us = esp_timer_get_time(); }
 
 void arm_last(uint16_t out[NSERVO])
 {

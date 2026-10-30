@@ -106,8 +106,8 @@ LINES = {
                     "Why was the robot so tired? It had a hard drive."],
     "joke_tag":    ["Get it?", "I'm hilarious.", "Ba dum tss."],
     "maker":       ["The Ragamuffin crew built me. I made me famous.", "Ragamuffin Studios. With love, and way too much coffee."],
-    "can_do":      ["I pick things up, sort them, stack towers, dance, and ring bells. And look amazing doing it.",
-                    "Say pick up the red one. Or dance. Or just admire me."],
+    "can_do":      ["I dance, ring bells, wave, take bows, hold things for you, and teach robot school. And look amazing doing it.",
+                    "Say lets dance. Or ring the bell. Or just admire me."],
     "praise":      ["I know.", "Tell me something I don't know.", "Thank you. I'm wonderful."],
     "scold":       ["Rude.", "Hey! I have feelings. Probably.", "I'm telling the Ragamuffin crew."],
     "love":        ["Of course you do.", "Everybody loves Muffin."],
@@ -131,7 +131,7 @@ LESSONS = {
     "robot": [
         "Lesson time. What is a robot?",
         "A robot is a machine that does three things. It senses, it thinks, and it acts.",
-        "I sense with my camera and my microphones.",
+        "I sense with my microphones, and I feel where every joint is.",
         "I think with a tiny computer in my base.",
         "And I act with my motors. Like this.",
         "Sense, think, act. Over and over. Just like you, but shinier.",
@@ -159,10 +159,10 @@ LESSONS = {
         "Eggs everywhere thank me.",
     ],
     "vision": [
-        "My eye is a camera with its own little computer.",
-        "I don't see a red block the way you do. I see thousands of tiny dots called pixels.",
+        "Lots of robots have a camera for an eye, with its own little computer.",
+        "A robot doesn't see a red block the way you do. It sees thousands of tiny dots called pixels.",
         "Every pixel is just a number for its color.",
-        "My camera hunts for a blob of red numbers, then tells my brain where it is and how big it is.",
+        "The camera hunts for a blob of red numbers, then tells the robot's brain where it is and how big it is.",
         "That's computer vision. Numbers. Lots and lots of numbers.",
     ],
     "hearing": [
@@ -176,7 +176,7 @@ LESSONS = {
         "My brain is a microcontroller. A whole computer, smaller than a cookie.",
         "It runs a program. A program is a list of instructions, like a recipe.",
         "My program runs in a loop, over and over, hundreds of times every second.",
-        "Check the microphone. Check the camera. Move the motors. Repeat.",
+        "Check the microphone. Check the servos. Move the motors. Repeat.",
         "People wrote every one of those steps. I just make it look easy.",
     ],
     "smooth": [
@@ -215,7 +215,7 @@ FACTS = [
 # true/false quiz: (question, answer, why) — chat.c asks three in a row
 QUIZ = [
     ("True or false? A servo knows its own position.", True, "A servo has a sensor inside that measures its angle."),
-    ("True or false? Robots see colors the same way you do.", False, "I see a number for every pixel, not colors like you."),
+    ("True or false? Robots see colors the same way you do.", False, "A robot camera sees a number for every pixel, not colors like you."),
     ("True or false? I have six degrees of freedom.", True, "Six servos, six ways to move."),
     ("True or false? A program is a list of instructions.", True, "Like a recipe, one step at a time."),
     ("True or false? Robots never make mistakes.", False, "Robots make mistakes. Rarely. Okay, sometimes."),

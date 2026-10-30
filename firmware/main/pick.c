@@ -837,9 +837,9 @@ static bool school_act(int a)
     case SA_SLOW:
         p[5] = clamp_pos(g_cfg.home[5] + 150); if (!go(p, 2000)) return false;
         p[5] = g_cfg.home[5];                  return go(p, 2000);
-    case SA_WAVE:     return wave_moves();
+    case SA_WAVE:     return s_holding ? true : wave_moves();     // these open the hand: never while holding
     case SA_BOW:      return bow_moves();
-    case SA_DANCE:    return dance_moves();
+    case SA_DANCE:    return s_holding ? true : dance_moves();
     case SA_BELL:     fx_event(FX_BELL); return wait_ms(300);
     case SA_JEWELS:
         for (int j = 0; j < 4; j++) { fx_show(j); if (!wait_ms(450)) return false; }
@@ -947,8 +947,8 @@ static pink_t s_pk1, s_pk2, s_pk3;
 static void idle_life(void)
 {
     int64_t now = esp_timer_get_time(), last = s_job_end_us > s_attn_us ? s_job_end_us : s_attn_us;
-    if (!s_anim || !s_at_home || s_holding || !arm_torque_on() || !s_job_end_us || arm_manual_us() > s_job_end_us) {
-        s_perk = false;
+    if (!s_anim || s_abort || !s_at_home || s_holding || !arm_torque_on() || !s_job_end_us || arm_manual_us() > s_job_end_us) {
+        s_perk = false;                      // s_abort: someone said stop, so nothing moves until the next job
         return;
     }
     uint16_t p[NSERVO];
@@ -975,6 +975,9 @@ static void idle_life(void)
         int ms = s_bored >= B_YAWN ? 550 : 320;   // waking from a nap takes a moment longer
         s_bored = B_AWAKE;
         rest_pose(p, 0.18f * mood_k());
+        uint16_t now_p[NSERVO];
+        arm_last(now_p);
+        if (abs((int)p[5] - (int)now_p[5]) > 120) ms = 600;   // a big turn toward a voice: not faster than the servo likes
         arm_move(p, mood_ms(ms));
         s_life_step = 1;
         s_life_next = now + 600000;

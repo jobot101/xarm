@@ -248,6 +248,7 @@ static void run_cloud(const char *t, bool unsure)
     voice_engage();
     strlcpy(s_last, t, sizeof s_last);
     s_prob = 1.0f;
+    if (strstr(t, "stop") || strstr(t, "freeze") || strstr(t, "halt")) unsure = false;   // stop never waits on anything
     if (!unsure) {
         bool ok = router_exec(t, msg, sizeof msg);
         if (ok || strcmp(msg, "unknown command")) { snprintf(why, sizeof why, "☁ %s", msg); note(t, 100, why); return; }

@@ -16,6 +16,7 @@
 #include "net.h"
 #include "store.h"
 #include "router.h"
+#include "school.h"
 #include "fx.h"
 #include "sdkconfig.h"
 
@@ -331,7 +332,17 @@ int cloud_intent(const char *heard, char *out, size_t n)
 {
     out[0] = 0;
     if (!cloud_ready() || !s_resp || !heard[0]) return INTENT_NONE;
-    int np = router_phrases(s_phr, 150);
+    // Muffin's commands, minus the grown-up passphrase (never sent anywhere, never pickable) and "hi i'm <kid>"
+    int np = 0;
+    {
+        int all = router_phrases(s_phr, 150);
+        const char *pass = school_pass();
+        for (int i = 0; i < all; i++) {
+            if ((pass[0] && !strcmp(s_phr[i], pass)) || !strncmp(s_phr[i], "hi i'm", 6)) continue;
+            if (np != i) strlcpy(s_phr[np], s_phr[i], sizeof s_phr[np]);
+            np++;
+        }
+    }
     char hint[sizeof s_hint];
     portENTER_CRITICAL(&s_mux);
     strlcpy(hint, s_hint, sizeof hint);
