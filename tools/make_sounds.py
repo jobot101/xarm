@@ -236,7 +236,7 @@ LINES.update({
 LESSON_GROUPS = {}     # filled by main(): lesson -> list of group names, one per sentence
 # Robot School lessons voiced so far (the rest stay in the bank's layout, empty, and School stops before the first
 # one without a voice). Voicing all 53 is about an hour of speech for the first build: raise this when ready.
-SCHOOL_VOICED = 3
+SCHOOL_VOICED = 53
 
 # ---- Muffin's Robot School (school.c): the daily class. Lessons live in school_lessons.py and are voiced
 # into the SD-card bank only ("SD-only" groups: present in sounds_gen.h and in the flash bank's group table

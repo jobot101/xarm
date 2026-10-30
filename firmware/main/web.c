@@ -239,6 +239,9 @@ static esp_err_t h_state(httpd_req_t *r)
     net_ssid(ssid, sizeof ssid);
     cJSON_AddStringToObject(n, "ssid", ssid);
     cJSON_AddBoolToObject(n, "online", net_online());
+    char nwhy[96];
+    net_why(nwhy, sizeof nwhy);
+    cJSON_AddStringToObject(n, "why", nwhy);
 
     char ver[32], part[16];
     ota_info(ver, sizeof ver, part, sizeof part);

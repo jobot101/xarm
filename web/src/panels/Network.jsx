@@ -21,7 +21,8 @@ export default function Network({ s, run }) {
           Save &amp; reboot
         </button>
       </div>
-      <p className="hint">If it can't join, it falls back to its own “Muffin” hotspot after 15 s.</p>
+      {n.ssid && !n.online && n.why && <p className="hint"><b>Not on “{n.ssid}”:</b> {n.why}. It keeps trying every 45 s.</p>}
+      <p className="hint">If it can't join, its own “Muffin” hotspot (http://192.168.4.1) stays up, and it keeps retrying home WiFi.</p>
     </section>
   )
 }

@@ -8,6 +8,8 @@
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "esp_timer.h"
+#include <stdio.h>
 #include "sdkconfig.h"
 
 static const char *TAG = "net";
@@ -15,19 +17,56 @@ static EventGroupHandle_t s_ev;
 static char s_ip[16] = "0.0.0.0";
 static char s_ssid[33], s_pass[65];
 static const char *s_mode = "none";
-static volatile bool s_ap, s_online;     // s_ap: home WiFi gave up, backup network only
+static volatile bool s_ap, s_online;     // s_ap: home WiFi isn't joined yet, the backup network carries the app
+static char s_why[96] = "";              // why home WiFi isn't joined, in plain words (shown on the WiFi card)
+static esp_timer_handle_t s_retry;
+
+// the station's disconnect reason, for a person
+static void why(int r)
+{
+    const char *w;
+    switch (r) {
+    case WIFI_REASON_NO_AP_FOUND:
+        w = "can't find that network: check the name, and it must be 2.4 GHz (not 5 GHz)"; break;
+    case WIFI_REASON_AUTH_FAIL: case WIFI_REASON_AUTH_EXPIRE: case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_HANDSHAKE_TIMEOUT: case WIFI_REASON_MIC_FAILURE:
+        w = "the router turned the password down: re-type it (capitals count)"; break;
+    case WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY: case WIFI_REASON_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD:
+        w = "the router's security setting isn't one the board speaks: try WPA2 or WPA2/WPA3"; break;
+    case WIFI_REASON_BEACON_TIMEOUT: case WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD:
+        w = "signal too weak: move Muffin closer to the router"; break;
+    case WIFI_REASON_ASSOC_FAIL: case WIFI_REASON_CONNECTION_FAIL: case WIFI_REASON_ASSOC_TOOMANY:
+        w = "the router refused the connection (full, or blocking new devices?)"; break;
+    default: {
+        static char b[48];
+        snprintf(b, sizeof b, "dropped by the router (reason %d)", r);
+        w = b;
+    }
+    }
+    strlcpy(s_why, w, sizeof s_why);
+}
+
+// while home WiFi isn't joined, try again every 45 s (not faster: each try scans channels, which briefly
+// interrupts phones on the backup network)
+static void retry_cb(void *arg) { if (s_ssid[0] && !s_online) esp_wifi_connect(); }
 
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) esp_wifi_connect();
     else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_event_sta_disconnected_t *d = data;
         s_online = false;
-        if (!s_ap) esp_wifi_connect();
+        why(d ? d->reason : 0);
+        ESP_LOGW(TAG, "home WiFi: %s", s_why);
+        if (!s_ap) esp_wifi_connect();               // first 15 s: straight back at it
+        else if (s_retry) { esp_timer_stop(s_retry); esp_timer_start_once(s_retry, 45 * 1000000ULL); }
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = data;
         esp_ip4addr_ntoa(&e->ip_info.ip, s_ip, sizeof s_ip);
         s_mode = "sta";
         s_online = true;
+        s_ap = false;
+        s_why[0] = 0;
         ESP_LOGI(TAG, "connected to %s: http://%s  http://muffin  http://muffin.local  (backup: wifi 'Muffin' -> http://192.168.4.1)", s_ssid, s_ip);
         xEventGroupSetBits(s_ev, 1);
     }
@@ -43,17 +82,20 @@ static void ap_config(void)
     esp_wifi_set_config(WIFI_IF_AP, &ap);
 }
 
-// home WiFi failed: drop the station side (its retries would keep hopping the AP's channel)
+// home WiFi didn't come up: the backup network carries the app; home WiFi keeps retrying in the background
+// (with no home network saved, it's the backup network only)
 static void start_ap(void)
 {
     s_ap = true;
-    esp_wifi_stop();
-    esp_wifi_set_mode(WIFI_MODE_AP);
-    ap_config();
-    esp_wifi_start();
     strcpy(s_ip, "192.168.4.1");
     s_mode = "ap";
-    ESP_LOGW(TAG, "AP mode: join wifi 'Muffin', open http://192.168.4.1");
+    if (!s_ssid[0]) {
+        esp_wifi_stop();
+        esp_wifi_set_mode(WIFI_MODE_AP);
+        ap_config();
+        esp_wifi_start();
+    } else if (s_retry) esp_timer_start_once(s_retry, 45 * 1000000ULL);
+    ESP_LOGW(TAG, "join wifi 'Muffin', open http://192.168.4.1");
 }
 
 // creds saved from the web app win; menuconfig values are the fallback
@@ -93,6 +135,12 @@ void net_start(void)
         wifi_config_t sta = {0};
         strlcpy((char *)sta.sta.ssid, s_ssid, sizeof sta.sta.ssid);
         strlcpy((char *)sta.sta.password, s_pass, sizeof sta.sta.password);
+        sta.sta.pmf_cfg.capable = true;               // WPA3 / WPA2-WPA3 routers want protected management frames
+        sta.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;      // and either WPA3 handshake flavor
+        sta.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;  // strongest access point of that name (mesh, extenders)
+        sta.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+        esp_timer_create_args_t ta = { .callback = retry_cb, .name = "wifi_retry" };
+        esp_timer_create(&ta, &s_retry);
         esp_wifi_set_mode(WIFI_MODE_APSTA);       // home WiFi + the backup network at once
         esp_wifi_set_config(WIFI_IF_STA, &sta);
         ap_config();
@@ -127,4 +175,5 @@ void net_info(char *ip, size_t n, const char **mode)
 }
 
 void net_ssid(char *out, size_t n) { strlcpy(out, s_ssid, n); }
+void net_why(char *out, size_t n) { strlcpy(out, s_online ? "" : s_why, n); }
 bool net_online(void) { return s_online; }
