@@ -11,8 +11,8 @@ Outputs firmware/main/sounds.bin (flashed after the speech models, updated over 
 firmware/main/sounds_gen.h (group ids, compiled into the app).
 CI runs this before every firmware build (.github/workflows/build.yml). Locally:
 
-  pip install piper-tts numpy scipy
-  python3 -m piper.download_voices en_US-ryan-high --download-dir ~/.cache/piper
+  pip install -r tools/requirements.txt          (Kokoro; apt install espeak-ng too)
+  python3 -m piper.download_voices en_US-ryan-high --download-dir ~/.cache/piper   (only for piper: voices)
   python3 tools/make_sounds.py                 # bank
   python3 tools/make_sounds.py --preview DIR   # WAVs of every clip + voice samples, to listen first
   python3 tools/make_sounds.py --no-voice      # silence for speech (no model needed), to test the build
@@ -33,12 +33,16 @@ RATE_PLANS = [(16000, 16000, 16000), (12000, 12000, 16000), (12000, 11000, 16000
               (11000, 10000, 16000), (12000, 10000, 12000), (11000, 10000, 12000), (11000, 8000, 12000),
               (10000, 8000, 12000), (8000, 8000, 12000)]
 
-VOICE = "en_US-ryan-high"          # Piper voice — see --preview for others
+# Voice: "kokoro:<id>" (Kokoro-82M, the most natural open TTS that runs on a CPU) or "piper:<name>".
+# Kokoro ids: am_* / bm_* = American / British male, af_* / bf_* = female. --preview renders the candidates.
+VOICE = "kokoro:am_puck"
+KOKORO_SPEED = 1.05                # 1 = Kokoro's natural pace
 VOICE_SPEED = 0.9                  # Piper length_scale: < 1 = brisker
-ROBOT_TINT = 0.10                  # 0 = plain human voice; 0.1 = a faint metallic shimmer
+ROBOT_TINT = 0.0                   # 0 = clean voice; 0.1 = a faint metallic shimmer
+TTS_CACHE = os.path.expanduser("~/.cache/muffin-tts")   # raw TTS per (voice, text): unchanged lines aren't re-voiced
 BUDGET = 0x340000                  # bytes: the bank lives in the "model" partition after the speech models
-                                   # (FX_BANK_OFF 0x2C0000 in fx.h, to the end of the 6 MB partition) and
-                                   # updates over WiFi on its own
+                                   # (FX_BANK_OFF in fx.h) and updates over WiFi on its own. = FX_BANK_MAX:
+                                   # sized to fit the old 6 MB "model" layout too, so OTA'd boards keep talking
 COLORS = ["red", "yellow", "green", "blue", "purple"]          # camera color order (cam/xarm_color/colors.h)
 NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
 
@@ -112,6 +116,8 @@ LINES = {
     "no":          ["Your loss.", "Fine. I'll just stand here looking great."],
     "milestone":   ["That's a lot of tricks. Do I get paid for this?", "I'm on fire today!"],
     "surprise":    ["You asked for it!", "Surprise!"],
+    "huh":         ["Huh? Say that again.", "I'm brilliant, not a mind reader. One more time?",
+                    "Didn't catch that. Try again, nice and slow."],
 }
 # ---- teaching (pick.c do_teach): each lesson is a list of sentences, played in order. Muffin moves the part
 # it's talking about on the same sentence (motion is matched by lesson name + sentence number in pick.c).
@@ -223,8 +229,9 @@ LINES.update({
 LESSON_GROUPS = {}     # filled by main(): lesson -> list of group names, one per sentence
 
 PREVIEW_TEXT = "I'm Muffin, the star of Ragamuffin Hall. Say, pick up the red one, and watch a genius at work."
-PREVIEW_VOICES = ["en_US-ryan-high", "en_US-joe-medium", "en_GB-alan-medium",
-                  "en_GB-northern_english_male-medium", "en_US-lessac-high", "en_GB-jenny_dioco-medium"]
+PREVIEW_VOICES = ["kokoro:am_puck", "kokoro:am_fenrir", "kokoro:am_michael", "kokoro:am_eric",
+                  "kokoro:bm_fable", "kokoro:bm_george", "kokoro:af_heart", "kokoro:af_bella",
+                  "piper:en_US-ryan-high"]
 
 # ---------------------------------------------------------------- notes
 C4, D4, E4, F4, G4, A4 = 262, 294, 330, 349, 392, 440
@@ -434,13 +441,50 @@ def load_voice(name, voice_dir):
     return _voices[name]
 
 
-def speak(text, voice_name, voice_dir, tint):
+_kokoro = {}
+
+
+def kokoro_raw(text, voice):
+    """Kokoro-82M -> (float audio, 24000). Needs: pip install kokoro soundfile (+ espeak-ng for odd words)."""
+    lang = voice[0]                                  # 'a' American, 'b' British
+    if lang not in _kokoro:
+        from kokoro import KPipeline
+        _kokoro[lang] = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M")
+    parts = []
+    for r in _kokoro[lang](text, voice=voice, speed=KOKORO_SPEED, split_pattern=None):
+        au = r.audio if hasattr(r, "audio") else r[2]
+        if au is None: continue
+        au = au.detach().cpu().numpy() if hasattr(au, "detach") else np.asarray(au)
+        parts.append(au.astype(np.float64))
+    return np.concatenate(parts), 24000
+
+
+def piper_raw(text, name, voice_dir):
     from piper import SynthesisConfig
-    v = load_voice(voice_name, voice_dir)
+    v = load_voice(name, voice_dir)
     cfg = SynthesisConfig(length_scale=VOICE_SPEED, noise_scale=0.72, noise_w_scale=0.85)   # livelier
     chunks = list(v.synthesize(text, cfg))
-    sr = chunks[0].sample_rate
-    x = np.concatenate([c.audio_float_array for c in chunks]).astype(np.float64)
+    return np.concatenate([c.audio_float_array for c in chunks]).astype(np.float64), chunks[0].sample_rate
+
+
+def tts(text, voice_name, voice_dir):
+    """Raw speech for one line, cached on disk by (engine settings, voice, text)."""
+    import hashlib
+    engine, _, name = voice_name.partition(":") if ":" in voice_name else ("piper", "", voice_name)
+    speed = KOKORO_SPEED if engine == "kokoro" else VOICE_SPEED
+    key = hashlib.sha1(f"{engine}|{name}|{speed}|{text}".encode()).hexdigest()
+    path = os.path.join(TTS_CACHE, key + ".npz")
+    if os.path.exists(path):
+        z = np.load(path)
+        return z["x"].astype(np.float64), int(z["sr"])
+    x, sr = kokoro_raw(text, name) if engine == "kokoro" else piper_raw(text, name, voice_dir)
+    os.makedirs(TTS_CACHE, exist_ok=True)
+    np.savez(path, x=x.astype(np.float32), sr=sr)
+    return x, sr
+
+
+def speak(text, voice_name, voice_dir, tint):
+    x, sr = tts(text, voice_name, voice_dir)
     g = np.gcd(SR, sr)
     x = signal.resample_poly(x, SR // g, sr // g)
     if tint > 0:                                   # faint metallic shimmer: a short swept comb
@@ -497,6 +541,23 @@ def write_wav(path, y, rate=OUT_SR):
         w.writeframes((y * 32767).astype("<i2").tobytes())
 
 
+def write_hq_bank(groups, clips):
+    """sounds_hq.bin for the SD card: same groups and layout CRC as sounds.bin, but every clip is 16 kHz
+    16-bit PCM (no ADPCM hiss, no downsampling). "SNP1" header = the SNB2 header with a different magic."""
+    names = [g for g, _, _ in groups]
+    layout = zlib.crc32("\n".join(names).encode())
+    head = 20 + 4 * len(groups) + 12 * len(clips)
+    table, data = bytearray(), bytearray()
+    for y in clips:
+        pcm = np.round(np.clip(y, -1, 1) * 32767).astype("<i2")
+        table += struct.pack("<IIhBB", head + len(data), len(pcm), 0, 0, OUT_SR // 1000)
+        data += pcm.tobytes()
+    gt = b"".join(struct.pack("<HH", f, n) for _, f, n in groups)
+    bank = b"SNP1" + struct.pack("<IIII", layout, len(groups), len(clips), len(data)) + gt + table + data
+    with open(os.path.join(FW, "sounds_hq.bin"), "wb") as f: f.write(bank)
+    print(f"SD bank: {len(clips)} clips, {len(data) / 2 / OUT_SR:.0f} s, {len(bank) / 1e6:.1f} MB")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--voice", default=VOICE)
@@ -512,10 +573,11 @@ def main():
         if not a.no_voice:
             for vn in PREVIEW_VOICES:
                 try:
-                    write_wav(os.path.join(a.preview, f"voice_{vn}.wav"), master(speak(PREVIEW_TEXT, vn, a.voice_dir, a.tint), "voice"))
+                    write_wav(os.path.join(a.preview, f"voice_{vn.replace(':', '_')}.wav"),
+                              master(speak(PREVIEW_TEXT, vn, a.voice_dir, a.tint), "voice"))
                     print("preview", vn)
-                except SystemExit as e:
-                    print("skip", vn, e)
+                except (SystemExit, Exception) as e:
+                    print("skip", vn, repr(e)[:200])
         if a.voices_only: return
 
     groups, clips, rates = [], [], []       # groups: (name, first, n); clips: float arrays; rates: Hz
@@ -557,6 +619,8 @@ def main():
         add(f"q_{k}", [speech(q)]); rates.append(-1)
         add(f"qa_{k}", [speech(why)]); rates.append(-1)
     print(f"quiz      {len(QUIZ)} questions")
+
+    write_hq_bank(groups, clips)
 
     # the best (talk, lesson, sfx) rates that still fit
     groups_n = len(groups)

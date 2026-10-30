@@ -1,0 +1,8 @@
+# tools/make_sounds.py — Muffin's voice + sound bank
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+kokoro>=0.9.4
+soundfile
+piper-tts
+numpy
+scipy

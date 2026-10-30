@@ -1,5 +1,5 @@
-# Renders voice samples (several Piper voices) + every clip of the sound bank as WAVs, so they can be
-# listened to before a voice is picked. Push to the voice-preview branch, or run it by hand.
+# Renders voice samples (several Kokoro + Piper voices) + every clip of the sound bank as WAVs, so they can
+# be listened to before a voice is picked. Push to the voice-preview branch, or run it by hand.
 name: voice-preview
 
 on:
@@ -18,11 +18,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: piper + voices
+          cache: pip
+          cache-dependency-path: tools/requirements.txt
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/piper
+            ~/.cache/muffin-tts
+          key: tts-${{ hashFiles('tools/make_sounds.py') }}
+          restore-keys: tts-
+      - name: voice engines
         run: |
-          pip install piper-tts numpy scipy
-          V=$(python3 -c "import sys; sys.path.insert(0,'tools'); import make_sounds as m; print(' '.join(m.PREVIEW_VOICES))")
-          python3 -m piper.download_voices $V --download-dir ~/.cache/piper
+          sudo apt-get install -y -qq espeak-ng >/dev/null
+          pip install -q -r tools/requirements.txt
+          python3 -m piper.download_voices en_US-ryan-high --download-dir ~/.cache/piper
       - name: render
         run: |
           python3 tools/make_sounds.py --preview preview/voices --voices-only
