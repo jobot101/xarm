@@ -196,6 +196,7 @@ static int s_asleep_kid = -1;
 static bool s_content;                       // lessons are on the card
 static int s_silent;                         // unanswered prompts in a row
 static bool s_said_tf_how;
+static volatile int s_q = -1;               // the true/false question being asked (Learning page pop-up)
 
 static int limit_s(int k) { return s_minutes * 60 + P[k].extra_s; }
 
@@ -340,8 +341,10 @@ static int question(int q)
 {
     say(SCHOOL_QUIZ[q].q);
     if (!s_said_tf_how) { s_said_tf_how = true; say(SND_SC_TF_HOW); }
+    s_q = q;
     int a = await(E_TF, ANSWER_S);
     if (a == A_NONE && !s_wrap) { say(SND_SC_TF_HOW); a = await(E_TF, AGAIN_S); }
+    s_q = -1;
     if (a == A_STOP || s_wrap) return -1;
     if (a == A_NONE) {
         say(SND_SC_NO_ANSWER);
@@ -791,6 +794,71 @@ bool school_chatter_ok(void) { return !s_on || s_st == ST_IDLE; }
 bool school_in_lesson(void) { return s_on && s_st == ST_RUN && s_expect != E_FREE; }
 
 // ---------------------------------------------------------------- web
+// what Muffin is waiting for right now, as buttons for the Learning page's pop-up: each `say` goes through the
+// router as if the kid said it (POST /api/cmd {text, voice:true}), so it counts exactly like speaking.
+static void opt(cJSON *a, const char *label, const char *say)
+{
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddStringToObject(o, "label", label);
+    cJSON_AddStringToObject(o, "say", say);
+    cJSON_AddItemToArray(a, o);
+}
+
+static void turn_opts(cJSON *a, int k)
+{
+    switch (k) {
+    case K_UP: opt(a, "A little up", "a little up"); break;
+    case K_DOWN: opt(a, "A little down", "a little down"); break;
+    case K_LEFT: opt(a, "A little left", "a little left"); break;
+    case K_RIGHT: opt(a, "A little right", "a little right"); break;
+    case K_TURN: opt(a, "Turn left", "turn left"); opt(a, "Turn right", "turn right"); break;
+    case K_TILT: opt(a, "Tilt up", "tilt up"); opt(a, "Tilt down", "tilt down"); break;
+    case K_OPEN: opt(a, "Open your hand", "open your hand"); break;
+    case K_CLOSE: opt(a, "Close your hand", "close your hand"); break;
+    case K_BELL: opt(a, "Ring the bell", "ring the bell"); break;
+    case K_DANCE: opt(a, "Dance!", "lets dance"); break;
+    case K_WAVE: opt(a, "Wave hello", "wave hello"); break;
+    case K_BOW: opt(a, "Take a bow", "take a bow"); break;
+    case K_HOME: opt(a, "Go home", "go home"); break;
+    default: opt(a, "Up", "a little up"); opt(a, "Down", "a little down");
+             opt(a, "Left", "a little left"); opt(a, "Right", "a little right"); break;
+    }
+}
+
+static void ask_json(cJSON *o)
+{
+    int e = s_expect;
+    if (s_st != ST_RUN || e == E_NONE || e == E_FREE) return;
+    cJSON *ask = cJSON_AddObjectToObject(o, "ask");
+    cJSON *a = cJSON_AddArrayToObject(ask, "options");
+    switch (e) {
+    case E_TF:
+        cJSON_AddStringToObject(ask, "kind", "tf");
+        if (s_q >= 0) cJSON_AddNumberToObject(ask, "q", s_q);
+        opt(a, "True", "true"); opt(a, "False", "false");
+        break;
+    case E_YN:
+        cJSON_AddStringToObject(ask, "kind", "yn");
+        opt(a, "Yes please", "yes please"); opt(a, "No thanks", "no thanks");
+        break;
+    case E_KID:
+        cJSON_AddStringToObject(ask, "kind", "kid");
+        for (int i = 0; i < KIDS_MAX; i++) if (kids_get(i)) {
+            char say[48]; snprintf(say, sizeof say, "hi i'm %s", kids_get(i)->name);
+            opt(a, kids_get(i)->name, say);
+        }
+        break;
+    case E_STOP:
+        cJSON_AddStringToObject(ask, "kind", "stop");
+        opt(a, "Stop!", "stop");
+        break;
+    default:
+        cJSON_AddStringToObject(ask, "kind", "turn");
+        turn_opts(a, s_turn_kind);
+        break;
+    }
+}
+
 static const char *state_name(void)
 {
     if (!s_on) return "off";
@@ -822,6 +890,7 @@ void school_json(cJSON *o)
     cJSON_AddStringToObject(o, "clock", s_clock_ok ? s_clock_src : "none");
     cJSON_AddBoolToObject(o, "lessons_ready", fx_has(SCHOOL_STEP[0].g));
     cJSON_AddNumberToObject(o, "lesson_count", SCHOOL_COUNT);
+    ask_json(o);
     cJSON *arr = cJSON_AddArrayToObject(o, "kids");
     for (int k = 0; k < KIDS_MAX; k++) if (kids_get(k)) kid_json(arr, k, kids_get(k)->name);
     kid_json(arr, GUEST, "guest");

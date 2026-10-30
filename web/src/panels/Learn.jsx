@@ -4,12 +4,22 @@ import course from '../lessons.json'
 
 // The main page: Muffin's Robot School, to read. No robot controls here (class happens by voice);
 // lessons already learned open to re-read their story, the next one shows its teaser, later ones are a title.
+// When Muffin asks something in class (true/false, yes/no, "your turn"), a pop-up offers the answers as
+// buttons: a tap goes in as if the kid said it (api.say), so it counts the same as speaking.
 export default function Learn({ online }) {
   const [sc, setSc] = useState(null)
   const [open, setOpen] = useState(null)
 
+  const [sent, setSent] = useState('')     // the question just answered by tap: hide it until Muffin moves on
+
   const load = useCallback(async () => { try { setSc(await api.school()) } catch {} }, [])
-  useEffect(() => { load(); const t = setInterval(load, 2000); return () => clearInterval(t) }, [load])
+  const fast = sc?.state === 'in class'
+  useEffect(() => { load(); const t = setInterval(load, fast ? 700 : 2000); return () => clearInterval(t) }, [load, fast])
+
+  const ask = online ? sc?.ask : null
+  const askKey = ask ? JSON.stringify(ask) : ''
+  useEffect(() => { if (!askKey) setSent('') }, [askKey])
+  const answer = async o => { setSent(askKey); try { await api.say(o.say) } catch {} ; load() }
 
   const kid = sc?.kids?.[0]
   const total = course.parts.reduce((a, p) => a + p.lessons.length, 0)
@@ -37,6 +47,24 @@ export default function Learn({ online }) {
             : <>Say <b>“Hey Muffin, let's go!”</b> to start class.</>}
         </p>
       </section>
+
+      {ask && askKey !== sent && ask.options?.length > 0 && (
+        <div className="ask-back" role="dialog" aria-modal="true">
+          <div className={`ask ask-${ask.kind}`}>
+            <div className="ask-who">Muffin asks</div>
+            <p className="ask-q">{
+              ask.kind === 'tf' ? (course.quiz[ask.q] ?? 'True or false?')
+              : ask.kind === 'yn' ? 'Another lesson?'
+              : ask.kind === 'kid' ? "Who's here today?"
+              : ask.kind === 'stop' ? 'Tell Muffin to stop!'
+              : 'Your turn! Tell Muffin:'}</p>
+            <div className="ask-opts">
+              {ask.options.map(o => <button key={o.say} className={`ask-btn ${o.say}`} onClick={() => answer(o)}>{o.label}</button>)}
+            </div>
+            <p className="ask-hint">Tap one, or just say it.</p>
+          </div>
+        </div>
+      )}
 
       {course.parts.map((part, pi) => {
         const got = part.lessons.filter(l => l.n <= done).length

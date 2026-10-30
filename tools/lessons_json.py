@@ -19,5 +19,6 @@ for i, L in enumerate(SL.SCHOOL):
     part["lessons"].append({"n": i + 1, "title": title.rstrip(".?!"), "teaser": L["teaser"], "story": texts[1:]})
 assert sum(len(p["lessons"]) for p in out) == len(SL.SCHOOL)
 with open(os.path.join(HERE, "..", "web", "src", "lessons.json"), "w") as f:
-    json.dump({"parts": out, "ranks": SL.RANKS, "rank_every": 5}, f, indent=1)
+    quiz = [q for L in SL.SCHOOL for (q, _, _) in L["quiz"]]   # questions only, in firmware order (q index)
+    json.dump({"quiz": quiz, "parts": out, "ranks": SL.RANKS, "rank_every": 5}, f, indent=1)
 print(f"lessons.json: {len(SL.SCHOOL)} lessons in {len(out)} parts")

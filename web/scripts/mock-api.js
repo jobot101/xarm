@@ -17,6 +17,14 @@ export const st = {
 }
 export const school = { on: true, minutes: 20, pass_set: false, state: 'waiting', kid: '', clock: 'internet', lessons_ready: true, lesson_count: 53,
   kids: [{ i: 0, name: 'sam', lesson: 4, stars: 19, streak: 3, used_s: 312, limit_s: 1200 }, { i: 12, name: 'guest', lesson: 0, stars: 0, streak: 0, used_s: 0, limit_s: 1200 }] }
+// what Muffin is asking in class (school.c ask_json); the preview panel sets it
+export const ASKS = {
+  tf: { kind: 'tf', q: 12, options: [{ label: 'True', say: 'true' }, { label: 'False', say: 'false' }] },
+  yn: { kind: 'yn', options: [{ label: 'Yes please', say: 'yes please' }, { label: 'No thanks', say: 'no thanks' }] },
+  turn: { kind: 'turn', options: [{ label: 'Turn left', say: 'turn left' }, { label: 'Turn right', say: 'turn right' }] },
+  nudge: { kind: 'turn', options: [{ label: 'Up', say: 'a little up' }, { label: 'Down', say: 'a little down' }, { label: 'Left', say: 'a little left' }, { label: 'Right', say: 'a little right' }] },
+  stop: { kind: 'stop', options: [{ label: 'Stop!', say: 'stop' }] },
+}
 export const cfg = { home: [500, 500, 500, 500, 500, 500], drop: [500, 500, 500, 500, 500, 800],
   lift: [0, 0, 0, 0, -120, 0], reach: [0, 0, 0, -90, 90, 0], pick2: { align_axis: 1, align_turn: 375, grab_check: true, grab_margin: 40, grab_tries: 3, size_split: 900 }, grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'], cam_on_head: true, scan: [0, -200, 200], stack_pct: 30 }
 
@@ -27,6 +35,7 @@ export function handle(method, url, body = {}) {
   switch (`${method} ${url}`) {
     case 'GET /api/state': return (st)
     case 'POST /api/cmd': {
+      if (body.voice && school.ask) { const o = school.ask.options.find(x => x.say === body.text); delete school.ask; return { ok: true, msg: o ? `answer: ${o.label}` : 'ok' } }
       const t = body.text, map = { 'build a tower': 'stacking', 'hold this': 'helping', 'dance': 'dancing', 'wave hello': 'waving', 'take a bow': 'bowing', 'ring the bell': 'ringing', 'sort everything': 'sorting', 'give it to me': 'giving' }
       if (t === 'stop') { st.state = 'stopped'; st.busy = false; return ({ ok: true, msg: 'stopped' }) }
       st.state = map[t] || (t.startsWith('pick') ? 'searching' : 'moving'); st.busy = true; st.detail = t

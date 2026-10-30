@@ -12,6 +12,7 @@ async function call(path, body) {
 export const api = {
   state:  ()            => call('/api/state'),
   cmd:    (text)        => call('/api/cmd', { text }),
+  say:    (text)        => call('/api/cmd', { text, voice: true }),   // as if the kid said it: School counts it
   jog:    (id, pos, ms) => call('/api/jog', { id, pos, ms }),
   drive:  (d)           => call('/api/drive', d),          // hold-to-move: {base|lift|reach|tilt|twist|grip: ±1, step, ms}
   torque: (on)          => call('/api/torque', { on }),

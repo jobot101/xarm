@@ -1,6 +1,6 @@
 // Preview build only (npm run preview:build): the fake firmware runs inside the page, plus a small tuning
 // panel to try the Learning page in different states. Never part of the firmware's web app.
-import { school, handle } from '../scripts/mock-api.js'
+import { school, handle, ASKS } from '../scripts/mock-api.js'
 
 let offline = false
 const realFetch = window.fetch.bind(window)
@@ -38,6 +38,7 @@ el.innerHTML = `<summary>Preview ▾</summary><div class="b">
  <label>Days in a row: <b id="pv-kn">${kid.streak}</b><input type="range" id="pv-streak" min="0" max="30" value="${kid.streak}"></label>
  <label>Minutes used today: <b id="pv-un">${Math.round(kid.used_s / 60)}</b><input type="range" id="pv-used" min="0" max="20" value="${Math.round(kid.used_s / 60)}"></label>
  <label>Muffin is <select id="pv-state"><option>waiting</option><option>in class</option><option>paused</option><option>asleep</option><option value="offline">offline</option></select></label>
+ <label>Muffin asks <select id="pv-ask"><option value="">nothing</option><option value="tf">a true/false question</option><option value="yn">another lesson?</option><option value="turn">your turn: turn</option><option value="nudge">your turn: any nudge</option><option value="stop">shout stop!</option></select></label>
  <div class="row"><button id="pv-mode">Open Workshop</button></div>
 </div>`
 const style = document.createElement('style'); style.textContent = css
@@ -53,6 +54,12 @@ bind('pv-streak', 'pv-kn', v => (kid.streak = v))
 bind('pv-used', 'pv-un', v => (kid.used_s = v * 60))
 $('pv-name').addEventListener('input', e => (kid.name = e.target.value.trim().toLowerCase() || 'sam'))
 $('pv-state').addEventListener('change', e => { offline = e.target.value === 'offline'; if (!offline) school.state = e.target.value })
+$('pv-ask').addEventListener('change', e => {
+  const a = ASKS[e.target.value]
+  if (a) { school.ask = JSON.parse(JSON.stringify(a)); school.state = 'in class'; $('pv-state').value = 'in class'; offline = false }
+  else delete school.ask
+})
+setInterval(() => { if (!school.ask && $('pv-ask').value) $('pv-ask').value = '' }, 500)   // answered: back to nothing
 $('pv-mode').addEventListener('click', () => {
   const ws = document.querySelector('.app.mode-workshop')
   try { localStorage.setItem('mode', ws ? 'play' : 'workshop') } catch {}

@@ -512,7 +512,8 @@ static esp_err_t h_cmd(httpd_req_t *r)
     cJSON *b = body(r);
     cJSON *t = cJSON_GetObjectItem(b, "text");
     char msg[96];
-    bool ok = cJSON_IsString(t) && router_exec_ex(t->valuestring, msg, sizeof msg, true);
+    // {voice:true}: as if the kid said it (the Learning page's answer buttons): School counts it
+    bool ok = cJSON_IsString(t) && router_exec_ex(t->valuestring, msg, sizeof msg, !cJSON_IsTrue(cJSON_GetObjectItem(b, "voice")));
     if (!cJSON_IsString(t)) strcpy(msg, "need text");
     else voice_engage();     // someone's playing from the app: Muffin listens without "Hey Muffin" for a bit
     cJSON_Delete(b);

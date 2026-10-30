@@ -133,3 +133,7 @@ git push                              # CI builds + publishes release "latest"
   to re-read, next lesson's teaser, later ones title only. No robot controls; STOP stays. Data comes from
   tools/lessons_json.py -> web/src/lessons.json (CI runs it before the web build).
 - Both mics: the ES7210 opens all 4 TDM slots; voice.c drops slot 3 before the AFE (MRM).
+- Answer pop-up: while School waits for an answer (true/false, yes/no, who's here, a "your turn" command, "shout
+  stop"), /api/school carries `ask` {kind, q, options[{label, say}]} (school.c ask_json) and the Learning page pops
+  up those buttons. A tap posts /api/cmd {text: say, voice: true}: router_exec_ex(app=false), so it goes through
+  school_filter/school_allow exactly like speech. STOP stays above the pop-up.
