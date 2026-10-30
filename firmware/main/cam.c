@@ -1,9 +1,8 @@
 #include "cam.h"
+#include "nvs.h"
 #include <stdio.h>
 #include <string.h>
 #include "esp_log.h"
-#include "esp_timer.h"
-#include "lwip/sockets.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -16,55 +15,6 @@ static bool s_seen[2];
 static uint8_t s_raw[2][CAM_BYTES];
 static volatile bool s_ok;
 
-// ---- wireless link: the camera joins Muffin's own WiFi ("Muffin" AP) and sends a UDP packet per frame to
-// the board's AP address (cam/xarm_color/muffin_link.cpp). Packet = "MUF1", u16 seq, slot0 color, slot1 color,
-// 5 x (x, y, w, h). Fresh wireless data wins; with none for 500 ms the I2C reading is used.
-#define CAM_UDP_PORT 4747
-static box_t s_wbox[2];
-static bool s_wseen[2];
-static uint8_t s_wraw[2][CAM_BYTES];
-static volatile int64_t s_wlast_us;
-static char s_wfrom[16];
-
-static bool wifi_fresh(void) { return s_wlast_us && esp_timer_get_time() - s_wlast_us < 500000; }
-
-static void udp_task(void *arg)
-{
-    int sock = -1;
-    for (;;) {
-        if (sock < 0) {                       // the network stack starts after us: keep trying
-            sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-            struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons(CAM_UDP_PORT), .sin_addr.s_addr = htonl(INADDR_ANY) };
-            if (sock < 0 || bind(sock, (struct sockaddr *)&a, sizeof a) < 0) {
-                if (sock >= 0) close(sock);
-                sock = -1;
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                continue;
-            }
-            ESP_LOGI(TAG, "listening for the wireless camera on UDP %d", CAM_UDP_PORT);
-        }
-        uint8_t p[64];
-        struct sockaddr_in from;
-        socklen_t fl = sizeof from;
-        int n = recvfrom(sock, p, sizeof p, 0, (struct sockaddr *)&from, &fl);
-        if (n < 8 + 5 * CAM_BYTES || memcmp(p, "MUF1", 4)) continue;
-        for (int slot = 0; slot < 2; slot++) {
-            int c = p[6 + slot];
-            if (c > 4) continue;
-            const uint8_t *raw = p + 8 + c * CAM_BYTES;
-            memcpy(s_wraw[slot], raw, CAM_BYTES);
-            box_t b;
-            s_wseen[slot] = cam_decode(raw, &b);
-            s_wbox[slot] = b;
-        }
-        if (!s_wlast_us) {
-            inet_ntoa_r(from.sin_addr, s_wfrom, sizeof s_wfrom);
-            ESP_LOGI(TAG, "wireless camera connected from %s", s_wfrom);
-        }
-        s_wlast_us = esp_timer_get_time();
-    }
-}
-
 static void task(void *arg)
 {
     int misses = 0;
@@ -72,7 +22,7 @@ static void task(void *arg)
         // no camera answering for 2 s: stop reading (each failed read floods the log with I2C errors) and
         // just knock quietly every 2 s until one shows up
         if (misses >= 20) {
-            if (wifi_fresh() || i2c_master_probe(s_bus, CAM_ADDR, 50) != ESP_OK) { s_ok = false; vTaskDelay(pdMS_TO_TICKS(2000)); continue; }
+            if (i2c_master_probe(s_bus, CAM_ADDR, 50) != ESP_OK) { s_ok = false; vTaskDelay(pdMS_TO_TICKS(2000)); continue; }
             ESP_LOGI(TAG, "camera answered at 0x52");
             misses = 0;
         }
@@ -92,8 +42,24 @@ static void task(void *arg)
     }
 }
 
+// Camera switch (NVS "cam_on", default off): with it off the camera is never polled, cam_ok() stays false, the
+// app hides everything that needs it, and the router drops picking, sorting and stacking. Applies at boot.
+static bool s_enabled;
+bool cam_enabled(void) { return s_enabled; }
+void cam_enable_save(bool on)
+{
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) { nvs_set_u8(h, "cam_on", on); nvs_commit(h); nvs_close(h); }
+}
+
 esp_err_t cam_init(i2c_master_bus_handle_t bus)
 {
+    s_bus = bus;                             // the I2C scan works either way
+    nvs_handle_t h;
+    uint8_t v = 0;
+    if (nvs_open("xarm", NVS_READONLY, &h) == ESP_OK) { nvs_get_u8(h, "cam_on", &v); nvs_close(h); }
+    s_enabled = v;
+    if (!s_enabled) { ESP_LOGI(TAG, "camera switched off"); return ESP_OK; }
     i2c_device_config_t d = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = CAM_ADDR,
@@ -104,28 +70,24 @@ esp_err_t cam_init(i2c_master_bus_handle_t bus)
     if (e != ESP_OK) { ESP_LOGE(TAG, "add device: %s", esp_err_to_name(e)); return e; }
     if (i2c_master_probe(bus, CAM_ADDR, 100) != ESP_OK) ESP_LOGW(TAG, "no ack at 0x52 — check wiring / color firmware");
     xTaskCreate(task, "cam", 3072, NULL, 4, NULL);
-    xTaskCreate(udp_task, "cam_udp", 3072, NULL, 4, NULL);
     return ESP_OK;
 }
 
 bool cam_get(int slot, box_t *out)
 {
     if (slot < 0 || slot > 1) return false;
-    if (wifi_fresh()) { *out = s_wbox[slot]; return s_wseen[slot]; }
     *out = s_box[slot];
     return s_ok && s_seen[slot];
 }
 
-bool cam_ok(void) { return wifi_fresh() || s_ok; }
-const char *cam_link(void) { return wifi_fresh() ? "wifi" : s_ok ? "wired" : "none"; }
+bool cam_ok(void) { return s_ok; }
 
 void cam_raw_hex(char *out, size_t n)
 {
     size_t k = 0;
-    uint8_t (*raw)[CAM_BYTES] = wifi_fresh() ? s_wraw : s_raw;
     for (int s = 0; s < 2; s++)
         for (int i = 0; i < CAM_BYTES && k + 4 < n; i++)
-            k += snprintf(out + k, n - k, "%02X%s", raw[s][i], i == CAM_BYTES - 1 && s == 0 ? " | " : " ");
+            k += snprintf(out + k, n - k, "%02X%s", s_raw[s][i], i == CAM_BYTES - 1 && s == 0 ? " | " : " ");
     if (k) out[k - 1] = 0;
 }
 

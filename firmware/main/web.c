@@ -122,8 +122,8 @@ static esp_err_t h_state(httpd_req_t *r)
     }
 
     cJSON *cam = cJSON_AddObjectToObject(j, "cam");
+    cJSON_AddBoolToObject(cam, "enabled", cam_enabled());
     cJSON_AddBoolToObject(cam, "ok", cam_ok());
-    cJSON_AddStringToObject(cam, "link", cam_link());
     cam_raw_hex(buf, sizeof buf);
     cJSON_AddStringToObject(cam, "raw", buf);
     cJSON *slots = cJSON_AddArrayToObject(cam, "slots");
@@ -368,6 +368,13 @@ static esp_err_t h_fx(httpd_req_t *r)
     cJSON *e = cJSON_GetObjectItem(b, "event");
     cJSON *an = cJSON_GetObjectItem(b, "anim");      // lifelike motion on/off
     if (cJSON_IsBool(an)) pick_anim(cJSON_IsTrue(an));
+    cJSON *cm = cJSON_GetObjectItem(b, "cam");       // camera switch: saved, then a restart applies it
+    if (cJSON_IsBool(cm) && cJSON_IsTrue(cm) != cam_enabled()) {
+        cam_enable_save(cJSON_IsTrue(cm));
+        cJSON_Delete(b);
+        xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+        return reply(r, true, cJSON_IsTrue(cm) ? "camera on — restarting" : "camera off — restarting");
+    }
     if (show >= 0) fx_show(show);
     else if (cJSON_IsString(e)) fx_event(!strcmp(e->valuestring, "sad") ? FX_ERROR : FX_CHEER);
     cJSON_Delete(b);

@@ -21,6 +21,11 @@ export default function Settings({ s, run }) {
         <span>Lifelike motion: looks where it's going, winds up, arcs, settles, breathes when idle</span>
         <input type="checkbox" checked={s?.arm?.anim ?? true} onChange={e => run(api.fx({ anim: e.target.checked }))} />
       </label>
+      <label className="autoup" style={{ marginBottom: 10 }}>
+        <span>Camera: picking, sorting and stacking by color. Off = Muffin never uses it. Restarts Muffin.</span>
+        <input type="checkbox" checked={!!s?.cam?.enabled}
+          onChange={e => confirm(`Turn the camera ${e.target.checked ? 'on' : 'off'}? Muffin restarts (about 15 s).`) && run(api.fx({ cam: e.target.checked }))} />
+      </label>
       <div className="fields">
         {c.slot_name.map((n, i) => (
           <label className="field" key={i}>Color {i + 1} spoken name

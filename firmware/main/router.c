@@ -8,6 +8,8 @@
 #include "kids.h"
 #include "chat.h"
 #include "school.h"
+#include "cam.h"
+#include "fx.h"
 
 static bool starts(const char *s, const char *p) { return strncmp(s, p, strlen(p)) == 0; }
 static bool has(const char *s, const char *w) { return strstr(s, w) != NULL; }
@@ -51,6 +53,13 @@ bool router_exec_ex(const char *text, char *msg, size_t n, bool app)
         int kind = d == NUDGE_UP ? K_UP : d == NUDGE_DOWN ? K_DOWN : d == NUDGE_LEFT ? K_LEFT : d == NUDGE_RIGHT ? K_RIGHT
                  : (d == NUDGE_TURN_L || d == NUDGE_TURN_R) ? K_TURN : K_TILT;
         if (d >= 0) return RUN(kind, pick_run(OP_NUDGE, d, msg, n));
+    }
+    // picking, sorting and stacking need the camera; with it switched off, say so instead
+    if (!cam_enabled() && (has(t, "tower") || has(t, "stack") || has(t, "sort") || has(t, "clean up") || has(t, "tidy") ||
+                           starts(t, "pick") || starts(t, "grab ") || starts(t, "get ") || starts(t, "fetch"))) {
+        fx_say(SND_NO_EYES);
+        snprintf(msg, n, "camera is switched off");
+        return false;
     }
     // stacking challenge
     if (has(t, "tower") || has(t, "stack"))                         return RUN(K_STACK, pick_run(OP_STACK, 0, msg, n));
@@ -96,8 +105,7 @@ int router_phrases(char out[][48], int max)
     ADD("go home");
     ADD("drop it");
     ADD("give it to me");
-    ADD("sort everything");
-    ADD("sort by size");
+    if (cam_enabled()) { ADD("sort everything"); ADD("sort by size"); }
     ADD("wave hello");
     ADD("take a bow");
     ADD("dance robot");
@@ -111,15 +119,14 @@ int router_phrases(char out[][48], int max)
     ADD("a little right");
     ADD("a little up");
     ADD("a little down");
-    ADD("build a tower");
+    if (cam_enabled()) ADD("build a tower");
     // more ways to say the same things (each must route through router_exec above)
     ADD("go back");
     ADD("put it down");
     ADD("hand it over");
     ADD("bring it here");
     ADD("come here");
-    ADD("clean up");
-    ADD("tidy up");
+    if (cam_enabled()) { ADD("clean up"); ADD("tidy up"); }
     ADD("say hello");
     ADD("hello robot");
     ADD("goodbye");
@@ -130,7 +137,7 @@ int router_phrases(char out[][48], int max)
     ADD("grab it");
     ADD("let it go");
     ADD("third hand");
-    ADD("stack them");
+    if (cam_enabled()) ADD("stack them");
     ADD("move left");
     ADD("move right");
     ADD("move up");
@@ -157,7 +164,7 @@ int router_phrases(char out[][48], int max)
     ADD("yes please"); ADD("sure thing"); ADD("no thanks");   // no bare yes/no: one syllable steals matches
     for (int i = 0; i < KIDS_MAX; i++) if (kids_get(i)) ADD("hi i'm %s", kids_get(i)->name);
     if (school_pass()[0]) ADD("%s", school_pass());   // grown-up passphrase (Robot School): ten more minutes
-    for (int i = 0; i < NSLOT; i++) {
+    for (int i = 0; i < NSLOT && cam_enabled(); i++) {
         if (!g_cfg.slot_name[i][0]) continue;
         ADD("pick up the %s", g_cfg.slot_name[i]);
         ADD("grab the %s", g_cfg.slot_name[i]);

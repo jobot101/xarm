@@ -5,7 +5,7 @@ import { createServer } from 'node:http'
 const st = {
   state: 'idle', detail: '', busy: false, holding: false, marked: false,
   arm: { pos: [500, 500, 500, 500, 500, 500], torque: true, anim: true, link: true, battery_mv: 7480, lim: [[100, 800], [50, 950], [80, 920], [80, 920], [80, 920], [0, 1000]] },
-  cam: { ok: true, link: 'wifi', raw: '50 3C 14 12 | 00 00 00 00', slots: [
+  cam: { ok: false, enabled: false, raw: '50 3C 14 12 | 00 00 00 00', slots: [
     { name: 'red', seen: true, x: 80, y: 60, w: 20, h: 18 },
     { name: 'blue', seen: false, x: 0, y: 0, w: 0, h: 0 } ] },
   calib: [{ px: 30, py: 30 }, { px: 210, py: 30 }, { px: 120, py: 200 }],

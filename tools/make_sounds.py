@@ -92,6 +92,7 @@ LINES = {
     # a question that isn't about robots, math or physics (cloud.c's intent check): Muffin never answers those
     "offtopic":    ["I only talk about robots, math, and physics. Ask me about those!",
                     "That's not my department. Try me on robots, math, or physics."],
+    "no_eyes":     ["My eyes are switched off, so finding things is off too. Try lets dance, or ring the bell!"],
     "explain":     ["Great question! Here's what I know.", "Ooh, I can explain that."],
     # ---- conversation (chat.c)
     "hey":         ["You rang?", "Muffin here. What's up?", "Yes? The famous Muffin is listening."],

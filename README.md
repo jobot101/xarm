@@ -29,7 +29,6 @@ Use the 2×9 header on the audio board.
 | SDA (GPIO11) | vision module SDA | Shares the onboard bus (codecs 0x18/0x40, TCA9555 0x20, RTC 0x51) |
 | SCL (GPIO10) | vision module SCL | |
 
-- **Wireless camera (default from now on):** the vision module needs only power (5 V to its USB-C, e.g. a small 5 V buck off the arm's supply or a USB power bank). It joins Muffin's own WiFi network ("Muffin") and sends what it sees over WiFi; no SDA/SCL/GND wires to the board. Flash it once over USB with the flasher's **Camera** button. The wired I2C hookup in the table still works if you'd rather run wires.
 - **Power:** the arm runs on its 7.5 V brick. The audio board runs on USB-C (5 V), and the cam is fed from the board's 5V pin. Never put 7.5 V near the board.
 - **Pins to leave alone:** IO19/IO20 are the native USB lines. IO3/4/5/7/8/9 are the LCD pins and are free when no screen is fitted.
 - **Camera mount:** fix it overhead, looking straight down at the mat, roughly 350–450 mm (14–18 in) up. It needs to see the arm's whole reach. It must not move after calibration, so use a rigid printed bracket.

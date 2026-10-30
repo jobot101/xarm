@@ -650,7 +650,7 @@ static bool teach_move(int lesson, int k)
     uint16_t p[NSERVO];
     switch (lesson) {
     case LESSON_ROBOT:
-        if (k == 2 && g_cfg.cam_on_head) return look_at(0);                       // "I sense with my camera"
+        if (k == 2 && g_cfg.cam_on_head && cam_enabled()) return look_at(0);                       // "I sense with my camera"
         if (k == 4) {                                                              // "I act... like this"
             if (!go_home()) return false;
             return wiggle(1, 150);
@@ -673,7 +673,7 @@ static bool teach_move(int lesson, int k)
         if (k == 3) return grip(g_cfg.grip_open);
         break;
     case LESSON_VISION:
-        if (k == 0) return look_at(0);
+        if (k == 0) return cam_enabled() ? look_at(0) : true;
         if (k == 4) return go_home();
         break;
     case LESSON_SMOOTH:
@@ -810,7 +810,7 @@ static bool school_act(int a)
         pose(p, g_cfg.home, 0, c[0]);
         return (s_at_home = travel(p, g_cfg.move_ms));
     }
-    case SA_LOOK:     return g_cfg.cam_on_head ? look_at(0) : true;
+    case SA_LOOK:     return g_cfg.cam_on_head && cam_enabled() ? look_at(0) : true;
     case SA_BASE:     return wiggle(5, 120);
     case SA_SHOULDER: return wiggle(4, 60);
     case SA_ELBOW:    return wiggle(3, 60);
@@ -845,7 +845,7 @@ static bool school_act(int a)
         for (int j = 0; j < 4; j++) { fx_show(j); if (!wait_ms(450)) return false; }
         return true;
     case SA_SCAN:
-        if (!g_cfg.cam_on_head) return wiggle(5, 200);
+        if (!g_cfg.cam_on_head || !cam_enabled()) return wiggle(5, 200);
         return look_at(g_cfg.scan[1]) && look_at(g_cfg.scan[2]) && look_at(0);
     case SA_JOINTS: {
         static const int8_t idx[5] = {5, 4, 3, 2, 1};
