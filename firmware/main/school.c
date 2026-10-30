@@ -277,6 +277,7 @@ static const char *turn_words(int k)
     case K_BELL: return "Ring the bell.";          case K_DANCE: return "Let's dance.";
     case K_WAVE: return "Wave hello.";             case K_BOW: return "Take a bow.";
     case K_HOME: return "Go home.";                case K_STOP: return "Stop!";
+    case K_FETCH: return "Grab it. Close your hand."; case K_GIVEBACK: return "Let go. Open your hand.";
     default: return "A little up. A little left. Turn left. Tilt up.";
     }
 }
@@ -385,8 +386,50 @@ static bool warmup(int n)
 }
 
 // the kid's turn after a step that asks for one; false if the class got interrupted
+static void settle(void)                     // the command the router just let through: let it finish
+{
+    nap(300);
+    for (int quiet = 0; quiet < 2;) { nap(60); quiet = pick_idle() ? quiet + 1 : 0; }
+}
+
+// "hand me something": the hand is open toward the kid (act handoff). They put it in and tap Clamp (K_CLOSE);
+// Muffin checks the jaws stopped on something, else opens and asks again. Up to three tries, then pretends.
+static bool fetch(void)
+{
+    for (int tries = 0; tries < 3; tries++) {
+        s_turn_kind = K_FETCH;
+        int a = await(E_TURN, ANSWER_S);
+        if (a == A_NONE && !s_wrap) { say(SND_SC_FETCH_AGAIN); a = await(E_TURN, AGAIN_S); }
+        if (a == A_STOP) return false;
+        if (s_wrap) return true;
+        if (a != A_TURN_OK) { say(SND_SC_FETCH_SKIP); return !gone(); }
+        settle();
+        if (pick_caught()) { say(SND_SC_FETCH_OK); return true; }
+        say(SND_SC_FETCH_MISS);
+        if (!job(OP_OPEN, 0)) return false;
+    }
+    say(SND_SC_FETCH_SKIP);
+    return true;
+}
+
+// hand it back: the kid holds it and taps Let go (K_OPEN). Nobody takes it: put it down at the drop spot.
+static bool give_back(void)
+{
+    if (!pick_holding()) return true;        // nothing borrowed (they skipped the fetch)
+    s_turn_kind = K_GIVEBACK;
+    int a = await(E_TURN, ANSWER_S);
+    if (a == A_NONE && !s_wrap) { say(SND_SC_GIVEBACK_AGAIN); a = await(E_TURN, AGAIN_S); }
+    if (a == A_STOP) return false;
+    if (a == A_TURN_OK) { settle(); say(SND_SC_THANKS_LEND); return true; }
+    say(SND_SC_PUT_DOWN);
+    if (!job(OP_DROP, 0)) return false;
+    return s_wrap || !gone();
+}
+
 static bool turn(int kind)
 {
+    if (kind == K_FETCH) return fetch();
+    if (kind == K_GIVEBACK) return give_back();
     if (kind == K_STOP) {                    // "when I start dancing, shout stop!"
         uint32_t stops = s_stops;
         char msg[64];
@@ -409,8 +452,7 @@ static bool turn(int kind)
     if (a == A_NONE && !s_wrap) { say(TAP(SND_SC_TURN_AGAIN)); a = await(E_TURN, AGAIN_S); }
     if (a == A_STOP) return false;
     if (a == A_TURN_OK) {
-        nap(300);                            // the router queues the command right after letting it through
-        for (int quiet = 0; quiet < 2;) { nap(60); quiet = pick_idle() ? quiet + 1 : 0; }
+        settle();                            // the router queues the command right after letting it through
         say(SND_SC_TURN_OK);
         return true;
     }
@@ -482,6 +524,7 @@ static void wrap(void)
     s_expect = E_NONE;
     for (int t = 0; t < 30000 && !pick_idle(); t += 50) nap(50);     // the lesson finishes its sentence
     for (int t = 0; t < 30000 && fx_speaking(); t += 50) nap(50);
+    if (pick_holding()) { say(SND_SC_PUT_DOWN); job(OP_DROP, 0); }   // a borrowed thing: never sleep holding it
     job(OP_HOME, 0);
     if (s_content) {
         say(SND_SC_BELL);
@@ -825,6 +868,8 @@ static void turn_opts(cJSON *a, int k)
     case K_WAVE: opt(a, "Wave hello", "wave hello"); break;
     case K_BOW: opt(a, "Take a bow", "take a bow"); break;
     case K_HOME: opt(a, "Go home", "go home"); break;
+    case K_FETCH: opt(a, "Clamp!", "grab it"); break;
+    case K_GIVEBACK: opt(a, "Let go", "let go"); break;
     default: opt(a, "Up", "a little up"); opt(a, "Down", "a little down");
              opt(a, "Left", "a little left"); opt(a, "Right", "a little right"); break;
     }
@@ -872,7 +917,7 @@ static void ask_json(cJSON *o)
         opt(a, "Stop!", "stop");
         break;
     default:
-        cJSON_AddStringToObject(ask, "kind", "turn");
+        cJSON_AddStringToObject(ask, "kind", s_turn_kind == K_FETCH ? "fetch" : s_turn_kind == K_GIVEBACK ? "giveback" : "turn");
         turn_opts(a, s_turn_kind);
         break;
     }

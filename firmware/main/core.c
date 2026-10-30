@@ -253,6 +253,8 @@ bool kind_fits(int want, int got)
 {
     if (want == K_NONE) return false;
     if (want == K_NUDGE) return got == K_NUDGE || (got >= K_UP && got <= K_TILT);
+    if (want == K_FETCH) return got == K_CLOSE;
+    if (want == K_GIVEBACK) return got == K_OPEN;
     return want == got;
 }
 

@@ -64,6 +64,8 @@ export default function Learn({ online }) {
               : ask.kind === 'kid' ? "Who's here today?"
               : ask.kind === 'stop' ? 'Tell Muffin to stop!'
               : ask.kind === 'free' ? 'Free play! Pick one:'
+              : ask.kind === 'fetch' ? 'Put something small between Muffin\'s fingers, then:'
+              : ask.kind === 'giveback' ? 'Hold it, then:'
               : 'Your turn! Tell Muffin:'}</p>
             <div className="ask-opts">
               {ask.options.map(o => <button key={o.say} className={`ask-btn ${o.say}`} onClick={() => answer(o)}>{o.label}</button>)}

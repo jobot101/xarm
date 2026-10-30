@@ -296,4 +296,5 @@ button.link { background: none; border: 0; padding: 4px 0; color: var(--bad); fo
 @keyframes ask-in { from { opacity: 0 } to { opacity: 1 } }
 .learn-start { display: block; width: 100%; margin-top: 12px; padding: 18px; font-size: 22px; font-weight: 800; border-radius: 14px;
   border-width: 2px; background: var(--emerald); color: #fff; }
+.ask-fetch .ask-btn, .ask-giveback .ask-btn { background: var(--gold); color: var(--ink); font-size: 24px; padding: 22px 12px; }
 .ask-free .ask-btn { background: var(--amethyst); color: #fff; font-size: 18px; }

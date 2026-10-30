@@ -142,3 +142,8 @@ git push                              # CI builds + publishes release "latest"
   Idle/paused: ask {kind start|resume} -> a Start class / Keep going button on the top card. Free play: ask
   {kind free} -> a pop-up of tricks. Lines with a _tap twin (sc_tf_how, sc_turn_again, sc_more, sc_free, sc_away,
   sc_wake, sc_invite) say "tap" instead of "say" (TAP() in school.c). Lesson stories still say "say, a little up".
+- Borrowing an object: lesson turns "fetch" / "giveback" (K_FETCH / K_GIVEBACK, School-only kinds) with act
+  "handoff" (reach toward the kid, hand open unless holding). Fetch: pop-up Clamp! (= "grab it", K_CLOSE), then
+  pick_caught() reads the gripper: missed -> open, ask again (3 tries), then pretend. Giveback: pop-up Let go
+  (K_OPEN); nobody takes it -> put it down at the drop spot. wrap() never sleeps holding something. Used in
+  lessons 7 (payload: close vs far), 8 (grip: friction), 10 (gravity: holding still).

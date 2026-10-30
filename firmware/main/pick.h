@@ -26,6 +26,7 @@ void pick_listening(bool on);                            // ears open: lean in, 
 void pick_anim(bool on);                                 // lifelike motion on/off (saved)
 bool pick_anim_on(void);                             // OP_LESSON: the step after the last one it finished
 bool pick_holding(void);
+bool pick_caught(void);                              // after closing: did the jaws stop on something?
 void pick_status(char *state, size_t ns, char *detail, size_t nd);
 bool pick_locate(int slot, float *px, float *py);        // averaged blob center, false if not seen
 bool pick_look(void);                                   // head cam: move to the look pose (blocking)

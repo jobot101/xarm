@@ -854,6 +854,10 @@ static bool school_act(int a)
         return s_holding || (grip(g_cfg.grip_open) && grip(g_cfg.grip_close) && grip(g_cfg.grip_open));
     }
     case SA_CHEER:    fx_play(SND_S_CHEER); return true;
+    case SA_HANDOFF:                                          // reach toward the kid; hand open unless holding
+        pose(p, g_cfg.give, 0, hand());
+        if (!travel(p, g_cfg.move_ms)) return false;
+        return s_holding || grip(g_cfg.grip_open);
     default:          return true;
     }
 }
@@ -1166,6 +1170,7 @@ void pick_stop(void)
 bool pick_busy(void) { return s_busy; }
 bool pick_idle(void) { return !s_busy && !uxQueueMessagesWaiting(s_q); }
 bool pick_holding(void) { return s_holding; }
+bool pick_caught(void) { return holding_check(); }   // jaws stopped on something? (reads the gripper)
 void pick_status(char *st, size_t ns, char *d, size_t nd)
 {
     strlcpy(st, s_state, ns);

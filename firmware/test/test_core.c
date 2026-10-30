@@ -168,6 +168,7 @@ int main(void)
     assert(pass_heard("thats my secret", "that's my secret"));
     assert(kind_fits(K_NUDGE, K_UP) && kind_fits(K_NUDGE, K_TILT) && !kind_fits(K_NUDGE, K_DANCE));
     assert(kind_fits(K_UP, K_UP) && !kind_fits(K_UP, K_DOWN) && !kind_fits(K_NONE, K_NONE));
+    assert(kind_fits(K_FETCH, K_CLOSE) && !kind_fits(K_FETCH, K_OPEN) && kind_fits(K_GIVEBACK, K_OPEN) && !kind_fits(K_GIVEBACK, K_CLOSE));
     {
         uint8_t m[4] = {0};
         assert(recap_pick(m, 0, 7, -1) == -1 && recap_pick(m, 1, 7, 0) == 0);

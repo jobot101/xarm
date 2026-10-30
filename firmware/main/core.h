@@ -103,9 +103,11 @@ bool text_junk(const char *cleaned);
 // What a command does, as the router classifies it. School "your turn" steps name one of these, so
 // tools/make_sounds.py reads this enum to check the lesson scripts: keep names and order in step.
 // K_NUDGE in a script accepts any nudge (up/down/left/right/turn/tilt).
+// K_FETCH / K_GIVEBACK are School-only turns (never a command): "hand me something" is answered by a clamp
+// (K_CLOSE) and "take it back" by a let go (K_OPEN). make_sounds.py parses this enum: no comments inside it.
 typedef enum { K_NONE, K_NUDGE, K_UP, K_DOWN, K_LEFT, K_RIGHT, K_TURN, K_TILT, K_OPEN, K_CLOSE, K_BELL,
                K_DANCE, K_WAVE, K_BOW, K_PICK, K_HOLD, K_STOP, K_HOME, K_DROP, K_GIVE, K_SORT, K_STACK,
-               K_PLAY, K_KINDS } cmd_kind_t;
+               K_PLAY, K_FETCH, K_GIVEBACK, K_KINDS } cmd_kind_t;
 bool kind_fits(int want, int got);              // does a command of kind `got` answer a turn that wants `want`?
 // days since 1970-01-01 for a calendar date (proleptic Gregorian); yesterday = today - 1, across years too
 int32_t civil_days(int y, int m, int d);

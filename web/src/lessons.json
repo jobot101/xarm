@@ -275,7 +275,11 @@
      "title": "Riddle time. When does a block get heavier without changing at all",
      "teaser": "Next time: a riddle about something that gets heavier without changing.",
      "story": [
-      "Answer. When I hold it farther away.",
+      "Answer. When I hold it farther away. Let me show you.",
+      "Hand me something small. A block, an eraser, a toy. Put it between my fingers, then tap Clamp.",
+      "Close to my body, this is easy. Barely a feather.",
+      "Now watch me reach way out with it. Same thing. My shoulder suddenly works much harder.",
+      "Back in close. Ahh. Relief.",
       "Robot makers tell you a payload. That's the most a robot can carry.",
       "But that number is always for a certain reach. Close in, I can lift more. Far out, less.",
       "It's torque again, from lesson five.",
@@ -283,6 +287,7 @@
       "They get hot. Push too long, and they can wear out.",
       "So a smart robot keeps heavy things close, and only reaches far with light things.",
       "Think about it. Would you carry a full backpack on your back, or straight out in front of you?",
+      "Thanks for the loan. Hold on to it, then tap Let go, and it's yours again.",
       "Your turn. Say, go home. That's where I carry things best."
      ]
     },
@@ -298,9 +303,11 @@
       "The harder I squeeze, the more friction. But too hard, and I crush a paper cup.",
       "So I squeeze, then ease off a tiny bit. Just enough.",
       "And here's my trick. If my gripper closes almost all the way, I know I missed. Nothing was there.",
+      "Let's test it. Hand me something small, and put it right between my fingers. Then tap Clamp.",
+      "See? I'm not hooking it. I'm squeezing, and friction is doing the holding.",
+      "If it were wet and slippery, it would slide right out. Squeezing harder would only help a little.",
       "That's why some grippers have rubber pads. Rubber means more friction.",
-      "Your turn. Say, close your hand.",
-      "Now say, open your hand."
+      "Okay, I'll give it back. Hold it tight, then tap Let go."
      ]
     },
     {
@@ -327,11 +334,13 @@
       "Hold your arm straight out to the side. Don't move it. Keep holding.",
       "Getting tired? You're not moving. So why are your muscles working?",
       "Because gravity pulls down every single second, and you push back every single second.",
-      "Same for me. When I hold my arm out, my servos fight gravity the whole time.",
+      "Same for me. Hand me something to hold, and I'll prove it. Put it in my fingers, then tap Clamp.",
+      "Now I hold it out, perfectly still. My servos are fighting gravity the whole time.",
       "They use electricity even though I look perfectly still. Perfectly and gorgeously still.",
       "Big factory robots are clever. Springs and counterweights do some of the holding.",
       "That's called gravity compensation. The motors work less, and last longer.",
       "Okay. You can put your arm down now. You did great.",
+      "And here's your thing back. Hold it, then tap Let go.",
       "Your turn. Say, a little up. Feel how my shoulder has to lift against gravity."
      ]
     },

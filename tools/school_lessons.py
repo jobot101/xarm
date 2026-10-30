@@ -11,6 +11,10 @@ A lesson is:
             turn = after the sentence, the kid's turn: Muffin waits for that kind of voice command
                    (the cmd_kind_t names in firmware/main/core.h, lower case, without K_). The sentence
                    must tell the kid exactly what to say, in a phrase Muffin's ears know (router.c).
+                   "fetch": Muffin asks for an object (pair it with act "handoff"); the kid puts it in the open
+                   hand and taps Clamp. Muffin checks it really caught something, and asks again if not.
+                   "giveback": hand it back (act "handoff" again); the kid holds it and taps Let go.
+                   Between the two, no act that opens the hand (pick.c skips those while holding anyway).
   quiz    three true/false questions: (statement, answer, why). Two check the lesson right after it;
           all of them come back later as warm-up questions, the missed ones first.
   teaser  one line Muffin says at the end of the class before, to make tomorrow worth coming back for.
@@ -21,7 +25,8 @@ Keep sentences short: while Muffin talks it can only hear "stop".
 
 # what the arm can do during a sentence (pick.c school_act), in this order
 ACTS = ["none", "home", "look", "base", "shoulder", "elbow", "wrist", "twist", "grip", "open", "close", "out",
-        "jerky", "smooth", "fast", "slow", "wave", "bow", "dance", "bell", "jewels", "scan", "joints", "cheer"]
+        "jerky", "smooth", "fast", "slow", "wave", "bow", "dance", "bell", "jewels", "scan", "joints", "cheer",
+        "handoff"]   # handoff: reach toward the kid, hand open (or still holding what it has)
 
 T = "True or false? "
 
@@ -149,7 +154,11 @@ SCHOOL = [
     ]),
     dict(name="payload", teaser="Next time: a riddle about something that gets heavier without changing.", steps=[
         "Lesson seven. Riddle time. When does a block get heavier without changing at all?",
-        "Answer. When I hold it farther away.",
+        "Answer. When I hold it farther away. Let me show you.",
+        ("Hand me something small. A block, an eraser, a toy. Put it between my fingers, then tap Clamp.", "handoff", "fetch"),
+        ("Close to my body, this is easy. Barely a feather.", "home"),
+        ("Now watch me reach way out with it. Same thing. My shoulder suddenly works much harder.", "out"),
+        ("Back in close. Ahh. Relief.", "home"),
         "Robot makers tell you a payload. That's the most a robot can carry.",
         "But that number is always for a certain reach. Close in, I can lift more. Far out, less.",
         "It's torque again, from lesson five.",
@@ -157,6 +166,7 @@ SCHOOL = [
         "They get hot. Push too long, and they can wear out.",
         "So a smart robot keeps heavy things close, and only reaches far with light things.",
         "Think about it. Would you carry a full backpack on your back, or straight out in front of you?",
+        ("Thanks for the loan. Hold on to it, then tap Let go, and it's yours again.", "handoff", "giveback"),
         ("Your turn. Say, go home. That's where I carry things best.", "none", "home"),
     ], quiz=[
         (T + "A robot can carry more close in than far out.", True,
@@ -175,9 +185,11 @@ SCHOOL = [
         "The harder I squeeze, the more friction. But too hard, and I crush a paper cup.",
         "So I squeeze, then ease off a tiny bit. Just enough.",
         "And here's my trick. If my gripper closes almost all the way, I know I missed. Nothing was there.",
+        ("Let's test it. Hand me something small, and put it right between my fingers. Then tap Clamp.", "handoff", "fetch"),
+        ("See? I'm not hooking it. I'm squeezing, and friction is doing the holding.", "twist"),
+        "If it were wet and slippery, it would slide right out. Squeezing harder would only help a little.",
         "That's why some grippers have rubber pads. Rubber means more friction.",
-        ("Your turn. Say, close your hand.", "none", "close"),
-        ("Now say, open your hand.", "none", "open"),
+        ("Okay, I'll give it back. Hold it tight, then tap Let go.", "handoff", "giveback"),
     ], quiz=[
         (T + "My gripper holds things using friction.", True,
          "I squeeze, and friction does the holding."),
@@ -210,11 +222,13 @@ SCHOOL = [
         "Hold your arm straight out to the side. Don't move it. Keep holding.",
         "Getting tired? You're not moving. So why are your muscles working?",
         "Because gravity pulls down every single second, and you push back every single second.",
-        ("Same for me. When I hold my arm out, my servos fight gravity the whole time.", "out"),
+        ("Same for me. Hand me something to hold, and I'll prove it. Put it in my fingers, then tap Clamp.", "handoff", "fetch"),
+        ("Now I hold it out, perfectly still. My servos are fighting gravity the whole time.", "out"),
         "They use electricity even though I look perfectly still. Perfectly and gorgeously still.",
         ("Big factory robots are clever. Springs and counterweights do some of the holding.", "home"),
         "That's called gravity compensation. The motors work less, and last longer.",
         "Okay. You can put your arm down now. You did great.",
+        ("And here's your thing back. Hold it, then tap Let go.", "handoff", "giveback"),
         ("Your turn. Say, a little up. Feel how my shoulder has to lift against gravity.", "none", "up"),
     ], quiz=[
         (T + "Holding still takes no energy for a robot arm.", False,
@@ -1120,6 +1134,15 @@ SCHOOL_LINES = {
     "sc_minutes":   ["{n} minutes left today."],
     "sc_last":      ["Only a minute or two left today. Let's make it count."],
     "sc_rank_up":   ["Big news. You earned a new rank!"],
+    # "fetch" / "giveback" turns: borrowing a real object
+    "sc_fetch_ok":   ["Got it! Thank you. My fingers are very grateful.", "Caught it. Smooth handoff, partner."],
+    "sc_fetch_miss": ["Hmm. My fingers closed on air. Let's try again. Put it right in the middle.",
+                      "Whoops. Nothing in there. Try once more, right between my fingers."],
+    "sc_fetch_skip": ["No worries. I'll pretend I'm holding something. I have a great imagination."],
+    "sc_fetch_again": ["Put it between my fingers, then tap Clamp."],
+    "sc_giveback_again": ["Hold it, then tap Let go."],
+    "sc_thanks_lend": ["Thanks for lending it to me.", "Returned in perfect condition. Mostly."],
+    "sc_put_down":   ["I'll just put it down over here. Safe and sound."],
     # taps only (School setting): the same moments, worded for the Learning page's buttons
     "sc_tf_how_tap":     ["Tap true, or false."],
     "sc_turn_again_tap": ["Go on. Tap it. I'm very patient, for a robot.", "Your turn. Tap the button."],

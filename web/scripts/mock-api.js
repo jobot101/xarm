@@ -25,6 +25,8 @@ export const ASKS = {
   nudge: { kind: 'turn', options: [{ label: 'Up', say: 'a little up' }, { label: 'Down', say: 'a little down' }, { label: 'Left', say: 'a little left' }, { label: 'Right', say: 'a little right' }] },
   stop: { kind: 'stop', options: [{ label: 'Stop!', say: 'stop' }] },
   free: { kind: 'free', options: [{ label: 'Dance!', say: 'lets dance' }, { label: 'Wave hello', say: 'wave hello' }, { label: 'Ring the bell', say: 'ring the bell' }, { label: 'Take a bow', say: 'take a bow' }, { label: 'Open hand', say: 'open your hand' }, { label: 'Close hand', say: 'close your hand' }] },
+  fetch: { kind: 'fetch', options: [{ label: 'Clamp!', say: 'grab it' }] },
+  giveback: { kind: 'giveback', options: [{ label: 'Let go', say: 'let go' }] },
   start: { kind: 'start', options: [{ label: 'Start class', say: 'lets go' }] },
 }
 school.ask = JSON.parse(JSON.stringify(ASKS.start))   // taps only, waiting: the Start class button
