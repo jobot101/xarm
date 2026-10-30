@@ -562,9 +562,12 @@ static void session(void)
         if (!P[k].warmed) { say(SND_SC_REVIEW); if (!warmup(3)) goto out; }
     } else {
         if (!P[k].warmed && P[k].next > 0) { say(SND_SC_WARMUP); if (!warmup(2)) goto out; }
-        while (!s_wrap && P[k].next < SCHOOL_COUNT && P[k].lessons_today < MAX_LESSONS && left_s(k) >= LESSON_MIN_S) {
+        // (a lesson whose voice isn't on the card yet ends the lessons for now: SCHOOL_VOICED in make_sounds.py)
+        while (!s_wrap && P[k].next < SCHOOL_COUNT && P[k].lessons_today < MAX_LESSONS && left_s(k) >= LESSON_MIN_S &&
+               fx_has(SCHOOL_STEP[SCHOOL[P[k].next].step].g)) {
             if (!lesson(P[k].next)) goto out;
-            if (s_wrap || P[k].next >= SCHOOL_COUNT || P[k].lessons_today >= MAX_LESSONS || left_s(k) < MORE_MIN_S) break;
+            if (s_wrap || P[k].next >= SCHOOL_COUNT || P[k].lessons_today >= MAX_LESSONS || left_s(k) < MORE_MIN_S ||
+                !fx_has(SCHOOL_STEP[SCHOOL[P[k].next].step].g)) break;
             say(SND_SC_MORE);
             int a = await(E_YN, ANSWER_S);
             if (a == A_STOP) goto out;

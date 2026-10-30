@@ -234,6 +234,9 @@ LINES.update({
     "quiz_zero":   ["Zero out of three. Let's call that practice."],
 })
 LESSON_GROUPS = {}     # filled by main(): lesson -> list of group names, one per sentence
+# Robot School lessons voiced so far (the rest stay in the bank's layout, empty, and School stops before the first
+# one without a voice). Voicing all 53 is about an hour of speech for the first build: raise this when ready.
+SCHOOL_VOICED = 3
 
 # ---- Muffin's Robot School (school.c): the daily class. Lessons live in school_lessons.py and are voiced
 # into the SD-card bank only ("SD-only" groups: present in sounds_gen.h and in the flash bank's group table
@@ -675,12 +678,13 @@ def main():
         for gname, texts in expand(group, variants):
             sd.append((gname, [speech(t) for t in texts]))
     for i, lesson in enumerate(SL.SCHOOL, 1):
+        say = (lambda t: [speech(t)]) if i <= SCHOOL_VOICED else (lambda t: [])   # not voiced yet: empty group
         for k, (t, _, _) in enumerate(school_steps(lesson), 1):
-            sd.append((f"s{i}_{k}", [speech(t)]))
+            sd.append((f"s{i}_{k}", say(t)))
         for k, (q, _, why) in enumerate(lesson["quiz"], 1):
-            sd.append((f"sq{i}_{k}", [speech(q)]))
-            sd.append((f"sqa{i}_{k}", [speech(why)]))
-        sd.append((f"st{i}", [speech(lesson["teaser"])]))
+            sd.append((f"sq{i}_{k}", say(q)))
+            sd.append((f"sqa{i}_{k}", say(why)))
+        sd.append((f"st{i}", say(lesson["teaser"])))
     print(f"school    {len(SL.SCHOOL)} lessons, {sum(len(y) for _, ys in sd for y in ys) / OUT_SR:.0f} s (SD card only)")
 
     write_hq_bank(groups, clips, sd)
