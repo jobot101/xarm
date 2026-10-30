@@ -22,7 +22,7 @@ export default function School({ run }) {
     <section className="card">
       <h2>Robot School <small>{sc.state}{sc.kid ? ` · ${sc.kid}` : ''}</small></h2>
       <label className="autoup">
-        <span>Daily class by voice: lesson, quiz, free play, then Muffin sleeps until tomorrow</span>
+        <span>Daily class: a warm-up, then lessons back to back, then Muffin sleeps until tomorrow</span>
         <input type="checkbox" checked={sc.on} onChange={e => set({ on: e.target.checked })} />
       </label>
       <label className="autoup">

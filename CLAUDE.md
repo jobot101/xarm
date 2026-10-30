@@ -158,3 +158,8 @@ git push                              # CI builds + publishes release "latest"
   Tomorrow (asleep) / Offline. Only one primary button on the page; progress card sits below it.
 - One student (Jack). Workshop -> School -> Student's name: POST /api/school {student} -> set_student(): no kid
   yet = add one and hand them the guest progress; else rename the first kid (kids_rename keeps progress).
+- No free play: class = warm-up, then lessons back to back (a tapped lesson first) until MAX_LESSONS or the
+  minutes run out; then the day ends (used_s set to the limit) with the bell and sleep. No card: says so, pauses.
+- SD card: never formatted on its own. Workshop -> Voice -> "Format card for Muffin" (/api/voice {sd_format:1})
+  sets NVS sd_fmt + sd_voice and restarts; sd_init then wipes the card to FAT32 (64 KB clusters) and the voice
+  downloads onto it.

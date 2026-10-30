@@ -484,6 +484,12 @@ static esp_err_t h_voice(httpd_req_t *r)
     cJSON *b = body(r);
     voice_tune(num(b, "gain", -1), num(b, "thresh", -1), num(b, "wake", -1));
     int dual = num(b, "dual", -1), cl = num(b, "cloud", -1), sdv = num(b, "sd", -1), face = num(b, "face", 9);
+    if (num(b, "sd_format", 0) == 1) {                      // erase the card to FAT32 on a restart, then store the voice
+        cJSON_Delete(b);
+        sd_format_next_boot();
+        xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+        return reply(r, true, "formatting the card: Muffin restarts, then downloads its voice (a few minutes)");
+    }
     if (face >= -1 && face <= 1) voice_face_set(face);
     cJSON *key = cJSON_GetObjectItem(b, "stt_key");
     bool keyed = cJSON_IsString(key);

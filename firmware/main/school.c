@@ -29,7 +29,6 @@ static const char *TAG = "school";
 #define EXTRA_S        600          // grown-up passphrase: ten more minutes
 #define ANSWER_S       20           // waiting for an answer or a "your turn" command
 #define AGAIN_S        12           // after asking again
-#define FREE_IDLE_S    180          // free play with nobody talking: pause the clock
 #define LESSON_MIN_S   240          // don't start a lesson with less than this left
 #define MORE_MIN_S     360          // offer another lesson only with this much left
 #define MAX_LESSONS    3            // new lessons a day: spacing beats cramming
@@ -511,23 +510,6 @@ static bool lesson_run(int i)
     return true;
 }
 
-static void free_play(void)
-{
-    if (s_content) say(TAP(SND_SC_FREE));
-    s_heard_us = esp_timer_get_time();
-    s_expect = E_FREE;
-    while (!s_wrap && s_on && s_want_lesson < 0) {          // a Start lesson tap ends free play
-        if (esp_timer_get_time() - s_heard_us > (int64_t)FREE_IDLE_S * 1000000 && pick_idle() && !fx_speaking()) {
-            s_expect = E_NONE;
-            say(TAP(SND_SC_AWAY));
-            pause_class();
-            return;
-        }
-        nap(100);
-    }
-    s_expect = E_NONE;
-}
-
 static void wrap(void)
 {
     s_expect = E_NONE;
@@ -621,32 +603,30 @@ static void session(void)
         if (left_s(k) < 150) say(SND_SC_LAST);
         else if (m >= 2 && m < s_minutes && m <= SND_N_NUMBERS) say_n(SND_SC_MINUTES_1, m);
     }
-    if (!s_content) { fx_say(SND_SC_NOCARD); free_play(); if (s_wrap) wrap(); return; }
+    if (!s_content) { fx_say(SND_SC_NOCARD); pause_class(); return; }   // the lessons live on the card
 
-    if (s_want_lesson >= 0) { }              // they picked a lesson: straight to it (below), no warm-up
-    else if (P[k].next >= SCHOOL_COUNT) {    // finished the course: review, then play
-        if (!P[k].warmed) { say(SND_SC_REVIEW); if (!warmup(3)) goto out; }
-    } else {
-        if (!P[k].warmed && P[k].next > 0) { say(SND_SC_WARMUP); if (!warmup(2)) goto out; }
-        // (a lesson whose voice isn't on the card yet ends the lessons for now: SCHOOL_VOICED in make_sounds.py)
-        while (!s_wrap && P[k].next < SCHOOL_COUNT && P[k].lessons_today < MAX_LESSONS && left_s(k) >= LESSON_MIN_S &&
-               fx_has(SCHOOL_STEP[SCHOOL[P[k].next].step].g)) {
-            if (!lesson(P[k].next)) goto out;
-            if (s_wrap || P[k].next >= SCHOOL_COUNT || P[k].lessons_today >= MAX_LESSONS || left_s(k) < MORE_MIN_S ||
-                !fx_has(SCHOOL_STEP[SCHOOL[P[k].next].step].g)) break;
-            say(TAP(SND_SC_MORE));
-            int a = await(E_YN, ANSWER_S);
-            if (a == A_STOP) goto out;
-            if (a != A_YES) break;
-        }
+    if (s_want_lesson < 0) {                 // a warm-up first, unless they tapped a particular lesson
+        if (P[k].next >= SCHOOL_COUNT) { if (!P[k].warmed) { say(SND_SC_REVIEW); if (!warmup(3)) goto out; } }
+        else if (!P[k].warmed && P[k].next > 0) { say(SND_SC_WARMUP); if (!warmup(2)) goto out; }
     }
-    while (!s_wrap) {                        // free play; a Start lesson tap runs that lesson, then back to play
+    // straight into classes, back to back (no free play): a tapped lesson first, then on through the course
+    // until today's lessons or minutes run out. (A lesson whose voice isn't on the card yet stops here too.)
+    while (!s_wrap) {
         int L = s_want_lesson;
         s_want_lesson = -1;
-        if (L >= 0 && L <= P[k].next && L < SCHOOL_COUNT && fx_has(SCHOOL_STEP[SCHOOL[L].step].g) && !lesson(L)) goto out;
-        if (s_wrap) break;
-        free_play();
-        if (s_want_lesson < 0) break;        // walked away, or time's up
+        if (L < 0 || L > P[k].next || L >= SCHOOL_COUNT || !fx_has(SCHOOL_STEP[SCHOOL[L].step].g)) {
+            L = P[k].next;
+            if (L >= SCHOOL_COUNT || P[k].lessons_today >= MAX_LESSONS || left_s(k) < LESSON_MIN_S ||
+                !fx_has(SCHOOL_STEP[SCHOOL[L].step].g)) break;
+        }
+        if (!lesson(L)) goto out;
+    }
+    if (!s_wrap) {                           // that's everything for today: the bell, and sleep till tomorrow
+        lock();
+        if (P[k].used_s < limit_s(k)) P[k].used_s = (uint16_t)limit_s(k);
+        save();
+        unlock();
+        s_wrap = true;
     }
 out:
     s_want_lesson = -1;

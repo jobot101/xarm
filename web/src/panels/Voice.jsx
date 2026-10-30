@@ -68,6 +68,8 @@ export default function Voice({ s, run }) {
           Store Muffin's full-quality voice on the SD card
         </label>
         <p className="hint">Card: {v.sd.card_status}{v.sd.on ? ` · ${v.sd.status}` : ''}</p>
+        <button className="pill danger" onClick={() => confirm('Erase everything on the memory card and set it up for Muffin\'s voice?') &&
+          run(api.voice({ sd_format: 1 }))}>Format card for Muffin</button>
         <p className="hint">Muffin only ever writes inside a <code>muffin</code> folder on the card and never formats it.
           About 25 MB. The flash voice keeps playing until the download is checked and ready.</p>
       </div>}

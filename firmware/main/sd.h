@@ -1,6 +1,7 @@
 // sd.h — the board's TF card, for Muffin's full-quality voice (sounds_hq.bin in /sdcard/muffin/).
-// Mounted at boot, never formatted. Muffin writes to the card only after "Store voice on SD card" is
-// switched on in Workshop -> Voice, and then only inside /sdcard/muffin/. Nothing else on the card is touched.
+// Mounted at boot. Never formatted on its own: only when a grown-up taps "Format card for Muffin" (Workshop ->
+// Voice), which wipes it to FAT32 on the next boot. Muffin writes to the card only after "Store voice on SD card"
+// is switched on, and then only inside /sdcard/muffin/.
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
@@ -18,3 +19,4 @@ void sd_status(char *out, size_t n);         // "16 GB card, 14.2 GB free" / "no
 uint64_t sd_free_bytes(void);
 bool sd_voice_wanted(void);                  // the Workshop switch (NVS), default off
 void sd_voice_set(bool on);
+void sd_format_next_boot(void);              // erase the card to FAT32 on the next boot (and store the voice there)

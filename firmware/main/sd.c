@@ -49,14 +49,29 @@ bool sd_init(i2c_master_bus_handle_t bus)
     slot.d0 = GPIO_NUM_41;
     slot.d1 = slot.d2 = slot.d3 = slot.d4 = slot.d5 = slot.d6 = slot.d7 = GPIO_NUM_NC;
     slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    // formatting only ever happens when asked (Format card for Muffin): the card may hold someone's photos
+    nvs_handle_t h;
+    uint8_t fmt = 0;
+    if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_get_u8(h, "sd_fmt", &fmt);
+        if (fmt) { nvs_erase_key(h, "sd_fmt"); nvs_commit(h); }   // one shot, even if it fails
+        nvs_close(h);
+    }
     esp_vfs_fat_sdmmc_mount_config_t mc = {
-        .format_if_mount_failed = false,                     // never: the card may hold someone's photos
+        .format_if_mount_failed = fmt != 0,                  // exFAT / unreadable: wipe to FAT32
         .max_files = 4,
         .allocation_unit_size = 16 * 1024,
     };
+    if (fmt) mc.allocation_unit_size = 64 * 1024;           // big clusters: a small FAT, a quick format
     esp_err_t e = esp_vfs_fat_sdmmc_mount(SD_ROOT, &host, &slot, &mc, &s_card);
+    if (fmt && e == ESP_OK) {                                // it was readable FAT already: wipe it anyway, as asked
+        ESP_LOGW(TAG, "formatting the card for Muffin");
+        e = esp_vfs_fat_sdcard_format_cfg(SD_ROOT, s_card, &mc);
+        if (e != ESP_OK) ESP_LOGE(TAG, "format failed: %s", esp_err_to_name(e));
+    }
     if (e == ESP_FAIL) {
-        strlcpy(s_status, "card isn't FAT32 (exFAT cards are left alone, never formatted)", sizeof s_status);
+        strlcpy(s_status, fmt ? "couldn't format the card: try another card"
+                              : "card isn't FAT32: tap Format card for Muffin (erases it)", sizeof s_status);
     } else if (e != ESP_OK) {
         snprintf(s_status, sizeof s_status, "no card (%s)", esp_err_to_name(e));
     } else {
@@ -79,6 +94,16 @@ uint64_t sd_free_bytes(void)
     uint64_t total = 0, free_b = 0;
     if (s_ok) esp_vfs_fat_info(SD_ROOT, &total, &free_b);
     return free_b;
+}
+
+void sd_format_next_boot(void)
+{
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u8(h, "sd_fmt", 1);
+    nvs_set_u8(h, "sd_voice", 1);                            // and the voice goes on it right after
+    nvs_commit(h);
+    nvs_close(h);
 }
 
 bool sd_voice_wanted(void)

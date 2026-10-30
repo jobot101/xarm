@@ -3,8 +3,8 @@
 // Once a day each kid gets a class of N minutes (Workshop -> School, default 20). The first thing anyone says
 // starts it: Muffin greets them, asks who's there if it knows several kids, runs a warm-up quiz on past
 // lessons (missed questions first), teaches the next lesson (talking while the arm demonstrates, with
-// "your turn" moments where the kid gives a voice command), checks it with two true/false questions, offers
-// another lesson while there's time, then free play. When the time is up it finishes the sentence, says
+// "your turn" moments where the kid gives a voice command), checks it with two true/false questions, and goes
+// straight on to the next lesson (no free play) until today's lessons or minutes run out. Then it finishes the sentence, says
 // what's next tomorrow, bows, and sleeps until the next day: it only answers "stop" and the grown-up
 // passphrase (ten more minutes). The web app is the grown-up's controller and is never limited.
 //
