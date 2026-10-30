@@ -247,3 +247,136 @@ bool text_junk(const char *t)
         "subscribe", "music", "applause", "silence", "the end", "bye bye bye", 0 };
     return in_list(t, J);
 }
+
+// ---------------------------------------------------------------- Robot School
+bool kind_fits(int want, int got)
+{
+    if (want == K_NONE) return false;
+    if (want == K_NUDGE) return got == K_NUDGE || (got >= K_UP && got <= K_TILT);
+    return want == got;
+}
+
+int32_t civil_days(int y, int m, int d)      // Howard Hinnant's days_from_civil
+{
+    y -= m <= 2;
+    int era = (y >= 0 ? y : y - 399) / 400;
+    unsigned yoe = (unsigned)(y - era * 400);
+    unsigned doy = (153 * (unsigned)(m + (m > 2 ? -3 : 9)) + 2) / 5 + (unsigned)d - 1;
+    unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (int32_t)era * 146097 + (int32_t)doe - 719468;
+}
+
+uint16_t streak_next(int32_t last_day, int32_t today, uint16_t streak)
+{
+    if (last_day == today) return streak ? streak : 1;          // second visit the same day
+    if (last_day == today - 1) return streak < 9999 ? streak + 1 : streak;
+    return 1;
+}
+
+// lower-case words only, single spaces, no leading/trailing space
+static void words(const char *in, char *out, size_t n)
+{
+    size_t k = 0;
+    bool sp = true;
+    for (; *in && k + 1 < n; in++) {
+        unsigned char c = (unsigned char)*in;
+        if (isalnum(c)) { out[k++] = (char)tolower(c); sp = false; }
+        else if (c == '\'') continue;                           // "that's" == "thats"
+        else if (!sp) { out[k++] = ' '; sp = true; }
+    }
+    while (k && out[k - 1] == ' ') k--;
+    out[k] = 0;
+}
+
+bool pass_heard(const char *heard, const char *pass)
+{
+    char h[96], p[48];
+    words(heard ? heard : "", h, sizeof h);
+    words(pass ? pass : "", p, sizeof p);
+    int letters = 0;
+    for (const char *c = p; *c; c++) letters += *c != ' ';
+    if (letters < 6) return false;
+    size_t lp = strlen(p);
+    for (const char *s = h; (s = strstr(s, p)); s++) {
+        bool start = s == h || s[-1] == ' ', end = s[lp] == 0 || s[lp] == ' ';
+        if (start && end) return true;
+    }
+    return false;
+}
+
+int recap_pick(const uint8_t *missed, int n, uint32_t rnd, int avoid)
+{
+    if (n <= 0) return -1;
+    if (n == 1) return 0;
+    int nm = 0;
+    for (int i = 0; i < n; i++) if (i != avoid && missed && (missed[i >> 3] >> (i & 7) & 1)) nm++;
+    if (nm) {
+        int k = (int)(rnd % (uint32_t)nm);
+        for (int i = 0; i < n; i++)
+            if (i != avoid && (missed[i >> 3] >> (i & 7) & 1) && k-- == 0) return i;
+    }
+    int pool = avoid >= 0 && avoid < n ? n - 1 : n;
+    int k = (int)(rnd % (uint32_t)pool);
+    for (int i = 0; i < n; i++) if (i != avoid && k-- == 0) return i;
+    return 0;
+}
+
+int rank_of(int done) { return done < 0 ? 0 : done / SCHOOL_RANK_EVERY; }
+
+// ---------------------------------------------------------------- lifelike travel
+void arc_pose(const uint16_t from[NSERVO], const uint16_t to[NSERVO], const int16_t bulge[NSERVO],
+              const uint16_t lag_ms[NSERVO], float dur_ms, float t_ms, uint16_t out[NSERVO])
+{
+    for (int i = 0; i < NSERVO; i++) {
+        float u = dur_ms > 0 ? (t_ms - (lag_ms ? lag_ms[i] : 0)) / dur_ms : 1;
+        float s = ease_minjerk(u);
+        // straight min-jerk line plus a 4s(1-s) hump: zero at both ends, full bulge at the middle
+        float v = from[i] + (to[i] - from[i]) * s + (bulge ? bulge[i] : 0) * 4 * s * (1 - s);
+        out[i] = clamp_pos((int)lroundf(v));
+    }
+}
+
+float pink_next(pink_t *p, uint32_t rnd)
+{
+    // each row is re-rolled half as often as the one before (row k when bit k of the counter flips)
+    uint32_t n = ++p->n, k = 0;
+    while (k < 7 && !(n & (1u << k))) k++;
+    float v = ((rnd >> 8) & 0xFFFF) / 32767.5f - 1.0f;          // -1..1
+    p->sum += v - p->row[k];
+    p->row[k] = v;
+    return p->sum / 4.0f;                                         // 8 rows of +-1: about +-1 most of the time
+}
+
+int beat_find(const float *env, int n, int lo, int hi, float *conf, int *phase)
+{
+    *conf = 0; *phase = 0;
+    if (n < hi * 3 || lo < 2 || hi <= lo) return 0;
+    float mean = 0;
+    for (int i = 0; i < n; i++) mean += env[i];
+    mean /= n;
+    float e0 = 0;
+    for (int i = 0; i < n; i++) e0 += (env[i] - mean) * (env[i] - mean);
+    if (e0 <= 1e-6f) return 0;
+    int best = 0;
+    float bv = 0, sum = 0;
+    for (int l = lo; l <= hi; l++) {
+        float c = 0;
+        for (int i = l; i < n; i++) c += (env[i] - mean) * (env[i - l] - mean);
+        c /= (n - l);
+        // a beat at period l also correlates at 2l: credit the half-period a little, so 120 bpm isn't read as 60
+        if (c > 0) sum += c;
+        if (c > bv) { bv = c; best = l; }
+    }
+    if (!best || bv <= 0) return 0;
+    *conf = bv / (e0 / n);                                        // normalized autocorrelation at the best lag
+    if (*conf > 1) *conf = 1;
+    // phase: the offset (0..best-1) whose comb of beats collects the most onset energy, counted from the newest
+    float pb = -1;
+    for (int ph = 0; ph < best; ph++) {
+        float s = 0;
+        for (int i = n - 1 - ph; i >= 0; i -= best) s += env[i];
+        if (s > pb) { pb = s; *phase = ph; }
+    }
+    (void)sum;
+    return best;
+}

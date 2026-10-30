@@ -14,6 +14,7 @@ import Voice from './panels/Voice.jsx'
 import Vision from './panels/Vision.jsx'
 import Limits from './panels/Limits.jsx'
 import System from './panels/System.jsx'
+import School from './panels/School.jsx'
 
 const POLL_MS = 250
 const HOLD_MS = 3000          // hold the rose window this long to open the Workshop (keeps little hands in Play)
@@ -84,12 +85,13 @@ export default function App() {
           <main className="grid">
             <Commands s={s} run={run} />
             <Voice s={s} run={run} />
+            <School run={run} />
             {s?.cam?.ok && <Vision s={s} run={run} />}
             <Joints s={s} run={run} title="Jog" torqueBtn />
             <Helper s={s} run={run} />
             <Limits s={s} run={run} />
             <Teach s={s} run={run} />
-            <Settings run={run} />
+            <Settings s={s} run={run} />
             <Firmware s={s} run={run} />
             <Network s={s} run={run} />
             <System />

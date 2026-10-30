@@ -35,7 +35,7 @@ RATE_PLANS = [(16000, 16000, 16000), (12000, 12000, 16000), (12000, 11000, 16000
 
 # Voice: "kokoro:<id>" (Kokoro-82M, the most natural open TTS that runs on a CPU) or "piper:<name>".
 # Kokoro ids: am_* / bm_* = American / British male, af_* / bf_* = female. --preview renders the candidates.
-VOICE = "kokoro:am_michael"
+VOICE = "kokoro:am_puck"
 KOKORO_SPEED = 1.05                # 1 = Kokoro's natural pace
 VOICE_SPEED = 0.9                  # Piper length_scale: < 1 = brisker
 ROBOT_TINT = 0.0                   # 0 = clean voice; 0.1 = a faint metallic shimmer
@@ -87,6 +87,12 @@ LINES = {
     "greet":       ["Oh good, my favorite human.", "Look who's back!"],
     "idle":        ["Hello? I'm bored.", "Anyone? A genius is waiting.", "I could be dancing right now, you know."],
     "home":        ["Back to my throne.", "Home sweet home."],
+    "yawn":        ["Yawn. Wake me if anything exciting happens.", "So. Very. Sleepy."],
+    "celebrate":   ["Victory lap!", "Ladies and gentlemen, a legend!", "Yes! Yes! Yes!"],
+    # a question that isn't about robots, math or physics (cloud.c's intent check): Muffin never answers those
+    "offtopic":    ["I only talk about robots, math, and physics. Ask me about those!",
+                    "That's not my department. Try me on robots, math, or physics."],
+    "explain":     ["Great question! Here's what I know.", "Ooh, I can explain that."],
     # ---- conversation (chat.c)
     "hey":         ["You rang?", "Muffin here. What's up?", "Yes? The famous Muffin is listening."],
     "name":        ["I'm Muffin. The star of Ragamuffin Hall.", "Muffin. Remember it. You'll want my autograph."],
@@ -227,6 +233,35 @@ LINES.update({
     "quiz_zero":   ["Zero out of three. Let's call that practice."],
 })
 LESSON_GROUPS = {}     # filled by main(): lesson -> list of group names, one per sentence
+
+# ---- Muffin's Robot School (school.c): the daily class. Lessons live in school_lessons.py and are voiced
+# into the SD-card bank only ("SD-only" groups: present in sounds_gen.h and in the flash bank's group table
+# with no clips, so the flash bank stays small; the SD bank stores them as 16 kHz ADPCM).
+sys.path.insert(0, HERE)
+import school_lessons as SL
+LINES.update(SL.SCHOOL_FLASH)
+
+
+def cmd_kinds():
+    """turn names come from the cmd_kind_t enum in firmware/main/core.h (one source of truth)"""
+    import re
+    src = open(os.path.join(FW, "core.h")).read()
+    body = re.search(r"typedef enum \{([^}]*)\} cmd_kind_t;", src).group(1)
+    names = [n.strip() for n in body.replace("\n", " ").split(",") if n.strip()]
+    assert names[0] == "K_NONE" and names[-1] == "K_KINDS", names
+    return [n[2:].lower() for n in names[:-1]]
+
+
+def school_steps(lesson):
+    """-> [(text, act index, turn index)], checked against ACTS and cmd_kind_t"""
+    kinds, out = cmd_kinds(), []
+    for s in lesson["steps"]:
+        text, act, turn = (s, "none", "none") if isinstance(s, str) else (tuple(s) + ("none", "none"))[:3]
+        assert act in SL.ACTS, f"{lesson['name']}: unknown act {act!r}"
+        assert turn in kinds, f"{lesson['name']}: unknown turn {turn!r} (core.h cmd_kind_t)"
+        out.append((text, SL.ACTS.index(act), kinds.index(turn)))
+    assert len(lesson["quiz"]) == 3, f"{lesson['name']}: needs three quiz questions"
+    return out
 
 PREVIEW_TEXT = "I'm Muffin, the star of Ragamuffin Hall. Say, pick up the red one, and watch a genius at work."
 PREVIEW_VOICES = ["kokoro:am_puck", "kokoro:am_fenrir", "kokoro:am_michael", "kokoro:am_eric",
@@ -541,21 +576,34 @@ def write_wav(path, y, rate=OUT_SR):
         w.writeframes((y * 32767).astype("<i2").tobytes())
 
 
-def write_hq_bank(groups, clips):
-    """sounds_hq.bin for the SD card: same groups and layout CRC as sounds.bin, but every clip is 16 kHz
-    16-bit PCM (no ADPCM hiss, no downsampling). "SNP1" header = the SNB2 header with a different magic."""
-    names = [g for g, _, _ in groups]
+def write_hq_bank(groups, clips, sd=()):
+    """sounds_hq.bin for the SD card: same groups and layout CRC as sounds.bin. Clips the flash bank also
+    has are 16 kHz 16-bit PCM (no ADPCM hiss, no downsampling); SD-only groups (Robot School: far too long
+    for flash) are 16 kHz IMA ADPCM, marked by bit 7 of the rate byte. "SNP1" header = SNB2 with another magic."""
+    names = [g for g, _, _ in groups] + [g for g, _ in sd]
     layout = zlib.crc32("\n".join(names).encode())
-    head = 20 + 4 * len(groups) + 12 * len(clips)
+    sd_clips = [y for _, ys in sd for y in ys]
+    head = 20 + 4 * len(names) + 12 * (len(clips) + len(sd_clips))
     table, data = bytearray(), bytearray()
     for y in clips:
         pcm = np.round(np.clip(y, -1, 1) * 32767).astype("<i2")
         table += struct.pack("<IIhBB", head + len(data), len(pcm), 0, 0, OUT_SR // 1000)
         data += pcm.tobytes()
+    for y in sd_clips:
+        pcm = np.round(np.clip(y, -1, 1) * 32767).astype(np.int32)
+        code, first, idx = adpcm(pcm)
+        table += struct.pack("<IIhBB", head + len(data), len(pcm), first, idx, 0x80 | (OUT_SR // 1000))
+        data += code
     gt = b"".join(struct.pack("<HH", f, n) for _, f, n in groups)
-    bank = b"SNP1" + struct.pack("<IIII", layout, len(groups), len(clips), len(data)) + gt + table + data
+    at = len(clips)
+    for _, ys in sd:
+        gt += struct.pack("<HH", at, len(ys)); at += len(ys)
+    assert at < 65536, "too many clips for the u16 group table"
+    bank = b"SNP1" + struct.pack("<IIII", layout, len(names), len(clips) + len(sd_clips), len(data)) + gt + table + data
+    assert len(bank) == head + len(data)
     with open(os.path.join(FW, "sounds_hq.bin"), "wb") as f: f.write(bank)
-    print(f"SD bank: {len(clips)} clips, {len(data) / 2 / OUT_SR:.0f} s, {len(bank) / 1e6:.1f} MB")
+    secs = (sum(len(y) for y in clips) + sum(len(y) for y in sd_clips)) / OUT_SR
+    print(f"SD bank: {len(clips) + len(sd_clips)} clips, {secs:.0f} s, {len(bank) / 1e6:.1f} MB")
 
 
 def main():
@@ -620,10 +668,24 @@ def main():
         add(f"qa_{k}", [speech(why)]); rates.append(-1)
     print(f"quiz      {len(QUIZ)} questions")
 
-    write_hq_bank(groups, clips)
+    # Robot School: SD-only groups (voiced into sounds_hq.bin; empty in the flash bank)
+    sd = []                                            # (group name, [16 kHz clips])
+    for group, variants in SL.SCHOOL_LINES.items():
+        for gname, texts in expand(group, variants):
+            sd.append((gname, [speech(t) for t in texts]))
+    for i, lesson in enumerate(SL.SCHOOL, 1):
+        for k, (t, _, _) in enumerate(school_steps(lesson), 1):
+            sd.append((f"s{i}_{k}", [speech(t)]))
+        for k, (q, _, why) in enumerate(lesson["quiz"], 1):
+            sd.append((f"sq{i}_{k}", [speech(q)]))
+            sd.append((f"sqa{i}_{k}", [speech(why)]))
+        sd.append((f"st{i}", [speech(lesson["teaser"])]))
+    print(f"school    {len(SL.SCHOOL)} lessons, {sum(len(y) for _, ys in sd for y in ys) / OUT_SR:.0f} s (SD card only)")
+
+    write_hq_bank(groups, clips, sd)
 
     # the best (talk, lesson, sfx) rates that still fit
-    groups_n = len(groups)
+    groups_n = len(groups) + len(sd)                   # SD-only groups sit in the table with no clips
     head = 20 + 4 * groups_n + 12 * len(clips)
     secs = {k: sum(len(y) for y, r in zip(clips, rates) if r == k) / OUT_SR for k in (0, -1, OUT_SR)}
     for plan in RATE_PLANS:
@@ -645,7 +707,7 @@ def main():
     #              IMA ADPCM data
     # layout = CRC32 of the group names in order. The firmware only plays a bank whose layout matches its
     # sounds_gen.h, so a new app with an old bank (or the reverse) stays quiet instead of saying wrong lines.
-    names = [g for g, _, _ in groups]
+    names = [g for g, _, _ in groups] + [g for g, _ in sd]
     layout = zlib.crc32("\n".join(names).encode())
     table, data = bytearray(), bytearray()
     for y, r in zip(clips, rates):
@@ -654,7 +716,7 @@ def main():
         table += struct.pack("<IIhBB", head + len(data), len(pcm), first, idx, r // 1000)
         data += code
         if len(data) % 2: data += b"\0"
-    gt = b"".join(struct.pack("<HH", f, n) for _, f, n in groups)
+    gt = b"".join(struct.pack("<HH", f, n) for _, f, n in groups) + b"".join(struct.pack("<HH", len(clips), 0) for _ in sd)
     bank = b"SNB2" + struct.pack("<IIII", layout, groups_n, len(clips), len(data)) + gt + table + data
     assert len(bank) == head + len(data)
     secs = sum(len(y) / r for y, r in zip(clips, rates))
@@ -668,6 +730,7 @@ def main():
          "// random, never the same one twice in a row.",
          "#pragma once", "#include <stdint.h>", "",
          f"#define SND_LAYOUT 0x{layout:08x}u",
+         f"#define SND_N_SFX {len(SFX)}   // groups 0 .. SND_N_SFX-1 are sound effects; the rest is speech",
          f"#define SND_VOICE \"{'none' if a.no_voice else a.voice}\"",
          f"#define SND_N_COLORS {len(COLORS)}   // " + " ".join(COLORS), f"#define SND_N_NUMBERS {len(NUMBERS)}", "",
          "typedef enum {"]
@@ -684,6 +747,31 @@ def main():
           "static const struct { uint16_t q, why; uint8_t truth; } QUIZ[QUIZ_COUNT] __attribute__((unused)) = {"]
     h += [f"    {{SND_Q_{k}, SND_QA_{k}, {1 if ans else 0}}}," for k, (_, ans, _) in enumerate(QUIZ, 1)]
     h += ["};", ""]
+    # Robot School tables (school.c, pick.c). Step/quiz/teaser groups are SD-only: fx_has() says if they play.
+    h += ["// ---- Robot School: lessons, steps (sentence + arm act + kid's turn), true/false questions",
+          "typedef enum {"] + [f"    SA_{a.upper()}," for a in SL.ACTS] + ["    SA_COUNT", "} school_act_t;", "",
+          f"#define SCHOOL_COUNT {len(SL.SCHOOL)}", "#define SCHOOL_QPER 3",
+          f"#define SCHOOL_RANKS {len(SL.RANKS)}", ""]
+    steps, quiz, rows = [], [], []
+    for i, lesson in enumerate(SL.SCHOOL, 1):
+        st = school_steps(lesson)
+        rows.append(f"    {{{len(steps)}, {len(st)}, {len(quiz)}, SND_ST{i}}},   // {lesson['name']}")
+        steps += [f"    {{SND_S{i}_{k}, {a}, {t}}}," for k, (_, a, t) in enumerate(st, 1)]
+        quiz += [f"    {{SND_SQ{i}_{k}, SND_SQA{i}_{k}, {1 if ans else 0}}},"
+                 for k, (_, ans, _) in enumerate(lesson["quiz"], 1)]
+    h += ["static const struct { uint16_t step, nstep, quiz, teaser; } SCHOOL[SCHOOL_COUNT] __attribute__((unused)) = {"]
+    h += rows + ["};", "", f"#define SCHOOL_STEPS {len(steps)}",
+                 "static const struct { uint16_t g; uint8_t act, turn; } SCHOOL_STEP[SCHOOL_STEPS] __attribute__((unused)) = {"]
+    h += steps + ["};", "", f"#define SCHOOL_QUIZ_COUNT {len(quiz)}",
+                  "static const struct { uint16_t q, why; uint8_t truth; } SCHOOL_QUIZ[SCHOOL_QUIZ_COUNT] __attribute__((unused)) = {"]
+    h += quiz + ["};", ""]
+    # what each lesson is about, for the cloud intent check (cloud.c): a question maps to its closest lesson
+    def topic(lesson):
+        first = lesson["steps"][0] if isinstance(lesson["steps"][0], str) else lesson["steps"][0][0]
+        title = first.split(". ", 1)[1] if ". " in first else first
+        return f'{lesson["name"]}: {title.rstrip(".?!")}'.replace('"', "'")
+    h += ["static const char *const SCHOOL_TOPIC[SCHOOL_COUNT] __attribute__((unused)) = {"]
+    h += [f'    "{topic(L)}",' for L in SL.SCHOOL] + ["};", ""]
     with open(os.path.join(FW, "sounds_gen.h"), "w") as f: f.write("\n".join(h))
 
 if __name__ == "__main__":

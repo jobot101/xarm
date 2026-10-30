@@ -36,6 +36,9 @@ export default function Voice({ s, run }) {
             ~8 s, keeps listening while you talk to it, and the ring glows blue while it's listening.</small></span></label>
         <label className="toggle"><input type="checkbox" checked={!!v.dual} onChange={e => setDual(e.target.checked)} />
           <span><b>Use both mics</b><small>Steers toward whoever's talking. Try it if Muffin misses you in a noisy room. Restarts Muffin.</small></span></label>
+        {v.dual && <label className="toggle"><input type="checkbox" checked={v.face !== 0} onChange={e => run(api.voice({ face: e.target.checked ? 1 : 0 }))} />
+          <span><b>Turn toward voices</b><small>On “Hey Muffin” it turns its head toward whoever said it.
+            Turns the wrong way? <a href="#" onClick={e => { e.preventDefault(); run(api.voice({ face: v.face === -1 ? 1 : -1 })) }}>Flip it</a>{v.face === -1 ? ' (flipped)' : ''}.</small></span></label>}
       </div>}
       {c && <div className="cloud">
         <h3>Cloud ears <small>Groq Whisper · free · only after “Hey Muffin”</small></h3>

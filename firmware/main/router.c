@@ -7,6 +7,7 @@
 #include "store.h"
 #include "kids.h"
 #include "chat.h"
+#include "school.h"
 
 static bool starts(const char *s, const char *p) { return strncmp(s, p, strlen(p)) == 0; }
 static bool has(const char *s, const char *w) { return strstr(s, w) != NULL; }
@@ -19,7 +20,13 @@ static int find_slot(const char *t)
     return -1;
 }
 
-bool router_exec(const char *text, char *msg, size_t n)
+// Robot School gets a say on every voice command (school.c); the app (a grown-up) is never limited.
+// RUN(kind, call): run the action unless School says it's not the moment.
+#define RUN(kind, call) ((app || school_allow((kind), msg, n)) ? (call) : false)
+
+bool router_exec(const char *text, char *msg, size_t n) { return router_exec_ex(text, msg, n, false); }
+
+bool router_exec_ex(const char *text, char *msg, size_t n, bool app)
 {
     char t[64];
     size_t k = 0;
@@ -27,45 +34,49 @@ bool router_exec(const char *text, char *msg, size_t n)
     t[k] = 0;
 
     // order matters: specific phrases before generic words
-    if (has(t, "stop") || has(t, "freeze") || has(t, "halt") || has(t, "wait"))                         { pick_stop(); chat_stopped(); snprintf(msg, n, "stopped"); return true; }
+    if (has(t, "stop") || has(t, "freeze") || has(t, "halt") || has(t, "wait"))                         { pick_stop(); chat_stopped(); school_note_stop(); snprintf(msg, n, "stopped"); return true; }
+    // class, sleep, grown-up passphrase, quiz answers
+    if (!app && school_filter(t, msg, n)) return true;
     // Muffin's conversation (name, small talk, jokes, yes/no answers...) — before the tricks, which match loosely
     if (chat_exec(t, msg, n)) return true;
     // third hand
-    if (has(t, "hold this") || has(t, "help me") || has(t, "third hand"))  return pick_run(OP_HELPER, 0, msg, n);
-    if (has(t, "hold it") || has(t, "grip") || has(t, "grab it") || has(t, "squeeze")) return pick_run(OP_CLOSE, 0, msg, n);
-    if (has(t, "let go") || has(t, "let it go") || has(t, "release") || has(t, "drop the"))                      return pick_run(OP_OPEN, 0, msg, n);
+    if (has(t, "hold this") || has(t, "help me") || has(t, "third hand"))  return RUN(K_HOLD, pick_run(OP_HELPER, 0, msg, n));
+    if (has(t, "hold it") || has(t, "grip") || has(t, "grab it") || has(t, "squeeze")) return RUN(K_CLOSE, pick_run(OP_CLOSE, 0, msg, n));
+    if (has(t, "let go") || has(t, "let it go") || has(t, "release") || has(t, "drop the"))                      return RUN(K_OPEN, pick_run(OP_OPEN, 0, msg, n));
     if (has(t, "little") || has(t, "nudge") || starts(t, "move") || has(t, "tilt") || has(t, "turn")) {
         int d = has(t, "tilt") ? (has(t, "down") ? NUDGE_TILT_DOWN : NUDGE_TILT_UP)
               : has(t, "turn") ? (has(t, "right") ? NUDGE_TURN_R : NUDGE_TURN_L)
               : has(t, "left") ? NUDGE_LEFT : has(t, "right") ? NUDGE_RIGHT
               : has(t, "up") || has(t, "higher") ? NUDGE_UP : has(t, "down") || has(t, "lower") ? NUDGE_DOWN : -1;
-        if (d >= 0) return pick_run(OP_NUDGE, d, msg, n);
+        int kind = d == NUDGE_UP ? K_UP : d == NUDGE_DOWN ? K_DOWN : d == NUDGE_LEFT ? K_LEFT : d == NUDGE_RIGHT ? K_RIGHT
+                 : (d == NUDGE_TURN_L || d == NUDGE_TURN_R) ? K_TURN : K_TILT;
+        if (d >= 0) return RUN(kind, pick_run(OP_NUDGE, d, msg, n));
     }
     // stacking challenge
-    if (has(t, "tower") || has(t, "stack"))                         return pick_run(OP_STACK, 0, msg, n);
+    if (has(t, "tower") || has(t, "stack"))                         return RUN(K_STACK, pick_run(OP_STACK, 0, msg, n));
     // who's playing: "hi i'm sam", "it's sam"
     if (has(t, "i'm ") || has(t, "i am ") || has(t, "it's ") || has(t, "my name")) {
         int k = kids_find(t);
-        if (k >= 0) { kids_select(k); snprintf(msg, n, "hi %s!", kids_get(k)->name); return pick_run(OP_WAVE, 0, msg, n) || true; }
+        if (k >= 0 && (app || school_allow(K_WAVE, msg, n))) { kids_select(k); snprintf(msg, n, "hi %s!", kids_get(k)->name); return pick_run(OP_WAVE, 0, msg, n) || true; }
     }
-    if (has(t, "give") || has(t, "hand it") || has(t, "bring it") || has(t, "come here"))                        return pick_run(OP_GIVE, 0, msg, n);
-    if (has(t, "sort") && (has(t, "size") || has(t, "big") || has(t, "small"))) return pick_run(OP_SORT_SIZE, 0, msg, n);
-    if (has(t, "sort") || has(t, "clean up") || has(t, "tidy"))     return pick_run(OP_SORT, 0, msg, n);
-    if (has(t, "wave") || has(t, "hello") || has(t, "say hi") || has(t, "goodbye") || has(t, "bye"))      return pick_run(OP_WAVE, 0, msg, n);
-    if (has(t, "bow") || has(t, "thank"))                                              return pick_run(OP_BOW, 0, msg, n);
-    if (has(t, "dance") || has(t, "boogie") || has(t, "party"))                        return pick_run(OP_DANCE, 0, msg, n);
-    if (has(t, "bell") || has(t, "ring"))                           return pick_run(OP_BELL, 0, msg, n);
-    if (has(t, "home") || has(t, "go back") || has(t, "rest") || has(t, "relax"))                                             return pick_run(OP_HOME, 0, msg, n);
-    if (has(t, "drop") || has(t, "put it down"))                    return pick_run(OP_DROP, 0, msg, n);
-    if (has(t, "open"))                                             return pick_run(OP_OPEN, 0, msg, n);
-    if (has(t, "close"))                                            return pick_run(OP_CLOSE, 0, msg, n);
+    if (has(t, "give") || has(t, "hand it") || has(t, "bring it") || has(t, "come here"))                        return RUN(K_GIVE, pick_run(OP_GIVE, 0, msg, n));
+    if (has(t, "sort") && (has(t, "size") || has(t, "big") || has(t, "small"))) return RUN(K_SORT, pick_run(OP_SORT_SIZE, 0, msg, n));
+    if (has(t, "sort") || has(t, "clean up") || has(t, "tidy"))     return RUN(K_SORT, pick_run(OP_SORT, 0, msg, n));
+    if (has(t, "wave") || has(t, "hello") || has(t, "say hi") || has(t, "goodbye") || has(t, "bye"))      return RUN(K_WAVE, pick_run(OP_WAVE, 0, msg, n));
+    if (has(t, "bow") || has(t, "thank"))                                              return RUN(K_BOW, pick_run(OP_BOW, 0, msg, n));
+    if (has(t, "dance") || has(t, "boogie") || has(t, "party"))                        return RUN(K_DANCE, pick_run(OP_DANCE, 0, msg, n));
+    if (has(t, "bell") || has(t, "ring"))                           return RUN(K_BELL, pick_run(OP_BELL, 0, msg, n));
+    if (has(t, "home") || has(t, "go back") || has(t, "rest") || has(t, "relax"))                                             return RUN(K_HOME, pick_run(OP_HOME, 0, msg, n));
+    if (has(t, "drop") || has(t, "put it down"))                    return RUN(K_DROP, pick_run(OP_DROP, 0, msg, n));
+    if (has(t, "open"))                                             return RUN(K_OPEN, pick_run(OP_OPEN, 0, msg, n));
+    if (has(t, "close"))                                            return RUN(K_CLOSE, pick_run(OP_CLOSE, 0, msg, n));
     if (starts(t, "pick") || starts(t, "grab") || starts(t, "get") || starts(t, "fetch")) {
         int s = find_slot(t);
         if (s < 0) { snprintf(msg, n, "pick what? I know: %s, %s", g_cfg.slot_name[0], g_cfg.slot_name[1]); return false; }
-        return pick_run(OP_PICK, s, msg, n);
+        return RUN(K_PICK, pick_run(OP_PICK, s, msg, n));
     }
     int m = moves_find(t);                     // "do the robot", "play twirl", or just the name
-    if (m >= 0) return pick_run(OP_PLAY, m, msg, n);
+    if (m >= 0) return RUN(K_PLAY, pick_run(OP_PLAY, m, msg, n));
     snprintf(msg, n, "unknown command");
     return false;
 }
@@ -145,6 +156,7 @@ int router_phrases(char out[][48], int max)
     ADD("quiz me"); ADD("robot quiz"); ADD("thats true"); ADD("thats false");
     ADD("yes please"); ADD("sure thing"); ADD("no thanks");   // no bare yes/no: one syllable steals matches
     for (int i = 0; i < KIDS_MAX; i++) if (kids_get(i)) ADD("hi i'm %s", kids_get(i)->name);
+    if (school_pass()[0]) ADD("%s", school_pass());   // grown-up passphrase (Robot School): ten more minutes
     for (int i = 0; i < NSLOT; i++) {
         if (!g_cfg.slot_name[i][0]) continue;
         ADD("pick up the %s", g_cfg.slot_name[i]);

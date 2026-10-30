@@ -13,6 +13,11 @@ void voice_diag(char *status, size_t ns, int *level, float *prob, int *gain, int
 void voice_tune(int gain_db, int thresh_pct, int wake);   // live + saved; -1 leaves a value alone
 void voice_diag2(bool *wake, bool *open, const char **vad);  // "Hey Muffin" gate on, window open now, "VADNet"/"WebRTC"
 void voice_engage(void);                  // someone's talking to Muffin (app tap, Muffin asked a question): open the window
+int  voice_face(void);                    // turn toward voices: 1 on, -1 on (mics mounted the other way), 0 off
+void voice_face_set(int v);               // saved; needs "Use both mics"
+// music in the room? its beat period and when the next beat lands (esp_timer us); false = no clear beat
+bool voice_beat(int *period_ms, int64_t *next_us);
+void voice_hold_open(bool on);            // School's in class: ears stay open, no "Hey Muffin" needed
 
 typedef struct { char phrase[64]; char why[48]; int prob; int age_s; } voice_note_t;
 int voice_notes(voice_note_t *out, int max);   // recent matches, newest first, with what happened ("ok", why ignored)

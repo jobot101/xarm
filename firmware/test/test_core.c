@@ -152,6 +152,80 @@ int main(void)
     }
     printf("ok   text_clean\n");
 
+    // Robot School helpers
+    assert(civil_days(1970, 1, 1) == 0);
+    assert(civil_days(2000, 3, 1) - civil_days(2000, 2, 28) == 2);            // 2000 was a leap year
+    assert(civil_days(1900, 3, 1) - civil_days(1900, 2, 28) == 1);            // 1900 wasn't
+    assert(civil_days(2027, 1, 1) - civil_days(2026, 12, 31) == 1);           // yesterday across New Year
+    assert(civil_days(2026, 10, 29) == 20755);
+    assert(streak_next(100, 101, 4) == 5 && streak_next(100, 102, 4) == 1);
+    assert(streak_next(101, 101, 5) == 5 && streak_next(101, 101, 0) == 1 && streak_next(-3, 200, 9) == 1);
+    assert(pass_heard("hey muffin purple elephant", "Purple Elephant"));
+    assert(pass_heard("Purple, elephant!", "purple elephant"));
+    assert(!pass_heard("purple elephants", "purple elephant"));               // whole words only
+    assert(!pass_heard("purple", "purple elephant"));
+    assert(!pass_heard("anything at all", "") && !pass_heard("go home", "home"));   // too short to unlock
+    assert(pass_heard("thats my secret", "that's my secret"));
+    assert(kind_fits(K_NUDGE, K_UP) && kind_fits(K_NUDGE, K_TILT) && !kind_fits(K_NUDGE, K_DANCE));
+    assert(kind_fits(K_UP, K_UP) && !kind_fits(K_UP, K_DOWN) && !kind_fits(K_NONE, K_NONE));
+    {
+        uint8_t m[4] = {0};
+        assert(recap_pick(m, 0, 7, -1) == -1 && recap_pick(m, 1, 7, 0) == 0);
+        m[1] = 1 << 2;                                                         // question 10 was missed
+        for (uint32_t r = 0; r < 20; r++) assert(recap_pick(m, 12, r, -1) == 10);
+        for (uint32_t r = 0; r < 20; r++) { int q = recap_pick(m, 12, r, 10); assert(q >= 0 && q < 12 && q != 10); }
+        assert(recap_pick(m, 5, 3, -1) >= 0 && recap_pick(m, 5, 3, -1) < 5);  // missed one not learned yet
+        for (uint32_t r = 0; r < 20; r++) assert(recap_pick(NULL, 3, r, 1) != 1);
+    }
+    assert(rank_of(0) == 0 && rank_of(4) == 0 && rank_of(5) == 1 && rank_of(43) == 8);
+    printf("ok   school\n");
+
+    // lifelike travel: starts on from, ends on to, bulges mid-flight, lagging joints start late
+    {
+        uint16_t a[NSERVO] = {200, 500, 500, 500, 500, 300}, b[NSERVO] = {200, 500, 500, 500, 500, 700}, o[NSERVO];
+        int16_t bu[NSERVO] = {0, 0, 0, 0, 40, 0};
+        uint16_t lag[NSERVO] = {200, 190, 160, 110, 60, 0};
+        arc_pose(a, b, bu, lag, 1000, 0, o);    assert(!memcmp(o, a, sizeof o));
+        arc_pose(a, b, bu, lag, 1000, 1200, o); assert(!memcmp(o, b, sizeof o));
+        arc_pose(a, b, bu, lag, 1000, 560, o);  assert(o[4] >= 538 && o[4] <= 540);   // shoulder: mid-flight, full bulge
+        assert(o[5] > 500 && o[5] < 700);       // base well on its way
+        arc_pose(a, b, bu, lag, 1000, 100, o);  assert(o[4] == 500 && o[5] > 300);     // shoulder hasn't started, base has
+        uint16_t prev = 300;                    // base never turns back
+        for (int t = 0; t <= 1200; t += 40) { arc_pose(a, b, bu, lag, 1000, t, o); assert(o[5] >= prev); prev = o[5]; }
+        arc_pose(a, b, NULL, NULL, 0, 0, o);    assert(!memcmp(o, b, sizeof o));          // zero duration = there
+    }
+    printf("ok   arc\n");
+
+    // pink noise: bounded, wanders, not white
+    {
+        pink_t pk = {0}; float mn = 9, mx = -9, d = 0, prev = 0; uint32_t r = 12345;
+        for (int i = 0; i < 4000; i++) {
+            r = r * 1103515245u + 12345u;
+            float v = pink_next(&pk, r);
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+            if (i) d += fabsf(v - prev);
+            prev = v;
+        }
+        assert(mn > -2.1f && mx < 2.1f && mx - mn > 0.8f);
+        assert(d / 4000 < 0.5f);                 // steps are small next to the range: it drifts, it doesn't jump
+    }
+    printf("ok   pink\n");
+
+    // beat: clicks every 31 frames (16 ms hops = ~121 bpm), last click 7 frames ago
+    {
+        static float env[512]; int ph; float cf;
+        for (int i = 0; i < 512; i++) env[i] = ((511 - 7 - i) % 31 == 0) ? 1.0f : 0.02f * ((i * 7) % 5);
+        int per = beat_find(env, 512, 20, 54, &cf, &ph);
+        assert(per == 31 && ph == 7 && cf > 0.5f);
+        uint32_t z = 99;
+        for (int i = 0; i < 512; i++) { z = z * 1103515245u + 12345u; env[i] = 0.3f + ((z >> 16) & 255) / 255.0f; }   // no beat: noise
+        per = beat_find(env, 512, 20, 54, &cf, &ph);
+        assert(per == 0 || cf < 0.35f);
+        assert(beat_find(env, 40, 20, 54, &cf, &ph) == 0);                   // too short to tell
+    }
+    printf("ok   beat\n");
+
     puts("all passed");
     return 0;
 }

@@ -23,4 +23,4 @@ bool kids_remove(int i);
 bool kids_select(int i);                  // sets current, counts a visit, greets
 int  kids_current(void);                  // -1 if nobody picked
 int  kids_find(const char *text);         // a kid whose name appears in text, or -1
-void kids_score(const char *game, int score);   // "bells" | "tower": keeps the current kid's best
+bool kids_score(const char *game, int score);   // "bells" | "tower": keeps the current kid's best; true = new best

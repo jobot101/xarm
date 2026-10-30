@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, JOINTS } from '../api.js'
 
-export default function Settings({ run }) {
+export default function Settings({ s, run }) {
   const [c, setC] = useState(null)
   useEffect(() => { api.getConfig().then(setC).catch(() => {}) }, [])
   if (!c) return <section className="card"><h2>Settings</h2><p className="hint">loading…</p></section>
@@ -17,6 +17,10 @@ export default function Settings({ run }) {
   return (
     <section className="card">
       <h2>Settings</h2>
+      <label className="autoup" style={{ marginBottom: 10 }}>
+        <span>Lifelike motion: looks where it's going, winds up, arcs, settles, breathes when idle</span>
+        <input type="checkbox" checked={s?.arm?.anim ?? true} onChange={e => run(api.fx({ anim: e.target.checked }))} />
+      </label>
       <div className="fields">
         {c.slot_name.map((n, i) => (
           <label className="field" key={i}>Color {i + 1} spoken name

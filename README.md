@@ -81,6 +81,12 @@ GitHub Actions builds every push. The files are on the **latest** release: https
 
 Say **"pick up the red"**, "grab the blue", "drop it", "go home", "open hand", "close hand", or **"stop"**. Say **"Hey Muffin"** first: the ring glows blue while Muffin is listening (about 8 s, longer while you're chatting with it), and tapping anything in the app opens its ears too. **"Stop" works at any time**, no "Hey Muffin" needed. Workshop → Voice can switch "Hey Muffin" off. The web app sends the same commands and has a big STOP button.
 
+## Robot School
+
+Muffin teaches a daily class by voice: a 53-lesson robotics and automation course told as stories, with the arm demonstrating, "your turn" voice commands, true/false quizzes, stars, ranks and streaks. Each kid gets 20 minutes a day (Workshop → School to change it), then Muffin says goodnight and sleeps until tomorrow. A grown-up passphrase, spoken to Muffin, adds ten minutes. The app is never limited.
+
+The lessons live on the memory card: put a microSD card in the board and turn on **Workshop → Voice → Store voice on SD card** (home WiFi needed for the download, about 55 MB). With no card, the class is just timed free play. Days follow internet time; with no WiFi, the board clock keeps them only if it has a backup battery, otherwise each restart counts as a new day.
+
 ## API
 
 The React app uses this API. You can also script it with curl.

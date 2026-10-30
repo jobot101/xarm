@@ -57,7 +57,17 @@ menu "xArm Voice"
 
     config XARM_STT_MODEL
         string "Cloud ears: model"
-        default "whisper-large-v3-turbo"
+        default "whisper-large-v3"
+        help
+            Full large-v3: better than turbo with kids' voices, a little slower. Free on Groq.
+
+    config XARM_INTENT_URL
+        string "Cloud ears: intent check endpoint (OpenAI-compatible chat completions)"
+        default "https://api.groq.com/openai/v1/chat/completions"
+
+    config XARM_INTENT_MODEL
+        string "Cloud ears: intent model (turns any wording into one of Muffin's commands)"
+        default "llama-3.1-8b-instant"
 
     config XARM_STT_DAILY_MAX
         int "Cloud ears: most requests per day (then on-board only until the day rolls over)"
@@ -80,5 +90,14 @@ menu "xArm Voice"
     config XARM_CHATTER_MIN
         int "Idle chatter: say something this many minutes after play stops (0 = never)"
         default 5
+
+    config XARM_SCHOOL_MIN
+        int "Robot School: minutes of class per kid per day (default; Workshop -> School changes it)"
+        default 20
+        range 5 120
+
+    config XARM_TZ
+        string "Time zone (POSIX TZ) for when a School day starts"
+        default "EST5EDT,M3.2.0,M11.1.0"
 
 endmenu

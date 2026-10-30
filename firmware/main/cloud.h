@@ -19,12 +19,19 @@ typedef struct {
     bool stopped;                     // MultiNet already ran "stop" for it — don't run it twice
     char fallback[48];                // MultiNet's guess for it, used if the cloud call fails
     float fallback_prob;
+    bool unsure;                      // (answer) Whisper heard speech but wasn't confident in the words
 } cloud_clip_t;
 
 void cloud_init(void);
 bool cloud_ready(void);               // key set, switched on, online, not backing off, under the daily cap
 bool cloud_submit(const cloud_clip_t *c);   // copies the clip; false if a request is still in flight
 bool cloud_busy(void);
+void cloud_hint(const char *words);   // what Muffin is waiting to hear right now ("" = nothing in particular)
+
+// any wording -> one of Muffin's own commands (out), a lesson for a robots / math / physics question (out = index),
+// a refusal for any other question, or nothing. Blocking HTTPS: call it from the cloud task only (voice_cloud_heard).
+enum { INTENT_NONE, INTENT_COMMAND, INTENT_LESSON, INTENT_OFFTOPIC };
+int cloud_intent(const char *heard, char *out, size_t n);
 
 void cloud_set_key(const char *key);  // "" clears it
 void cloud_enable(bool on);

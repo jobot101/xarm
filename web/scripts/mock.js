@@ -4,13 +4,13 @@ import { createServer } from 'node:http'
 
 const st = {
   state: 'idle', detail: '', busy: false, holding: false, marked: false,
-  arm: { pos: [500, 500, 500, 500, 500, 500], torque: true, link: true, battery_mv: 7480, lim: [[100, 800], [50, 950], [80, 920], [80, 920], [80, 920], [0, 1000]] },
+  arm: { pos: [500, 500, 500, 500, 500, 500], torque: true, anim: true, link: true, battery_mv: 7480, lim: [[100, 800], [50, 950], [80, 920], [80, 920], [80, 920], [0, 1000]] },
   cam: { ok: true, link: 'wifi', raw: '50 3C 14 12 | 00 00 00 00', slots: [
     { name: 'red', seen: true, x: 80, y: 60, w: 20, h: 18 },
     { name: 'blue', seen: false, x: 0, y: 0, w: 0, h: 0 } ] },
   calib: [{ px: 30, py: 30 }, { px: 210, py: 30 }, { px: 120, py: 200 }],
   voice: { ok: true, last: 'pick up the red', status: 'listening — 24 phrases', level: 12, prob: 0, gain: 24, thresh: 22,
-    wake: true, awake: false, vad: 'VADNet', dual: false,
+    wake: true, awake: false, vad: 'VADNet', dual: false, face: 1,
     cloud: { on: true, ready: false, key: '', status: 'no key — paste your Groq key below', last: '', ms: 0, today: 0, max: 1800 },
     src: 'flash', sd: { card: true, card_status: '16.0 GB card, 9.4 GB free', on: false, status: 'off' }, bank: false, bank_status: 'downloading Muffin\'s voice… 40%', heard: [{ p: 'dance robot', prob: 41, why: 'ok', ago: 3 }, { p: 'go home', prob: 27, why: 'Muffin was talking', ago: 12 }, { p: 'wave hello', prob: 44, why: 'asleep - say Hey Muffin', ago: 20 }, { p: 'can you pick up the red one', prob: 100, why: '☁ picking up red', ago: 25 }] },
   moves: { recording: false, frames: 0, list: [{ i: 0, name: 'robot' }] },
@@ -18,6 +18,8 @@ const st = {
   net: { ip: '127.0.0.1', mode: 'sta', ssid: 'shop', online: true },
   fw: { version: 'mock-1', partition: 'ota_0', latest: 'mock-1', update: 'up to date (mock-1)', auto: true, sounds: '' },
 }
+const school = { on: true, minutes: 20, pass_set: false, state: 'waiting', kid: '', clock: 'internet', lessons_ready: true, lesson_count: 43,
+  kids: [{ i: 0, name: 'sam', lesson: 4, stars: 19, streak: 3, used_s: 312, limit_s: 1200 }, { i: 12, name: 'guest', lesson: 0, stars: 0, streak: 0, used_s: 0, limit_s: 1200 }] }
 const cfg = { home: [500, 500, 500, 500, 500, 500], drop: [500, 500, 500, 500, 500, 800],
   lift: [0, 0, 0, 0, -120, 0], reach: [0, 0, 0, -90, 90, 0], pick2: { align_axis: 1, align_turn: 375, grab_check: true, grab_margin: 40, grab_tries: 3, size_split: 900 }, grip_open: 200, grip_close: 650, move_ms: 700, grip_ms: 350, slot_name: ['red', 'blue'], cam_on_head: true, scan: [0, -200, 200], stack_pct: 30 }
 
@@ -65,14 +67,25 @@ createServer((req, res) => {
       case 'GET /api/phrases': return send(['stop', 'go home', 'dance robot', 'wave hello', 'thank you', 'move left', 'turn right'])
       case 'GET /api/i2c': return send({ found: '0x18 0x20 0x40 0x51 0x52', cam: true })
       case 'POST /api/limits': st.arm.lim[body.i] = [body.min, body.max]; return send({ ok: true, msg: 'limits saved' })
-      case 'POST /api/voice': if (body.gain >= 0) st.voice.gain = body.gain; if (body.thresh >= 5) st.voice.thresh = body.thresh; if (body.wake === 0 || body.wake === 1) st.voice.wake = !!body.wake; if (body.dual === 0 || body.dual === 1) st.voice.dual = !!body.dual; if (typeof body.stt_key === 'string') Object.assign(st.voice.cloud, body.stt_key ? { key: body.stt_key.slice(0, 4) + '…' + body.stt_key.slice(-4), ready: true, status: 'ready' } : { key: '', ready: false, status: 'no key — paste your Groq key below' }); if (body.cloud === 0 || body.cloud === 1) st.voice.cloud.on = !!body.cloud; if (body.sd === 0 || body.sd === 1) Object.assign(st.voice.sd, { on: !!body.sd, status: body.sd ? 'downloading full-quality voice… 12%' : 'off' }); return send({ ok: true, msg: body.dual !== undefined ? 'restarting' : 'voice tuned' })
-      case 'POST /api/fx': return send({ ok: true, msg: 'ok' })
+      case 'POST /api/voice': if (body.gain >= 0) st.voice.gain = body.gain; if (body.thresh >= 5) st.voice.thresh = body.thresh; if (body.wake === 0 || body.wake === 1) st.voice.wake = !!body.wake; if (body.dual === 0 || body.dual === 1) st.voice.dual = !!body.dual; if ([-1, 0, 1].includes(body.face)) st.voice.face = body.face; if (typeof body.stt_key === 'string') Object.assign(st.voice.cloud, body.stt_key ? { key: body.stt_key.slice(0, 4) + '…' + body.stt_key.slice(-4), ready: true, status: 'ready' } : { key: '', ready: false, status: 'no key — paste your Groq key below' }); if (body.cloud === 0 || body.cloud === 1) st.voice.cloud.on = !!body.cloud; if (body.sd === 0 || body.sd === 1) Object.assign(st.voice.sd, { on: !!body.sd, status: body.sd ? 'downloading full-quality voice… 12%' : 'off' }); return send({ ok: true, msg: body.dual !== undefined ? 'restarting' : 'voice tuned' })
+      case 'POST /api/fx': if (typeof body.anim === 'boolean') st.arm.anim = body.anim; return send({ ok: true, msg: 'ok' })
       case 'POST /api/kids': {
         const k = st.kids
         if (body.action === 'add') { const i = k.list.length; k.list.push({ i, name: body.name.toLowerCase(), emoji: body.emoji, jewel: body.jewel, visits: 1, best_bells: 0, best_tower: 0 }); k.cur = i; return send({ ok: true, msg: `hi ${body.name}!` }) }
         if (body.action === 'select') { k.cur = body.i; k.list.find(x => x.i === body.i).visits++; return send({ ok: true, msg: 'hi!' }) }
         if (body.action === 'remove') k.list = k.list.filter(x => x.i !== body.i)
         if (body.action === 'score') { const me = k.list.find(x => x.i === k.cur); if (me && body.score > me.best_bells) me.best_bells = body.score }
+        return send({ ok: true, msg: 'ok' })
+      }
+      case 'GET /api/school': return send(school)
+      case 'POST /api/school': {
+        if (typeof body.on === 'boolean') school.on = body.on
+        if (body.minutes) school.minutes = body.minutes
+        if (typeof body.pass === 'string') school.pass_set = !!body.pass
+        const k = school.kids.find(x => x.i === (body.more ?? body.reset_day ?? body.restart))
+        if (k && body.more !== undefined) k.limit_s += 600
+        if (k && body.reset_day !== undefined) k.used_s = 0
+        if (k && body.restart !== undefined) Object.assign(k, { lesson: 0, stars: 0, streak: 0 })
         return send({ ok: true, msg: 'ok' })
       }
       case 'GET /api/config': return send(cfg)

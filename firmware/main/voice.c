@@ -19,6 +19,8 @@
 #include "core.h"
 #include "audio.h"
 #include "fx.h"
+#include "pick.h"
+#include "school.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
@@ -117,9 +119,12 @@ static bool is_wake(const char *p) { return strstr(p, "muffin") && !is_stop(p); 
 
 // The window: open after a wake phrase or command, and in a live conversation also while Muffin talks
 // and a few seconds after (so "yes please" to Muffin's question works without the name).
+static volatile bool s_hold;              // Robot School in class: no "Hey Muffin" needed for anything
+void voice_hold_open(bool on) { s_hold = on; if (on) voice_engage(); }
+
 static bool window_open(int64_t now)
 {
-    if (now < s_open_until) return true;
+    if (s_hold || now < s_open_until) return true;
     return now - s_engaged < SESSION_US && now < audio_play_end_us() + FOLLOW_US;
 }
 
@@ -181,6 +186,7 @@ static float s_seg_fbp;
 static int64_t s_huh_at, s_sent_at;
 
 static void run_text(const char *t, float pr, const char *tag);
+static void run_cloud(const char *t, bool unsure);
 
 static void seg_feed(const int16_t *d, int n, bool speech, int64_t now)
 {
@@ -230,7 +236,40 @@ void voice_cloud_heard(const char *text, int err, const cloud_clip_t *c)
     if (!t[0] && (f & TC_WAKE)) strcpy(t, "hey muffin");          // only said its name: it answers to that
     if (text_junk(t)) { note(text[0] ? text : "(nothing)", 0, "cloud: no words in it"); return; }
     if (c->stopped && (strstr(t, "stop") || strstr(t, "freeze"))) { note(t, 100, "stop (already done)"); return; }
-    run_text(t, 1.0f, "☁ ");
+    run_cloud(t, c->unsure);
+}
+
+// a cloud transcript: the router first (unless Whisper wasn't sure of the words); whatever it doesn't understand
+// goes to the intent check, which can only come back with one of Muffin's own commands, a lesson (a question
+// about robots, math or physics), or a refusal (any other question). Muffin never says anything else.
+static void run_cloud(const char *t, bool unsure)
+{
+    char msg[64] = "", why[48], pick[48];
+    voice_engage();
+    strlcpy(s_last, t, sizeof s_last);
+    s_prob = 1.0f;
+    if (!unsure) {
+        bool ok = router_exec(t, msg, sizeof msg);
+        if (ok || strcmp(msg, "unknown command")) { snprintf(why, sizeof why, "☁ %s", msg); note(t, 100, why); return; }
+    }
+    int k = cloud_intent(t, pick, sizeof pick);
+    if (k == INTENT_COMMAND) {
+        router_exec(pick, msg, sizeof msg);
+        snprintf(why, sizeof why, "☁→ %s: %s", pick, msg);
+    } else if (k == INTENT_LESSON) {
+        int l = atoi(pick);
+        school_explain(l, msg, sizeof msg);
+        snprintf(why, sizeof why, "☁→ lesson %d: %s", l + 1, msg);
+    } else if (k == INTENT_OFFTOPIC) {
+        fx_say(SND_OFFTOPIC);
+        strlcpy(why, "☁→ not robots/math/physics", sizeof why);
+    } else {
+        int64_t now = esp_timer_get_time();
+        if (now - s_huh_at > 8000000) { s_huh_at = now; fx_say(SND_HUH); }      // "Huh? Say that again."
+        strlcpy(why, unsure ? "☁ not sure what I heard" : "☁ didn't understand", sizeof why);
+    }
+    note(t, 100, why);
+    ESP_LOGI(TAG, "☁ \"%s\"%s -> %s", t, unsure ? " (unsure)" : "", why);
 }
 
 // one command, from either ear
@@ -253,6 +292,132 @@ static void run_text(const char *t, float pr, const char *tag)
 }
 
 // mic -> AFE. Never blocks on anything but the I2S read.
+// ---- which way is the voice? Both mics' last second, kept raw. When Muffin hears its name, the time
+// difference between the two mics (cross-correlation of the loudest frames, within a few samples) says left or
+// right, and pick.c turns the head that way. Needs "Use both mics" (the second mic's channel). Coarse on
+// purpose: the mics are a few cm apart, so it's left / a bit left / ahead / a bit right / right.
+#define DOA_N    16384                   // ~1 s at 16 kHz, power of two
+#define DOA_LAG  5                       // samples each way to search (~10 cm of mic spacing at 343 m/s)
+static int16_t *s_doa1, *s_doa2;
+static volatile uint32_t s_doa_w;        // samples written so far
+static int8_t s_face = 1;                // NVS "face": 1 = turn toward voices, -1 = the same, flipped, 0 = off
+
+static void doa_push(const int16_t *buf, int frames, int ch)
+{
+    if (!s_doa1 || ch < 3) return;
+    uint32_t w = s_doa_w;
+    for (int i = 0; i < frames; i++, w++) {
+        s_doa1[w & (DOA_N - 1)] = buf[i * ch];          // MIC1
+        s_doa2[w & (DOA_N - 1)] = buf[i * ch + 2];      // MIC2
+    }
+    s_doa_w = w;
+}
+
+// -1 .. +1 (mic1 side .. mic2 side), or 2 = can't tell
+static float doa_estimate(void)
+{
+    if (!s_doa1 || !audio_mic_dual()) return 2;
+    uint32_t end = s_doa_w;
+    if (end < DOA_N) return 2;
+    enum { FR = 256, NF = DOA_N / FR };
+    static float energy[NF];
+    float sorted_max = 0;
+    for (int f = 0; f < NF; f++) {               // frame energy (first difference = cheap high-pass)
+        float e = 0;
+        for (int i = 1; i < FR; i++) {
+            uint32_t k = end - DOA_N + f * FR + i;
+            float d = (float)s_doa1[k & (DOA_N - 1)] - s_doa1[(k - 1) & (DOA_N - 1)];
+            e += d * d;
+        }
+        energy[f] = e;
+        if (e > sorted_max) sorted_max = e;
+    }
+    if (sorted_max <= 0) return 2;
+    double c[2 * DOA_LAG + 1] = {0};
+    int used = 0;
+    for (int f = 1; f < NF - 1; f++) {
+        if (energy[f] < sorted_max * 0.25f) continue;   // the loud frames: the voice, not the room
+        used++;
+        for (int i = 1; i < FR; i++) {
+            uint32_t k = end - DOA_N + f * FR + i;
+            float a = (float)s_doa1[k & (DOA_N - 1)] - s_doa1[(k - 1) & (DOA_N - 1)];
+            for (int l = -DOA_LAG; l <= DOA_LAG; l++) {
+                uint32_t j = k + l;
+                float b = (float)s_doa2[j & (DOA_N - 1)] - s_doa2[(j - 1) & (DOA_N - 1)];
+                c[l + DOA_LAG] += a * b;
+            }
+        }
+    }
+    if (used < 3) return 2;
+    int best = 0;
+    double bv = c[0], sum = 0;
+    for (int l = 0; l <= 2 * DOA_LAG; l++) { sum += c[l] > 0 ? c[l] : 0; if (c[l] > bv) { bv = c[l]; best = l; } }
+    if (bv <= 0 || bv < sum / (2 * DOA_LAG + 1) * 1.3) return 2;   // no clear peak: echoey room, or two voices
+    return (float)(best - DOA_LAG) / DOA_LAG;
+}
+
+static void face_voice(void)
+{
+    if (!s_face) return;
+    float d = doa_estimate();
+    if (d > 1.5f) return;
+    pick_face(d * s_face);
+    ESP_LOGI(TAG, "voice from %+.1f", d);
+}
+
+int  voice_face(void) { return s_face; }
+void voice_face_set(int v)
+{
+    s_face = (int8_t)(v > 0 ? 1 : v < 0 ? -1 : 0);
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) { nvs_set_i8(h, "face", s_face); nvs_commit(h); nvs_close(h); }
+}
+
+// ---- the room's beat: MIC1 loudness in 16 ms hops for the last ~8 s; onsets (how much louder each hop got)
+// feed beat_find() (core.c) when Muffin is asked to dance. Before Muffin's own dance tune starts, so it's the
+// room's music it hears.
+#define ENV_N   512
+#define HOP     256                      // samples = 16 ms
+static float s_env[ENV_N], s_lvl[ENV_N];
+static volatile uint32_t s_env_w;
+static volatile int64_t s_env_us;        // when the newest hop was written
+
+static void env_push(const int16_t *buf, int frames, int ch)
+{
+    static float prev_db = -90;
+    for (int h = 0; h + HOP <= frames; h += HOP) {
+        float acc = 0;
+        for (int i = h; i < h + HOP; i++) acc += (float)buf[i * ch] * buf[i * ch];
+        float db = 10.0f * log10f(acc / HOP / (32768.0f * 32768.0f) + 1e-9f);
+        float on = db - prev_db;
+        prev_db = db;
+        uint32_t w = s_env_w;
+        s_env[w % ENV_N] = on > 0 ? on : 0;
+        s_lvl[w % ENV_N] = db;
+        s_env_w = w + 1;
+    }
+    s_env_us = esp_timer_get_time();
+}
+
+bool voice_beat(int *period_ms, int64_t *next_us)
+{
+    static float e[ENV_N];
+    uint32_t w = s_env_w;
+    if (w < ENV_N) return false;
+    float loud = 0;
+    for (int i = 0; i < ENV_N; i++) { e[i] = s_env[(w + i) % ENV_N]; loud += s_lvl[(w + i) % ENV_N]; }
+    if (loud / ENV_N < -50) return false;                 // too quiet for music
+    float conf;
+    int ph, per = beat_find(e, ENV_N, 21, 54, &conf, &ph);   // 70 .. 180 bpm
+    if (!per || conf < 0.35f) return false;
+    *period_ms = per * HOP * 1000 / 16000;
+    int64_t last = s_env_us - (int64_t)ph * HOP * 1000000 / 16000, now = esp_timer_get_time();
+    while (last < now + 150000) last += (int64_t)*period_ms * 1000;
+    *next_us = last;
+    ESP_LOGI(TAG, "beat: %d bpm (sure %.2f)", 60000 / *period_ms, conf);
+    return true;
+}
+
 static void feed_task(void *arg)
 {
     int n = s_afe->get_feed_chunksize(s_afed) * s_afe->get_feed_channel_num(s_afed);
@@ -272,6 +437,8 @@ static void feed_task(void *arg)
         float lv = (db + 60.0f) * (100.0f / 60.0f);
         s_peak = lv > s_peak ? lv : s_peak * 0.93f;
         s_level = s_peak < 0 ? 0 : s_peak > 100 ? 100 : (int)s_peak;
+        doa_push(buf, m, ch);
+        env_push(buf, m, ch);
         s_afe->feed(s_afed, buf);
     }
 }
@@ -287,6 +454,7 @@ static void detect_task(void *arg)
         if (!r || r->ret_value == ESP_FAIL || !r->data) continue;
         if (r->vad_state == VAD_SPEECH) s_speech_us = esp_timer_get_time();
         fx_listening(s_wake && window_open(esp_timer_get_time()));
+        pick_listening(window_open(esp_timer_get_time()));   // leans in, head cocked, while its ears are open
         int n = r->data_size / (int)sizeof(int16_t);
         bool cloud = s_seg && cloud_ready();
 
@@ -324,7 +492,7 @@ static void detect_task(void *arg)
                     } else if (cloud && s_seg_on && !is_stop(p)) {
                         // the cloud gets this utterance: the wake word just opens the window (and marks it for
                         // sending), anything else is kept as the fallback if the cloud call fails
-                        if (is_wake(p)) { voice_engage(); s_seg_wake = true; fx_event(FX_HEARD); note(p, pr, "wake — listening ☁"); }
+                        if (is_wake(p)) { voice_engage(); s_seg_wake = true; fx_event(FX_HEARD); face_voice(); pick_attention(); note(p, pr, "wake — listening ☁"); }
                         else { if (pr > s_seg_fbp) { strlcpy(s_seg_fb, p, sizeof s_seg_fb); s_seg_fbp = pr; } note(p, pr, "→ cloud"); }
                         ESP_LOGI(TAG, "\"%s\" (p=%.2f) -> cloud", p, pr);
                     } else {
@@ -337,7 +505,10 @@ static void detect_task(void *arg)
                             router_exec(p, msg, sizeof msg);
                             note(p, pr, msg);
                             ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", p, pr, msg);
-                        } else run_text(p, pr, "");     // "hey muffin" opens the window, commands keep it open
+                        } else {
+                            if (is_wake(p)) face_voice();   // turn toward whoever said its name
+                            run_text(p, pr, "");            // "hey muffin" opens the window, commands keep it open
+                        }
                     }
                 }
                 s_mn->clean(s_mnd);
@@ -386,6 +557,16 @@ void voice_start(i2c_master_bus_handle_t bus)
     tune_load();
     s_in = audio_in();
     if (!s_in) { strlcpy(s_status, "no mic — audio codec didn't start", sizeof s_status); ESP_LOGE(TAG, "%s", s_status); return; }
+    {   // turning toward voices: both mics' last second (PSRAM), and the saved on/off/flip
+        nvs_handle_t h;
+        int8_t f;
+        if (nvs_open("xarm", NVS_READONLY, &h) == ESP_OK) { if (nvs_get_i8(h, "face", &f) == ESP_OK) s_face = f; nvs_close(h); }
+        if (audio_mic_dual()) {
+            s_doa1 = heap_caps_calloc(DOA_N, sizeof(int16_t), MALLOC_CAP_SPIRAM);
+            s_doa2 = heap_caps_calloc(DOA_N, sizeof(int16_t), MALLOC_CAP_SPIRAM);
+            if (!s_doa1 || !s_doa2) { free(s_doa1); free(s_doa2); s_doa1 = s_doa2 = NULL; }
+        }
+    }
     srmodel_list_t *models = esp_srmodel_init("model");
     char *name = models ? esp_srmodel_filter(models, ESP_MN_PREFIX, ESP_MN_ENGLISH) : NULL;
     if (!name) { strlcpy(s_status, "no English speech model in flash", sizeof s_status); ESP_LOGE(TAG, "%s", s_status); return; }

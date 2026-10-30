@@ -39,6 +39,7 @@ typedef struct {
 
 static SemaphoreHandle_t s_tx, s_txn, s_read_done, s_mx;
 static joint_t s_j[NSERVO];
+static volatile int64_t s_manual_us;         // last jog / drive / torque change (the app's hands on the arm)
 static int64_t s_drive_until;
 static uint16_t s_rd[NSERVO];
 static volatile int s_batt;
@@ -253,6 +254,7 @@ void arm_move_one(int id, uint16_t pos, uint16_t ms)
 
 void arm_follow_one(int id, uint16_t pos)
 {
+    s_manual_us = esp_timer_get_time();       // a person is driving: no idle life for a while
     if (id < 1 || id > NSERVO) return;
     lock();
     joint_t *j = &s_j[id - 1];
@@ -266,6 +268,7 @@ void arm_follow_one(int id, uint16_t pos)
 
 void arm_drive(const float vel[NSERVO], int keep_ms)
 {
+    s_manual_us = esp_timer_get_time();       // a person is driving: no idle life for a while
     lock();
     bool any = false;
     for (int i = 0; i < NSERVO; i++) {
@@ -298,6 +301,7 @@ bool arm_read(uint16_t out[NSERVO])
 
 void arm_torque(bool on)
 {
+    s_manual_us = esp_timer_get_time();       // a person is driving: no idle life for a while
     if (on) { arm_hold(); return; }
     uint8_t f[16];
     lock();
@@ -331,6 +335,7 @@ void arm_hold(void)
 }
 
 bool arm_torque_on(void) { return s_torque; }
+int64_t arm_manual_us(void) { return s_manual_us; }
 
 void arm_last(uint16_t out[NSERVO])
 {

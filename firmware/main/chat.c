@@ -76,7 +76,7 @@ bool chat_exec(const char *t, char *msg, size_t n)
     if (has(t, "teach me") || has(t, "tell me more") || has(t, "lesson")) return teach(s_next_lesson, msg, n);
     // ---- its name
     if (has(t, "muffin") && (eq(t, "muffin") || has(t, "hey") || has(t, "hi ") || has(t, "hello")))
-        return reply(SND_HEY, msg, n, "you rang?");
+        { pick_attention(); return reply(SND_HEY, msg, n, "you rang?"); }
     if (has(t, "your name") || has(t, "who are you")) return reply(SND_NAME, msg, n, "I'm Muffin");
     // ---- small talk
     if (has(t, "how are you")) return reply(s_mood >= 0 ? SND_HOW_GOOD : SND_HOW_BAD, msg, n, s_mood >= 0 ? "great" : "grumpy");

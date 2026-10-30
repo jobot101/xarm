@@ -4,6 +4,7 @@
 #include "esp_log.h"
 #include "fx.h"
 #include "nvs.h"
+#include "school.h"
 
 static const char *TAG = "kids";
 static kid_t s_kids[KIDS_MAX];
@@ -46,6 +47,7 @@ int kids_add(const char *name, const char *emoji, int jewel)
         strlcpy(s_kids[i].emoji, emoji && emoji[0] ? emoji : "🙂", sizeof s_kids[i].emoji);
         s_kids[i].jewel = (uint8_t)(jewel & 3);
         save();
+        school_kid_reset(i);                  // a fresh slot starts school from lesson one
         return i;
     }
     return -1;
@@ -57,6 +59,7 @@ bool kids_remove(int i)
     memset(&s_kids[i], 0, sizeof s_kids[i]);
     if (s_cur == i) s_cur = -1;
     save();
+    school_kid_reset(i);
     return true;
 }
 
@@ -81,10 +84,11 @@ int kids_find(const char *text)
     return -1;
 }
 
-void kids_score(const char *game, int score)
+bool kids_score(const char *game, int score)
 {
-    if (s_cur < 0 || score < 0) return;
+    if (s_cur < 0 || score < 0) return false;
     uint16_t *best = !strcmp(game, "bells") ? &s_kids[s_cur].best_bells
                    : !strcmp(game, "tower") ? &s_kids[s_cur].best_tower : NULL;
-    if (best && score > *best) { *best = (uint16_t)score; save(); fx_event(FX_CHEER); }
+    if (best && score > *best) { *best = (uint16_t)score; save(); fx_event(FX_CHEER); return true; }
+    return false;
 }

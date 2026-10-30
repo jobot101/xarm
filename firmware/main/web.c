@@ -27,6 +27,7 @@
 #include "cloud.h"
 #include "sdkconfig.h"
 #include "audio.h"
+#include "school.h"
 
 static const char *TAG = "web";
 extern const uint8_t app_start[] asm("_binary_index_html_gz_start");
@@ -111,6 +112,7 @@ static esp_err_t h_state(httpd_req_t *r)
     cJSON_AddItemToObject(arm, "pos", u16arr(p, NSERVO));
     cJSON_AddBoolToObject(arm, "torque", arm_torque_on());
     cJSON_AddBoolToObject(arm, "link", arm_link_ok());
+    cJSON_AddBoolToObject(arm, "anim", pick_anim_on());
     cJSON_AddNumberToObject(arm, "battery_mv", arm_battery_mv());
     {
         uint16_t l[NSERVO][2];
@@ -189,6 +191,7 @@ static esp_err_t h_state(httpd_req_t *r)
         cJSON_AddBoolToObject(v, "awake", open);       // listening for commands right now
         cJSON_AddStringToObject(v, "vad", vad);        // "VADNet" or "WebRTC" (old speech models in flash)
         cJSON_AddBoolToObject(v, "dual", audio_mic_dual());
+        cJSON_AddNumberToObject(v, "face", voice_face());
         {   // cloud ears (Groq Whisper). The key itself never leaves the board, only "gsk_…wxyz"
             bool on; char kh[24], cs[80], cl[96]; int ms, today;
             cloud_diag(&on, kh, sizeof kh, cs, sizeof cs, cl, sizeof cl, &ms, &today);
@@ -311,6 +314,24 @@ static esp_err_t h_moves(httpd_req_t *r)
     return reply(r, ok, msg);
 }
 
+// ---------- GET /api/school, POST /api/school {"on","minutes","pass","more":kid,"reset_day":kid,"restart":kid} ----------
+// Robot School (school.c): the grown-up's controls. The time limit only ever applies to voice.
+static esp_err_t h_school_get(httpd_req_t *r)
+{
+    cJSON *j = cJSON_CreateObject();
+    school_json(j);
+    return send_json(r, j);
+}
+
+static esp_err_t h_school_post(httpd_req_t *r)
+{
+    cJSON *b = body(r);
+    char msg[64] = "bad request";
+    bool ok = b && school_set(b, msg, sizeof msg);
+    cJSON_Delete(b);
+    return reply(r, ok, msg);
+}
+
 // ---------- POST /api/kids {"action":"add",name,emoji,jewel} | {"action":"select"|"remove", i} | {"action":"score", game, score} ----------
 static esp_err_t h_kids(httpd_req_t *r)
 {
@@ -345,6 +366,8 @@ static esp_err_t h_fx(httpd_req_t *r)
     cJSON *b = body(r);
     int show = num(b, "show", -1);
     cJSON *e = cJSON_GetObjectItem(b, "event");
+    cJSON *an = cJSON_GetObjectItem(b, "anim");      // lifelike motion on/off
+    if (cJSON_IsBool(an)) pick_anim(cJSON_IsTrue(an));
     if (show >= 0) fx_show(show);
     else if (cJSON_IsString(e)) fx_event(!strcmp(e->valuestring, "sad") ? FX_ERROR : FX_CHEER);
     cJSON_Delete(b);
@@ -450,7 +473,8 @@ static esp_err_t h_voice(httpd_req_t *r)
 {
     cJSON *b = body(r);
     voice_tune(num(b, "gain", -1), num(b, "thresh", -1), num(b, "wake", -1));
-    int dual = num(b, "dual", -1), cl = num(b, "cloud", -1), sdv = num(b, "sd", -1);
+    int dual = num(b, "dual", -1), cl = num(b, "cloud", -1), sdv = num(b, "sd", -1), face = num(b, "face", 9);
+    if (face >= -1 && face <= 1) voice_face_set(face);
     cJSON *key = cJSON_GetObjectItem(b, "stt_key");
     bool keyed = cJSON_IsString(key);
     if (keyed) cloud_set_key(key->valuestring);
@@ -478,7 +502,7 @@ static esp_err_t h_cmd(httpd_req_t *r)
     cJSON *b = body(r);
     cJSON *t = cJSON_GetObjectItem(b, "text");
     char msg[96];
-    bool ok = cJSON_IsString(t) && router_exec(t->valuestring, msg, sizeof msg);
+    bool ok = cJSON_IsString(t) && router_exec_ex(t->valuestring, msg, sizeof msg, true);
     if (!cJSON_IsString(t)) strcpy(msg, "need text");
     else voice_engage();     // someone's playing from the app: Muffin listens without "Hey Muffin" for a bit
     cJSON_Delete(b);
@@ -687,7 +711,7 @@ static esp_err_t h_app(httpd_req_t *r)
 bool web_start(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 24;
+    c.max_uri_handlers = 26;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
     c.stack_size = 8192;                      // /api/state builds a big JSON tree; 4 KB default is tight
@@ -710,6 +734,8 @@ bool web_start(void)
         {"/api/moves",  HTTP_POST, h_moves},
         {"/api/fx",     HTTP_POST, h_fx},
         {"/api/kids",   HTTP_POST, h_kids},
+        {"/api/school", HTTP_GET,  h_school_get},
+        {"/api/school", HTTP_POST, h_school_post},
         {"/api/voice",  HTTP_POST, h_voice},
         {"/api/limits", HTTP_POST, h_limits},
         {"/api/i2c",    HTTP_GET,  h_i2c},

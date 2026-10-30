@@ -19,6 +19,7 @@
 #include "kids.h"
 #include "voice.h"
 #include "web.h"
+#include "school.h"
 
 void app_main(void)
 {
@@ -51,7 +52,9 @@ void app_main(void)
     arm_init();
     cam_init(bus);
     pick_init();
+    school_init(bus);      // Robot School: the daily class (after kids, sounds and motion)
     net_start();
+    school_clock_start();  // internet time, when there's WiFi
     // the web UI is up: this build is good. A build that can't serve it rolls back on the next reboot
     if (web_start()) esp_ota_mark_app_valid_cancel_rollback();
     update_start();        // watches GitHub Pages for new builds

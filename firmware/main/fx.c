@@ -13,6 +13,7 @@
 #include "voice.h"
 #include "sounds_gen.h"
 #include "chat.h"
+#include "school.h"
 #include "sdkconfig.h"
 #include "led_strip.h"
 #include "freertos/FreeRTOS.h"
@@ -59,6 +60,8 @@ typedef struct { uint16_t g; int8_t pick; uint8_t low; int64_t at; } req_t;
 static QueueHandle_t s_sq;
 static volatile bool s_hush;                  // stop: cut the current clip, drop the queue
 static volatile bool s_talking;
+static volatile bool s_speech;                // the clip playing is Muffin talking (not a sound effect)
+static volatile float s_talk_lvl;             // its loudness right now, 0..1 (pick.c nods along)
 static uint8_t s_lastpick[SND_GROUPS];
 static volatile int64_t s_last_activity_us, s_last_said_us;
 
@@ -88,11 +91,20 @@ static int dec_next(dec_t *d)
     return d->pred;
 }
 
-// one clip's samples, from either bank: ADPCM out of mapped flash, or 16-bit PCM read from the card
-typedef struct { bool pcm; dec_t d; FILE *f; uint32_t left; int pos, len; int16_t fb[256]; } rd_t;
+// one clip's samples, from either bank: ADPCM out of mapped flash, or from the card: 16-bit PCM, or ADPCM
+// for the SD-only groups (Robot School), streamed through a small byte buffer
+typedef struct { bool pcm, adp; dec_t d; FILE *f; uint32_t left; int pos, len; int16_t fb[256]; uint8_t bb[256]; } rd_t;
 
 static int rd_next(rd_t *r)
 {
+    if (r->adp) {
+        if ((int)(r->d.k >> 1) >= r->len) {   // nibbles used up: next bytes from the card
+            r->len = (int)fread(r->bb, 1, sizeof r->bb, r->f);
+            if (r->len <= 0) { s_sd_bad = true; r->len = 0; return r->d.pred; }
+            r->d.p = r->bb; r->d.k = 0;
+        }
+        return dec_next(&r->d);
+    }
     if (!r->pcm) return dec_next(&r->d);
     if (r->pos >= r->len) {
         size_t want = r->left < 256 ? r->left : 256;
@@ -104,6 +116,16 @@ static int rd_next(rd_t *r)
     return r->fb[r->pos++];
 }
 
+static void talk_meter(const int16_t *b, int n)
+{
+    if (!s_speech) { s_talk_lvl = 0; return; }
+    float acc = 0;
+    for (int i = 0; i < n; i++) acc += (float)b[i] * b[i];
+    float rms = sqrtf(acc / n) / 6000.0f;          // mastered speech peaks around 0.5-1
+    s_talk_lvl = rms > 1 ? 1 : rms;
+}
+float fx_talk_level(void) { return s_talking ? s_talk_lvl : 0; }
+
 // play one clip straight to the speaker; slower clips (speech at 11/12 kHz in the flash bank) are
 // resampled to 16 kHz (linear) on the way
 static void play_clip(uint32_t i)
@@ -112,24 +134,31 @@ static void play_clip(uint32_t i)
     static rd_t r;
     memset(&r, 0, sizeof r);
     int first;
+    const int khz = c->khz & 0x7F;           // bit 7: ADPCM on the card
     if (s_src == SRC_SD) {
-        r.pcm = true; r.f = s_sdf; r.left = c->n;
         if (fseek(s_sdf, c->off, SEEK_SET)) { s_sd_bad = true; return; }
-        first = rd_next(&r);
+        if (c->khz & 0x80) {
+            r.adp = true; r.f = s_sdf;
+            r.d = (dec_t){ NULL, c->n, 0, c->first, c->idx };
+            first = c->first;
+        } else {
+            r.pcm = true; r.f = s_sdf; r.left = c->n;
+            first = rd_next(&r);
+        }
     } else {
         r.d = (dec_t){ s_bank + c->off, c->n, 0, c->first, c->idx };
         first = r.d.pred;
     }
     static int16_t buf[256];
     int k = 0;
-    if (c->khz == AUDIO_RATE / 1000 || c->khz == 0) {
+    if (khz == AUDIO_RATE / 1000 || khz == 0) {
         buf[k++] = (int16_t)first;
         for (uint32_t s = 1; s < c->n && !s_hush && !s_sd_bad; s++) {
             buf[k++] = (int16_t)rd_next(&r);
-            if (k == 256) { audio_play(buf, k); k = 0; }
+            if (k == 256) { talk_meter(buf, k); audio_play(buf, k); k = 0; }
         }
     } else {                                  // output j sits at input j * khz/16, phase in 1/16ths
-        const uint32_t step = c->khz, one = AUDIO_RATE / 1000;
+        const uint32_t step = (uint32_t)khz, one = AUDIO_RATE / 1000;
         int a = first, b = c->n > 1 ? rd_next(&r) : a;
         uint32_t used = 2, ph = 0;
         while (!s_hush && !s_sd_bad) {
@@ -140,7 +169,7 @@ static void play_clip(uint32_t i)
                 if (used >= c->n) goto done;
                 b = rd_next(&r); used++;
             }
-            if (k == 256) { audio_play(buf, k); k = 0; }
+            if (k == 256) { talk_meter(buf, k); audio_play(buf, k); k = 0; }
         }
     }
 done:
@@ -210,6 +239,8 @@ static void bank_detach(void)
 }
 
 bool fx_bank_ok(void) { return s_src != SRC_NONE; }
+// a group with clips in the bank that's playing (SD-only groups are empty in the flash bank)
+bool fx_has(int g) { int src = s_src; return src != SRC_NONE && g >= 0 && g < SND_GROUPS && s_grp && s_grp[g].n > 0; }
 const char *fx_bank_src(void) { return s_src == SRC_SD ? "sd" : s_src == SRC_FLASH ? "flash" : "none"; }
 
 // update.c is about to rewrite the bank: cut any sound, wait for the player to let go, unmap
@@ -246,9 +277,11 @@ static void sound_task(void *arg)
         s_lastpick[r.g] = (uint8_t)v;
         uint32_t i = s_grp[r.g].first + v;
         if (i >= s_nclips) continue;
+        s_speech = r.g >= SND_N_SFX;
         s_talking = true;
         play_clip(i);
         s_talking = false;
+        s_talk_lvl = 0;
     }
 }
 
@@ -301,6 +334,7 @@ void fx_hush(void)
 
 // ---------------------------------------------------------------- lights
 typedef enum { L_BOOT, L_IDLE, L_THINK, L_WORK, L_HOLD, L_WARN, L_STOP, L_UPDATE, L_PARTY } led_mode_t;
+static volatile bool s_sleep;                 // Robot School is out for the day: a slow, dim amethyst breath
 
 static led_strip_handle_t s_led;
 static volatile led_mode_t s_mode = L_BOOT;
@@ -339,6 +373,7 @@ static void led_task(void *arg)
             if (t > 6 * LED_N + 30) s_mode = L_IDLE;
             break;
         case L_IDLE:                                         // rose window: sunlight drifting through the glass
+            if (s_sleep) { fill(AMETHYST, 0.03f + 0.12f * (0.5f - 0.5f * cosf(t * 0.025f))); break; }
             if (s_listen) { fill(SAPPHIRE, 0.25f + 0.55f * breathe); break; }   // ears open after "Hey Muffin"
             for (int i = 0; i < LED_N; i++)
                 px(i, ROSE[(i + t / 90) % LED_N], 0.10f + 0.22f * (0.5f - 0.5f * cosf(t * 0.05f + i * 0.9f)));
@@ -364,7 +399,7 @@ static void led_task(void *arg)
             if (s_last_activity_us && s_chatted_after != s_last_activity_us &&
                 quiet > (int64_t)CONFIG_XARM_CHATTER_MIN * 60000000 && quiet < 20LL * 60000000) {
                 s_chatted_after = s_last_activity_us;
-                if (!fx_is_quiet()) { chat_idle(); voice_engage(); }   // a line, or a question it'll act on if you answer
+                if (!fx_is_quiet() && school_chatter_ok()) { chat_idle(); voice_engage(); }   // a line, or a question it'll act on if you answer
             }
         }
         vTaskDelay(pdMS_TO_TICKS(33));
@@ -404,6 +439,8 @@ void fx_state(const char *st)
     else if (is(st, "dancing"))                                     { s_mode = L_PARTY;  play(SND_S_DANCE); }
     else if (is(st, "helping"))                                     { s_mode = L_HOLD; }
     else if (is(st, "teaching"))                                    { s_mode = L_THINK; }
+    else if (is(st, "celebrating"))                                 { s_mode = L_PARTY;  play(SND_S_FANFARE); }
+    else if (is(st, "grooving"))                                    { s_mode = L_PARTY; }   // dancing to the room's music: no tune of its own
     else if (is(st, "ringing") || is(st, "playing"))                { s_mode = L_PARTY;  s_working = is(st, "playing"); }
     else if (is(st, "not_found") || is(st, "need_calib"))           { s_mode = L_WARN;   play(SND_S_SAD); }
     else if (is(st, "stopped"))                                     { s_mode = L_STOP;   fx_hush(); play(SND_S_STOP); fx_say(SND_STOPPED); }
@@ -439,3 +476,4 @@ void fx_greet(int jewel, unsigned seed)
 }
 
 void fx_listening(bool on) { s_listen = on; }
+void fx_sleep(bool on) { s_sleep = on; }

@@ -28,6 +28,8 @@ export const api = {
   phrases: ()           => call('/api/phrases'),
   sys:    ()            => call('/api/sys'),            // CPU per task, memory (Workshop -> System)         // everything the voice listens for
   fx:     (body)        => call('/api/fx', body),        // {show:0..3} | {event:'sad'|'happy'}
+  school: ()            => call('/api/school'),          // Robot School: settings + each kid's progress
+  setSchool: (body)     => call('/api/school', body),    // {on, minutes, pass, more:i, reset_day:i, restart:i}
 }
 
 // servo index 0..5 = bus id 1..6 on the xArm 1S

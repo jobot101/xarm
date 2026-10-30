@@ -41,10 +41,13 @@ void fx_say_n(int first, int n);                                // SND_X_1 + n-1
 void fx_hush(void);                                             // cut the current clip, drop the queue
 void fx_play(int group);                                        // a sound effect group (SND_S_*)
 bool fx_bank_ok(void);                                          // a matching sound bank is loaded
+bool fx_has(int group);                                         // that group has clips (SD-only ones need the card)
+void fx_sleep(bool on);                                         // Robot School is out: dim amethyst ring
 const char *fx_bank_src(void);                                  // "sd" (full quality) / "flash" / "none"
 void fx_bank_release(void);                                     // before rewriting the bank in flash
 void fx_bank_reload(void);                                      // after
 void fx_quiet(int minutes);                                     // "be quiet": no talking for a while (0 = talk again)
 bool fx_is_quiet(void);
 bool fx_speaking(void);
+float fx_talk_level(void);                                      // how loud Muffin's own voice is right now, 0..1 (0 = not talking)
 void fx_listening(bool on);                                     // "Hey Muffin" window open: ring glows sapphire when idle                                         // something is playing or queued
