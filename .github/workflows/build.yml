@@ -206,9 +206,48 @@ jobs:
           name: camera
           path: camera/
 
+  # solenoid tester (solenoid/): one MOSFET + solenoid on any ESP32-S3. Arduino core 3.x, 4 MB image, no PSRAM,
+  # DIO flash so it boots on any S3 module; native-USB serial (CDC on boot) for the flasher's boot log
+  solenoid:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: install esp32 core 3.x
+        run: |
+          URL=https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core update-index --additional-urls $URL
+          arduino-cli core install esp32:esp32@3.2.0 --additional-urls $URL
+      - name: compile
+        run: |
+          set -o pipefail
+          arduino-cli compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PSRAM=disabled,FlashSize=4M,PartitionScheme=default,FlashMode=dio" \
+            --export-binaries --output-dir out solenoid 2>&1 | tee sol.log
+      - name: report compile errors
+        if: failure()
+        run: grep -E "error:|Error" sol.log | head -30 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done
+      - name: package
+        run: |
+          B0=$(find ~/.arduino15 -name boot_app0.bin | head -1)
+          d=sol; mkdir -p $d
+          cp out/solenoid.ino.bootloader.bin $d/bootloader.bin
+          cp out/solenoid.ino.partitions.bin $d/partitions.bin
+          cp "$B0" $d/boot_app0.bin
+          cp out/solenoid.ino.bin $d/solenoid.bin
+          cat > $d/manifest.json <<JSON
+          {"name":"solenoid tester","version":"${GITHUB_SHA::7}","builds":[{"chipFamily":"ESP32-S3","parts":[
+            {"path":"bootloader.bin","offset":0},{"path":"partitions.bin","offset":32768},
+            {"path":"boot_app0.bin","offset":57344},{"path":"solenoid.bin","offset":65536}]}]}
+          JSON
+          ls -la $d
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sol
+          path: sol/
+
   # phone flasher page with both boards' files baked in -> https://jobot101.github.io/xarm/
   pages:
-    needs: [firmware, camera]
+    needs: [firmware, camera, solenoid]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -220,11 +259,13 @@ jobs:
         with: { name: release, path: release }
       - uses: actions/download-artifact@v4
         with: { name: camera, path: camera }
+      - uses: actions/download-artifact@v4
+        with: { name: sol, path: sol }
       - name: build flasher page
         working-directory: flasher
         run: |
           npm ci && npm run build
-          mkdir -p dist/fw dist/cam && cp ../release/* dist/fw/ && cp -r ../camera/* dist/cam/
+          mkdir -p dist/fw dist/cam dist/sol && cp ../release/* dist/fw/ && cp -r ../camera/* dist/cam/ && cp ../sol/* dist/sol/
       - name: publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:

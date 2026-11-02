@@ -1,6 +1,7 @@
 // One-tap ESP32-S3 flasher for phones, for both boards:
 //   arm brain = Waveshare ESP32-S3-AUDIO-Board  (native USB-Serial-JTAG, 303A:1001, 16 MB flash)
 //   camera    = Hiwonder ESP32-S3 vision module (4 MB flash; its USB may be native or a CH340 bridge)
+//   solenoid  = solenoid tester for any ESP32-S3 board (4 MB image, runs on any flash size; solenoid/ in the repo)
 // Android Chrome can't reach these through Web Serial, so we open them over WebUSB:
 //   303A (native)  -> Google's web-serial-polyfill (CDC-ACM)
 //   1A86 (CH340)   -> esptool-js's own WebUSBSerialPort
@@ -12,6 +13,7 @@ const ESPRESSIF = 0x303a, WCH = 0x1a86
 const BOARDS = {
   arm: { base: './fw/', label: 'arm brain', expectMB: 16, appOffset: 0x10000 },
   cam: { base: './cam/', label: 'camera', expectMB: 4 },
+  sol: { base: './sol/', label: 'solenoid tester', expectMB: 0 },   // 0 = any flash size
 }
 
 const $ = (id) => document.getElementById(id)
@@ -22,7 +24,7 @@ const progress = (f) => { barEl.style.width = `${Math.round(f * 100)}%` }
 const terminal = { clean() { logEl.textContent = '' }, writeLine: (s) => log(s + '\n'), write: (s) => log(s) }
 
 let board = 'arm'
-let manifests = {}          // arm: manifest, cam: { qspi, opi }
+let manifests = {}          // arm: manifest, cam: { qspi, opi }, sol: manifest
 let busy = false
 
 const getJSON = async (u) => (await fetch(u, { cache: 'no-store' })).json()
@@ -32,19 +34,22 @@ async function loadManifests() {
   try {
     manifests.cam = { qspi: await getJSON(BOARDS.cam.base + 'qspi/manifest.json'), opi: await getJSON(BOARDS.cam.base + 'opi/manifest.json') }
   } catch {}
+  try { manifests.sol = await getJSON(BOARDS.sol.base + 'manifest.json') } catch {}
   render(true)
 }
 
 function render(hint = false) {
   document.querySelectorAll('.board').forEach(b => b.classList.toggle('on', b.dataset.board === board))
   $('modes').style.display = board === 'arm' ? '' : 'none'
-  const m = board === 'arm' ? manifests.arm : manifests.cam?.qspi
+  const m = board === 'cam' ? manifests.cam?.qspi : manifests[board]
   $('fw').textContent = m ? `build ${m.version}` : 'files missing'
   flashBtn.disabled = !m || busy
-  flashBtn.textContent = board === 'arm' ? 'Flash arm brain' : 'Flash camera'
-  if (hint) status(board === 'arm'
-    ? 'Plug the Waveshare board (round, with the speaker) into this phone.'
-    : 'Plug the camera module into this phone by its own USB-C. Unplug it from the arm first.')
+  flashBtn.textContent = { arm: 'Flash arm brain', cam: 'Flash camera', sol: 'Flash solenoid tester' }[board]
+  if (hint) status({
+    arm: 'Plug the Waveshare board (round, with the speaker) into this phone.',
+    cam: 'Plug the camera module into this phone by its own USB-C. Unplug it from the arm first.',
+    sol: 'Plug the ESP32-S3 board into this phone. Two USB ports? Either works. Unplug the solenoid supply first.',
+  }[board])
 }
 
 document.querySelectorAll('.board').forEach(b => b.addEventListener('click', () => { if (!busy) { board = b.dataset.board; render(true) } }))
@@ -85,8 +90,8 @@ async function flash() {
   busy = true; render(); monBtn.disabled = true
   const B = BOARDS[board]
   const mode = document.querySelector('input[name=mode]:checked').value
-  const full = board === 'cam' || mode !== 'app'           // write every part
-  const erase = board === 'cam' || mode === 'full'          // and wipe the chip first ('keep' leaves nvs + store alone)
+  const full = board !== 'arm' || mode !== 'app'           // write every part
+  const erase = board !== 'arm' || mode === 'full'          // and wipe the chip first ('keep' leaves nvs + store alone)
   let transport
   try {
     terminal.clean(); progress(0)
@@ -103,11 +108,11 @@ async function flash() {
     const features = (await loader.chip.getChipFeatures(loader)).join(', ')
     const flashMB = parseInt(loader.DETECTED_FLASH_SIZES[(await loader.readFlashId()) >> 16 & 0xff] || '0')
     log(`features: ${features}\nflash: ${flashMB} MB\n`)
-    if (flashMB && flashMB !== B.expectMB &&
+    if (flashMB && B.expectMB && flashMB !== B.expectMB &&
         !confirm(`This board has ${flashMB} MB flash — the ${B.label} should have ${B.expectMB} MB. Is it the right board? Flash anyway?`))
       throw new Error('cancelled — wrong board?')
 
-    let man = manifests.arm, base = B.base
+    let man = manifests[board], base = B.base
     if (board === 'cam') {   // octal PSRAM (8 MB, 1.8 V) vs quad (2 MB) — pick the matching build
       const opi = /PSRAM 8MB|Octal|1v8/i.test(features)
       man = opi ? manifests.cam.opi : manifests.cam.qspi
@@ -134,9 +139,11 @@ async function flash() {
     progress(1)
     status('Done. Rebooting…', 'ok')
     await loader.after('hard_reset')
-    status(board === 'arm'
-      ? 'Done ✓ — listen for “Ready to rumble!”, then join WiFi “Muffin” (pw ragamuffin) → 192.168.4.1'
-      : 'Camera done ✓ — plug it back onto the arm (5V, GND, SDA, SCL). If nothing happens, tap its reset.', 'ok')
+    status({
+      arm: 'Done ✓ — listen for “Ready to rumble!”, then join WiFi “Muffin” (pw ragamuffin) → 192.168.4.1',
+      cam: 'Camera done ✓ — plug it back onto the arm (5V, GND, SDA, SCL). If nothing happens, tap its reset.',
+      sol: 'Solenoid done ✓ — join WiFi “Solenoid” (pw ragamuffin) → 192.168.4.1. MOSFET gate on GPIO 4 (change it there). BOOT button = strike.',
+    }[board], 'ok')
   } catch (e) {
     console.error(e)
     log(`\nERROR: ${e.message || e}\n`)

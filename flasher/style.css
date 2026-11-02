@@ -29,8 +29,8 @@ button.big { margin-top: 10px; padding: 18px; font-size: 20px; font-weight: 800;
 pre { background: #0b0b0b; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 11px; line-height: 1.35;
   height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin: 0; }
 
-.boards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-.board { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px; border-radius: 14px; font-weight: 800; }
+.boards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.board { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 12px 6px; border-radius: 14px; font-weight: 800; }
 .board span { font-size: 28px; }
 .board small { color: var(--dim); font-weight: 400; font-size: 12px; }
 .board.on { border-color: var(--brass); background: #2e2614; }
