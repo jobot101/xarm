@@ -28,6 +28,7 @@
 #define AP_SSID     "Solenoid"
 #define AP_PASS     "ragamuffin"
 #define HOSTNAME    "solenoid"
+#define HOME_SSID   "ClarkShop"   // preset network; its password is typed once on the page (NVS), never in the repo
 #define BOOT_BTN    0
 #define RES_BITS    10
 #define FULL        1023          // ledcWrite turns max into 100 % on
@@ -220,13 +221,14 @@ input[type=range]{width:100%}input[type=number],select{width:90px;font:inherit;p
 <div class="card"><b>Hall WiFi</b> <small id="nets"></small>
 <label>network <input id="ssid" list="aps" style="width:160px;font:inherit;padding:6px;border-radius:8px;border:0;background:#333;color:var(--fg)"></label><datalist id="aps"></datalist>
 <label>password <input id="wpass" type="password" style="width:160px;font:inherit;padding:6px;border-radius:8px;border:0;background:#333;color:var(--fg)"></label>
-<div class="row"><button id="scan">Scan</button><button id="join">Join</button><button id="forget">Forget</button></div></div>
+<div class="row"><button id="clark">ClarkShop</button><button id="scan">Scan</button></div>
+<div class="row"><button id="join">Join</button><button id="forget">Forget</button></div></div>
 <div class="card"><b>Firmware</b> <small id="fwv"></small>
 <div class="row"><button id="latest">Install latest</button></div>
 <p style="color:var(--dim);font-size:13px">Needs mobile data on, page open in Chrome (not the WiFi sign-in pop-up).</p>
 <input type="file" id="bin" accept=".bin"><div class="row"><button id="up">Upload file</button></div></div>
 <script>
-const LATEST=')HTML" LATEST_URL R"HTML(';
+const LATEST=')HTML" LATEST_URL R"HTML(',HOME=')HTML" HOME_SSID R"HTML(';
 const $=id=>document.getElementById(id),go=u=>fetch(u).then(r=>r.json()).then(show).catch(()=>{});
 const PINS=[1,2,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,21,38,39,40,41,42,43,44,47,48];
 PINS.forEach(p=>$('pin').add(new Option('GPIO '+p,p)));
@@ -237,7 +239,7 @@ function show(j){if(!j||j.err){$('st').textContent=j?j.err:'no reply';return}c=j
  $('fw').textContent=j.fw;$('heat').style.width=j.heat+'%';
  $('st').textContent=`GPIO ${j.pin} · ${j.state} · ${Math.round(j.min+(j.max-j.min)*($('vel').value-1)/126)} ms · strikes ${j.strikes} · heat-clipped ${j.clipped}${j.rep?' · repeat '+j.rep:''}`;
  $('rep').textContent=j.rep?'Stop':'Go'}
-function fill(j){show(j);if(j.net&&j.net.ssid)$('ssid').value=j.net.ssid;$('fwv').textContent='running '+j.fw;$('volts').value=j.volts;$('pin').value=j.pin;$('inv').checked=!!j.inv;
+function fill(j){show(j);$('ssid').value=(j.net&&j.net.ssid)||HOME;$('fwv').textContent='running '+j.fw;$('volts').value=j.volts;$('pin').value=j.pin;$('inv').checked=!!j.inv;
  ['min','max','kick','mhold','hz'].forEach(k=>$(k).value=j[k]);$('hold_').value=j.hold}
 $('vel').oninput=()=>{$('vv').textContent=$('vel').value;show(c)};
 $('strike').addEventListener('pointerdown',e=>{e.preventDefault();go('/s?v='+$('vel').value)});
@@ -247,6 +249,7 @@ h.addEventListener('pointerdown',e=>{e.preventDefault();h.setPointerCapture(e.po
 $('stop').onclick=()=>go('/stop');
 $('scan').onclick=()=>{$('scan').textContent='scanning…';fetch('/scan').then(r=>r.json()).then(a=>{$('aps').innerHTML='';
  a.forEach(s=>$('aps').append(new Option(s)));$('scan').textContent=a.length+' found';if(a.length&&!$('ssid').value)$('ssid').value=a[0]}).catch(()=>$('scan').textContent='Scan')};
+$('clark').onclick=()=>{$('ssid').value=HOME;$('wpass').focus()};
 $('join').onclick=()=>{if(!$('ssid').value)return;const q=new URLSearchParams({ssid:$('ssid').value,pass:$('wpass').value});go('/wifi?'+q)};
 $('forget').onclick=()=>{if(confirm('Forget the hall WiFi?'))go('/wifi?forget=1')};
 $('rep').onclick=()=>go(c.rep?'/stop':`/r?n=${$('n').value}&bpm=${$('bpm').value}&v=${$('vel').value}`);
