@@ -7,10 +7,13 @@
 //        hold   = full-power kick, then PWM hold at hold% until released (auto-off after maxHold)
 // Built for 12 V coils run at 24 V: hold% is capped at 50, full-power on-time is rate-limited (heat bucket).
 // Also: BOOT button = strike, USB serial commands (type ? for help), WiFi firmware update at /update.
+// Network: always its own "Solenoid" AP (192.168.4.1); join the hall WiFi from the page -> http://solenoid.local,
+//          http://solenoid or its IP on that network. Credentials live in NVS.
 
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
+#include <ESPmDNS.h>
 #include <Preferences.h>
 #include <Update.h>
 #include "esp_timer.h"
@@ -24,6 +27,7 @@
 #define LATEST_URL  "https://jobot101.github.io/xarm/sol/"
 #define AP_SSID     "Solenoid"
 #define AP_PASS     "ragamuffin"
+#define HOSTNAME    "solenoid"
 #define BOOT_BTN    0
 #define RES_BITS    10
 #define FULL        1023          // ledcWrite turns max into 100 % on
@@ -48,6 +52,19 @@ esp_timer_handle_t tmr;
 Preferences prefs;
 WebServer server(80);
 DNSServer dns;
+
+String staSsid, staPass;
+uint8_t staWhy = 0;               // last disconnect reason
+uint32_t staTry = 0;              // when the current join attempt started (0 = not trying)
+uint32_t staNext = 0;             // next attempt
+// paced joins: a station that retries nonstop hops channels and keeps knocking phones off the Solenoid AP
+void staBegin() { staWhy = 0; WiFi.disconnect(); WiFi.begin(staSsid.c_str(), staPass.c_str()); staTry = millis() | 1; }
+void staService() {
+  if (!staSsid.length()) return;
+  if (WiFi.status() == WL_CONNECTED) { staTry = 0; staNext = millis() + 45000; return; }
+  if (staTry && millis() - staTry > 15000) { WiFi.disconnect(); staTry = 0; staNext = millis() + 45000; }  // give up for now
+  else if (!staTry && (int32_t)(millis() - staNext) >= 0) staBegin();
+}
 
 float bucket = BUCKET_MS;
 uint32_t lastRefill = 0, strikes = 0, clipped = 0;
@@ -139,12 +156,16 @@ void saveCfg() {
 String cfgJson() {
   refill();
   static const char* names[] = {"idle", "strike", "kick", "hold"};
-  char b[400];
+  char b[640];
+  bool up = WiFi.status() == WL_CONNECTED;
+  String ip = up ? WiFi.localIP().toString() : "";
   snprintf(b, sizeof b,
     "{\"fw\":\"%s\",\"pin\":%d,\"inv\":%d,\"min\":%d,\"max\":%d,\"kick\":%d,\"hold\":%d,\"mhold\":%d,\"hz\":%d,\"volts\":%d,"
-    "\"state\":\"%s\",\"heat\":%d,\"strikes\":%lu,\"clipped\":%lu,\"rep\":%d}",
+    "\"state\":\"%s\",\"heat\":%d,\"strikes\":%lu,\"clipped\":%lu,\"rep\":%d,"
+    "\"net\":{\"ssid\":\"%s\",\"up\":%d,\"ip\":\"%s\",\"why\":%d}}",
     FW_VERSION, cfg.pin, cfg.inv, cfg.minMs, cfg.maxMs, cfg.kickMs, cfg.holdPct, cfg.maxHoldS, cfg.hz, cfg.volts,
-    names[state], (int)(100 - bucket * 100 / BUCKET_MS), (unsigned long)strikes, (unsigned long)clipped, repLeft);
+    names[state], (int)(100 - bucket * 100 / BUCKET_MS), (unsigned long)strikes, (unsigned long)clipped, repLeft,
+    staSsid.c_str(), up, ip.c_str(), up ? 0 : staWhy);
   return b;
 }
 
@@ -196,6 +217,10 @@ input[type=range]{width:100%}input[type=number],select{width:90px;font:inherit;p
 <label>hold kick ms <input type="number" id="kick"></label><label>hold % <input type="number" id="hold_"></label>
 <label>hold auto-off s <input type="number" id="mhold"></label><label>PWM Hz <input type="number" id="hz"></label>
 <button id="save">Save</button></div>
+<div class="card"><b>Hall WiFi</b> <small id="nets"></small>
+<label>network <input id="ssid" list="aps" style="width:160px;font:inherit;padding:6px;border-radius:8px;border:0;background:#333;color:var(--fg)"></label><datalist id="aps"></datalist>
+<label>password <input id="wpass" type="password" style="width:160px;font:inherit;padding:6px;border-radius:8px;border:0;background:#333;color:var(--fg)"></label>
+<div class="row"><button id="scan">Scan</button><button id="join">Join</button><button id="forget">Forget</button></div></div>
 <div class="card"><b>Firmware</b> <small id="fwv"></small>
 <div class="row"><button id="latest">Install latest</button></div>
 <p style="color:var(--dim);font-size:13px">Needs mobile data on, page open in Chrome (not the WiFi sign-in pop-up).</p>
@@ -206,11 +231,13 @@ const $=id=>document.getElementById(id),go=u=>fetch(u).then(r=>r.json()).then(sh
 const PINS=[1,2,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,21,38,39,40,41,42,43,44,47,48];
 PINS.forEach(p=>$('pin').add(new Option('GPIO '+p,p)));
 let c={};
-function show(j){if(!j||j.err){$('st').textContent=j?j.err:'no reply';return}c=j;
+const WHY={2:'auth expired',15:'wrong password',201:'not found (2.4 GHz only)',202:'wrong password',203:'refused',204:'wrong password',205:'refused'};
+function show(j){if(!j||j.err){$('st').textContent=j?j.err:'no reply';return}c=j;const n=j.net||{};
+ $('nets').textContent=n.up?`on ${n.ssid} · ${n.ip} · solenoid.local`:n.ssid?`joining ${n.ssid}…${n.why?' ('+(WHY[n.why]||'reason '+n.why)+')':''}`:'not set — own WiFi only';
  $('fw').textContent=j.fw;$('heat').style.width=j.heat+'%';
  $('st').textContent=`GPIO ${j.pin} · ${j.state} · ${Math.round(j.min+(j.max-j.min)*($('vel').value-1)/126)} ms · strikes ${j.strikes} · heat-clipped ${j.clipped}${j.rep?' · repeat '+j.rep:''}`;
  $('rep').textContent=j.rep?'Stop':'Go'}
-function fill(j){show(j);$('fwv').textContent='running '+j.fw;$('volts').value=j.volts;$('pin').value=j.pin;$('inv').checked=!!j.inv;
+function fill(j){show(j);if(j.net&&j.net.ssid)$('ssid').value=j.net.ssid;$('fwv').textContent='running '+j.fw;$('volts').value=j.volts;$('pin').value=j.pin;$('inv').checked=!!j.inv;
  ['min','max','kick','mhold','hz'].forEach(k=>$(k).value=j[k]);$('hold_').value=j.hold}
 $('vel').oninput=()=>{$('vv').textContent=$('vel').value;show(c)};
 $('strike').addEventListener('pointerdown',e=>{e.preventDefault();go('/s?v='+$('vel').value)});
@@ -218,6 +245,10 @@ const h=$('hold');
 h.addEventListener('pointerdown',e=>{e.preventDefault();h.setPointerCapture(e.pointerId);h.classList.add('held');go('/h?on=1')});
 ['pointerup','pointercancel','lostpointercapture'].forEach(t=>h.addEventListener(t,()=>{if(h.classList.contains('held')){h.classList.remove('held');go('/h?on=0')}}));
 $('stop').onclick=()=>go('/stop');
+$('scan').onclick=()=>{$('scan').textContent='scanning…';fetch('/scan').then(r=>r.json()).then(a=>{$('aps').innerHTML='';
+ a.forEach(s=>$('aps').append(new Option(s)));$('scan').textContent=a.length+' found';if(a.length&&!$('ssid').value)$('ssid').value=a[0]}).catch(()=>$('scan').textContent='Scan')};
+$('join').onclick=()=>{if(!$('ssid').value)return;const q=new URLSearchParams({ssid:$('ssid').value,pass:$('wpass').value});go('/wifi?'+q)};
+$('forget').onclick=()=>{if(confirm('Forget the hall WiFi?'))go('/wifi?forget=1')};
 $('rep').onclick=()=>go(c.rep?'/stop':`/r?n=${$('n').value}&bpm=${$('bpm').value}&v=${$('vel').value}`);
 $('save').onclick=()=>go(`/cfg?volts=${$('volts').value}&pin=${$('pin').value}&inv=${$('inv').checked?1:0}&min=${$('min').value}&max=${$('max').value}&kick=${$('kick').value}&hold=${$('hold_').value}&mhold=${$('mhold').value}&hz=${$('hz').value}`).then(()=>fetch('/state').then(r=>r.json()).then(fill));
 function send(blob,btn){const x=new XMLHttpRequest(),d=new FormData();d.append('f',blob,'solenoid.bin');
@@ -250,6 +281,25 @@ void setupWeb() {
     String e = applyCfg([](const char* k) { return server.hasArg(k); }, [](const char* k) { return (int)server.arg(k).toInt(); });
     if (e.length()) server.send(400, "application/json", "{\"err\":\"" + e + "\"}"); else sendState();
   });
+  server.on("/scan", [] {
+    int n = WiFi.scanNetworks();
+    String j = "[";
+    for (int i = 0; i < n; i++) {
+      String s = WiFi.SSID(i); if (!s.length() || j.indexOf("\"" + s + "\"") >= 0) continue;
+      s.replace("\\", "\\\\"); s.replace("\"", "\\\"");
+      if (j.length() > 1) j += ",";
+      j += "\"" + s + "\"";
+    }
+    WiFi.scanDelete();
+    server.send(200, "application/json", j + "]");
+  });
+  server.on("/wifi", [] {
+    if (server.hasArg("forget")) { staSsid = staPass = ""; WiFi.disconnect(false, true); }
+    else { staSsid = server.arg("ssid"); staPass = server.arg("pass"); }
+    prefs.begin("sol", false); prefs.putString("ssid", staSsid); prefs.putString("wpass", staPass); prefs.end();
+    sendState();
+    if (staSsid.length()) staBegin(); else staTry = 0;
+  });
   server.on("/update", HTTP_POST, [] {
     bool ok = !Update.hasError();
     server.send(200, "text/plain", ok ? "ok" : "update failed");
@@ -260,7 +310,7 @@ void setupWeb() {
     else if (u.status == UPLOAD_FILE_WRITE) Update.write(u.buf, u.currentSize);
     else if (u.status == UPLOAD_FILE_END) Update.end(true);
   });
-  server.onNotFound([] { server.sendHeader("Location", "http://192.168.4.1/"); server.send(302); });  // captive portal
+  server.onNotFound([] { server.sendHeader("Location", "/"); server.send(302); });  // captive portal
   server.begin();
 }
 
@@ -294,10 +344,20 @@ void setup() {
   pinMode(BOOT_BTN, INPUT_PULLUP);
   lastRefill = millis();
 
-  WiFi.mode(WIFI_AP);
+  prefs.begin("sol", true); staSsid = prefs.getString("ssid", ""); staPass = prefs.getString("wpass", ""); prefs.end();
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t i) { staWhy = i.wifi_sta_disconnected.reason; },
+               ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t) {
+    Serial.printf("hall WiFi \"%s\": http://%s  http://%s.local\n", staSsid.c_str(), WiFi.localIP().toString().c_str(), HOSTNAME);
+  }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.setHostname(HOSTNAME);
   WiFi.softAP(AP_SSID, AP_PASS);
   WiFi.setSleep(false);
+  WiFi.setAutoReconnect(false);   // staService() paces the retries
+  if (staSsid.length()) staBegin();
   dns.start(53, "*", WiFi.softAPIP());
+  MDNS.begin(HOSTNAME); MDNS.addService("http", "tcp", 80);
   setupWeb();
   Serial.printf("\n%s  solenoid on GPIO %d  WiFi \"%s\" -> http://%s\n", FW_VERSION, cfg.pin, AP_SSID, WiFi.softAPIP().toString().c_str());
 }
@@ -306,6 +366,7 @@ void loop() {
   dns.processNextRequest();
   server.handleClient();
   serialCmd();
+  staService();
 
   static bool was = true; static uint32_t tDown = 0;      // BOOT button: strike at velocity 100
   bool up = digitalRead(BOOT_BTN);
