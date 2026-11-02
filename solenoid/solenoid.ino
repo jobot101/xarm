@@ -15,14 +15,21 @@
 #include <Update.h>
 #include "esp_timer.h"
 
-#define FW_VERSION  "sol-1"
+#if __has_include("version.h")
+#include "version.h"                // CI writes FW_VERSION = the short commit SHA (same as sol/manifest.json)
+#endif
+#ifndef FW_VERSION
+#define FW_VERSION  "dev"
+#endif
+#define LATEST_URL  "https://jobot101.github.io/xarm/sol/"
 #define AP_SSID     "Solenoid"
 #define AP_PASS     "ragamuffin"
 #define BOOT_BTN    0
 #define RES_BITS    10
 #define FULL        1023          // ledcWrite turns max into 100 % on
-#define BUCKET_MS   400.0f        // full-power ms that can go out back to back
+#define BUCKET_MS   400.0f        // full-power ms that can go out back to back (24 V on a 12 V coil)
 #define REFILL_MS_S 300.0f        // full-power ms per second on average (30 % duty at 24 V ~ 1.2x a 12 V coil's rating)
+                                  // at 12 V (= coil rating) the limiter is off and hold can go to 100 %
 
 struct Cfg {
   int pin = 4;
@@ -32,6 +39,7 @@ struct Cfg {
   int holdPct = 35;               // hold: PWM duty after the kick (35 % of 24 V ~ 8.4 V avg)
   int maxHoldS = 8;               // hold auto-release
   int hz = 20000;                 // PWM freq (opto-isolated modules: 1000)
+  int volts = 24;                 // supply: 12 = coil rating (no limits), 24 = 2x (heat-limited, hold <= 50 %)
 } cfg;
 
 enum State { IDLE, STRIKE, KICK, HOLD };
@@ -49,7 +57,8 @@ uint32_t repNext = 0, repGap = 250;
 // ---------- output ----------
 static inline void out(uint32_t d) { ledcWrite(cfg.pin, cfg.inv ? FULL - d : d); }
 static inline void off() { out(0); }
-static inline uint32_t holdDuty() { return (uint32_t)FULL * constrain(cfg.holdPct, 5, 50) / 100; }
+static inline int holdMax() { return cfg.volts <= 12 ? 100 : 50; }
+static inline uint32_t holdDuty() { return (uint32_t)FULL * constrain(cfg.holdPct, 5, holdMax()) / 100; }
 
 void IRAM_ATTR onTimer(void*) {
   if (state == KICK) {            // pull-in done -> hold at reduced duty, arm the auto-release
@@ -60,6 +69,7 @@ void IRAM_ATTR onTimer(void*) {
 
 void refill() {
   uint32_t now = millis();
+  if (cfg.volts <= 12) { bucket = BUCKET_MS; lastRefill = now; return; }   // rated voltage: no heat limit
   bucket = min(BUCKET_MS, bucket + (now - lastRefill) * REFILL_MS_S / 1000.0f);
   lastRefill = now;
 }
@@ -111,6 +121,7 @@ void loadCfg() {
   cfg.minMs = prefs.getInt("min", cfg.minMs);   cfg.maxMs = prefs.getInt("max", cfg.maxMs);
   cfg.kickMs = prefs.getInt("kick", cfg.kickMs); cfg.holdPct = prefs.getInt("hold", cfg.holdPct);
   cfg.maxHoldS = prefs.getInt("mhold", cfg.maxHoldS); cfg.hz = prefs.getInt("hz", cfg.hz);
+  cfg.volts = prefs.getInt("volts", cfg.volts);
   prefs.end();
   if (!pinOk(cfg.pin)) cfg.pin = 4;
 }
@@ -121,17 +132,18 @@ void saveCfg() {
   prefs.putInt("min", cfg.minMs);   prefs.putInt("max", cfg.maxMs);
   prefs.putInt("kick", cfg.kickMs); prefs.putInt("hold", cfg.holdPct);
   prefs.putInt("mhold", cfg.maxHoldS); prefs.putInt("hz", cfg.hz);
+  prefs.putInt("volts", cfg.volts);
   prefs.end();
 }
 
 String cfgJson() {
   refill();
   static const char* names[] = {"idle", "strike", "kick", "hold"};
-  char b[360];
+  char b[400];
   snprintf(b, sizeof b,
-    "{\"fw\":\"%s\",\"pin\":%d,\"inv\":%d,\"min\":%d,\"max\":%d,\"kick\":%d,\"hold\":%d,\"mhold\":%d,\"hz\":%d,"
+    "{\"fw\":\"%s\",\"pin\":%d,\"inv\":%d,\"min\":%d,\"max\":%d,\"kick\":%d,\"hold\":%d,\"mhold\":%d,\"hz\":%d,\"volts\":%d,"
     "\"state\":\"%s\",\"heat\":%d,\"strikes\":%lu,\"clipped\":%lu,\"rep\":%d}",
-    FW_VERSION, cfg.pin, cfg.inv, cfg.minMs, cfg.maxMs, cfg.kickMs, cfg.holdPct, cfg.maxHoldS, cfg.hz,
+    FW_VERSION, cfg.pin, cfg.inv, cfg.minMs, cfg.maxMs, cfg.kickMs, cfg.holdPct, cfg.maxHoldS, cfg.hz, cfg.volts,
     names[state], (int)(100 - bucket * 100 / BUCKET_MS), (unsigned long)strikes, (unsigned long)clipped, repLeft);
   return b;
 }
@@ -143,7 +155,9 @@ String applyCfg(std::function<bool(const char*)> has, std::function<int(const ch
   if (has("min"))   cfg.minMs = constrain(get("min"), 1, 100);
   if (has("max"))   cfg.maxMs = constrain(get("max"), 1, 100);
   if (has("kick"))  cfg.kickMs = constrain(get("kick"), 5, 100);
-  if (has("hold"))  cfg.holdPct = constrain(get("hold"), 5, 50);
+  if (has("volts")) cfg.volts = get("volts") <= 12 ? 12 : 24;
+  if (has("hold"))  cfg.holdPct = get("hold");
+  cfg.holdPct = constrain(cfg.holdPct, 5, holdMax());
   if (has("mhold")) cfg.maxHoldS = constrain(get("mhold"), 1, 60);
   if (has("hz"))    cfg.hz = constrain(get("hz"), 100, 40000);
   if (cfg.maxMs < cfg.minMs) cfg.maxMs = cfg.minMs;
@@ -175,14 +189,19 @@ input[type=range]{width:100%}input[type=number],select{width:90px;font:inherit;p
 <label>count <input type="number" id="n" value="16"></label><label>bpm <input type="number" id="bpm" value="240"></label>
 <button id="rep">Go</button></div>
 <div class="card"><b>Settings</b>
+<label>supply <select id="volts"><option value="12">12 V (coil rating)</option><option value="24">24 V (2× coil)</option></select></label>
 <label>GPIO <select id="pin"></select></label>
 <label>active low <input type="checkbox" id="inv"></label>
 <label>strike min ms <input type="number" id="min"></label><label>strike max ms <input type="number" id="max"></label>
-<label>hold kick ms <input type="number" id="kick"></label><label>hold % (≤50) <input type="number" id="hold_"></label>
+<label>hold kick ms <input type="number" id="kick"></label><label>hold % <input type="number" id="hold_"></label>
 <label>hold auto-off s <input type="number" id="mhold"></label><label>PWM Hz <input type="number" id="hz"></label>
 <button id="save">Save</button></div>
-<div class="card"><b>Firmware</b> <input type="file" id="bin" accept=".bin"><div class="row"><button id="up">Upload</button></div></div>
+<div class="card"><b>Firmware</b> <small id="fwv"></small>
+<div class="row"><button id="latest">Install latest</button></div>
+<p style="color:var(--dim);font-size:13px">Needs mobile data on, page open in Chrome (not the WiFi sign-in pop-up).</p>
+<input type="file" id="bin" accept=".bin"><div class="row"><button id="up">Upload file</button></div></div>
 <script>
+const LATEST=')HTML" LATEST_URL R"HTML(';
 const $=id=>document.getElementById(id),go=u=>fetch(u).then(r=>r.json()).then(show).catch(()=>{});
 const PINS=[1,2,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,21,38,39,40,41,42,43,44,47,48];
 PINS.forEach(p=>$('pin').add(new Option('GPIO '+p,p)));
@@ -191,7 +210,7 @@ function show(j){if(!j||j.err){$('st').textContent=j?j.err:'no reply';return}c=j
  $('fw').textContent=j.fw;$('heat').style.width=j.heat+'%';
  $('st').textContent=`GPIO ${j.pin} · ${j.state} · ${Math.round(j.min+(j.max-j.min)*($('vel').value-1)/126)} ms · strikes ${j.strikes} · heat-clipped ${j.clipped}${j.rep?' · repeat '+j.rep:''}`;
  $('rep').textContent=j.rep?'Stop':'Go'}
-function fill(j){show(j);$('pin').value=j.pin;$('inv').checked=!!j.inv;
+function fill(j){show(j);$('fwv').textContent='running '+j.fw;$('volts').value=j.volts;$('pin').value=j.pin;$('inv').checked=!!j.inv;
  ['min','max','kick','mhold','hz'].forEach(k=>$(k).value=j[k]);$('hold_').value=j.hold}
 $('vel').oninput=()=>{$('vv').textContent=$('vel').value;show(c)};
 $('strike').addEventListener('pointerdown',e=>{e.preventDefault();go('/s?v='+$('vel').value)});
@@ -200,10 +219,17 @@ h.addEventListener('pointerdown',e=>{e.preventDefault();h.setPointerCapture(e.po
 ['pointerup','pointercancel','lostpointercapture'].forEach(t=>h.addEventListener(t,()=>{if(h.classList.contains('held')){h.classList.remove('held');go('/h?on=0')}}));
 $('stop').onclick=()=>go('/stop');
 $('rep').onclick=()=>go(c.rep?'/stop':`/r?n=${$('n').value}&bpm=${$('bpm').value}&v=${$('vel').value}`);
-$('save').onclick=()=>go(`/cfg?pin=${$('pin').value}&inv=${$('inv').checked?1:0}&min=${$('min').value}&max=${$('max').value}&kick=${$('kick').value}&hold=${$('hold_').value}&mhold=${$('mhold').value}&hz=${$('hz').value}`).then(()=>fetch('/state').then(r=>r.json()).then(fill));
-$('up').onclick=()=>{const f=$('bin').files[0];if(!f)return;const x=new XMLHttpRequest(),d=new FormData();d.append('f',f);
- x.upload.onprogress=e=>$('up').textContent=Math.round(e.loaded*100/e.total)+'%';x.onload=()=>{$('up').textContent=x.responseText+' — rebooting';setTimeout(()=>location.reload(),4000)};
- x.open('POST','/update');x.send(d)};
+$('save').onclick=()=>go(`/cfg?volts=${$('volts').value}&pin=${$('pin').value}&inv=${$('inv').checked?1:0}&min=${$('min').value}&max=${$('max').value}&kick=${$('kick').value}&hold=${$('hold_').value}&mhold=${$('mhold').value}&hz=${$('hz').value}`).then(()=>fetch('/state').then(r=>r.json()).then(fill));
+function send(blob,btn){const x=new XMLHttpRequest(),d=new FormData();d.append('f',blob,'solenoid.bin');
+ x.upload.onprogress=e=>btn.textContent='writing '+Math.round(e.loaded*100/e.total)+'%';
+ x.onload=()=>{btn.textContent=x.responseText+' — rebooting';setTimeout(()=>location.reload(),5000)};
+ x.onerror=()=>btn.textContent='upload failed';x.open('POST','/update');x.send(d)}
+$('up').onclick=()=>{const f=$('bin').files[0];if(f)send(f,$('up'))};
+$('latest').onclick=async()=>{const b=$('latest');try{
+ b.textContent='checking…';const m=await(await fetch(LATEST+'manifest.json',{cache:'no-store'})).json();
+ if(m.version===c.fw&&!confirm('Already on '+m.version+'. Reinstall?')){b.textContent='up to date ('+m.version+')';return}
+ b.textContent='downloading '+m.version+'…';const r=await fetch(LATEST+'solenoid.bin',{cache:'no-store'});if(!r.ok)throw 0;
+ send(await r.blob(),b)}catch(e){b.textContent='no internet — mobile data on, open in Chrome'}};
 fetch('/state').then(r=>r.json()).then(fill);setInterval(()=>go('/state'),700);
 </script></main></body></html>)HTML";
 

@@ -16,3 +16,4 @@ preview/
 firmware/main/sounds_hq.bin
 web/dist-preview/
 __pycache__/
+solenoid/version.h

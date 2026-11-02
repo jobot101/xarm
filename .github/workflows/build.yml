@@ -221,6 +221,7 @@ jobs:
       - name: compile
         run: |
           set -o pipefail
+          echo "#define FW_VERSION \"${GITHUB_SHA::7}\"" > solenoid/version.h
           arduino-cli compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PSRAM=disabled,FlashSize=4M,PartitionScheme=default,FlashMode=dio" \
             --export-binaries --output-dir out solenoid 2>&1 | tee sol.log
       - name: report compile errors
