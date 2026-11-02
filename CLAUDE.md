@@ -65,7 +65,7 @@ The first flash happens from the phone over USB-C using **`flasher/`** (modes: *
 
 The CI `camera` job builds it with arduino-esp32 2.0.17 (bundled esp-dl), 4 MB flash, huge_app, for both quad and octal PSRAM. The flasher's **Camera** button handles it. HSV thresholds live in `color_detection.cpp`.
 
-**Solenoid tester (separate from the arm):** `solenoid/solenoid.ino` (Arduino core 3.x, any ESP32-S3) drives one MOSFET + solenoid for the Ragamuffin Hall bell machine: strike/hold/repeat web page on its own AP "Solenoid" (192.168.4.1) or the hall WiFi (ClarkShop preset; password NVS-only, never in the repo) at solenoid.local, 12/24 V supply setting, Install latest over WiFi. **It has its own workflow, `.github/workflows/solenoid.yml`, which publishes only `gh-pages/sol/`.** build.yml ignores `solenoid/**` and its pages job carries `sol/` over, so solenoid changes never rebuild the arm or make Muffin auto-update. The flasher's third board button (Solenoid) reads `./sol/`.
+**Solenoid tester and Hall chimes moved out (Nov 2 2026):** they now live in **`jobot101/Ragamuffin-Flasher`**, with the new phone flasher (https://jobot101.github.io/Ragamuffin-Flasher/), which reads this repo's `fw/` and `cam/` from Pages. Keep those paths. This repo's own flasher stays up. Its Solenoid button still serves the last build from here (`gh-pages/sol/`, `5360c13`), which build.yml's pages job keeps carrying over. Don't add new solenoid or chime work here.
 
 **4. Hardware bring-up:** work through the unverified list below with the owner.
 
