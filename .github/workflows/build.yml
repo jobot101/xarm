@@ -5,7 +5,7 @@ name: build
 on:
   push:
     branches: [main, "dev/**"]     # dev/** = compile check only: no release, no Pages, the board never sees it
-    paths-ignore: [cam/hiwonder/**, .github/workflows/fetch-cam.yml, solenoid/**, .github/workflows/solenoid.yml]
+    paths-ignore: [pc/**, cam/hiwonder/**, .github/workflows/fetch-cam.yml, solenoid/**, .github/workflows/solenoid.yml]
   workflow_dispatch:
 
 permissions:
