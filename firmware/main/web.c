@@ -745,6 +745,13 @@ static esp_err_t h_cfg_get(httpd_req_t *r)
     cJSON *j = cJSON_CreateObject();
     cJSON_AddItemToObject(j, "home", u16arr(g_cfg.home, NSERVO));
     cJSON_AddItemToObject(j, "drop", u16arr(g_cfg.drop, NSERVO));
+    // every taught pose, read only (its own object so a Settings save can never post them back)
+    cJSON *ps = cJSON_AddObjectToObject(j, "poses");
+    cJSON_AddItemToObject(ps, "home", u16arr(g_cfg.home, NSERVO));
+    cJSON_AddItemToObject(ps, "drop", u16arr(g_cfg.drop, NSERVO));
+    cJSON_AddItemToObject(ps, "give", u16arr(g_cfg.give, NSERVO));
+    cJSON_AddItemToObject(ps, "helper", u16arr(g_cfg.helper, NSERVO));
+    cJSON_AddItemToObject(ps, "bell", u16arr(g_cfg.bell, NSERVO));
     cJSON *p2 = cJSON_AddObjectToObject(j, "pick2");
     cJSON_AddNumberToObject(p2, "align_axis", g_pick2.align_axis);
     cJSON_AddNumberToObject(p2, "align_turn", g_pick2.align_turn);
