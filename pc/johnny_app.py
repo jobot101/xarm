@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageTk
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAME = 240                                   # blob coordinates are on a 240x240 frame (board core.h)
-VIEW = (480, 360)
+VIEW = (400, 300)
 SWEEP = [10, 15, 20, 30, 40, 55, 70, 90, 120]  # bell auto-tune: pulse lengths tried, ms
 COMMANDS = ["ring the bell", "pick up the red", "pick up the blue", "hold this for me", "grab it", "let go",
             "put it down", "give it to me", "go home", "wave hello"]
@@ -108,16 +108,23 @@ class App:
         self.cam = tk.Label(eyes, image=self.tkimg, bg="black", bd=0); self.cam.pack()
         self.cam_note = ttk.Label(eyes, text="", style="Dim.TLabel"); self.cam_note.pack(anchor="w", pady=(6, 0))
 
-        # ---- commands
-        cmds = ttk.LabelFrame(left, text="Tell Johnny", padding=8); cmds.pack(fill="x", pady=(10, 0))
-        for i, c in enumerate(COMMANDS):
-            ttk.Button(cmds, text=c, command=lambda c=c: self.send(c)).grid(row=i // 5, column=i % 5, sticky="ew", padx=2, pady=2)
-        for i in range(5): cmds.columnconfigure(i, weight=1)
-        row = ttk.Frame(cmds); row.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(6, 0))
+        # ---- controls: tabs
+        s.configure("TNotebook", background=BG, borderwidth=0)
+        s.configure("TNotebook.Tab", background=PANEL, foreground=DIM, padding=(10, 4))
+        s.map("TNotebook.Tab", background=[("selected", "#3a2f24")], foreground=[("selected", BRASS)])
+        s.configure("TFrame", background=BG)
+        nb = ttk.Notebook(left); nb.pack(fill="both", expand=True, pady=(10, 0))
+        tabs = {}
+        for name in ("Quick", "Drive", "Joints", "Teach", "Tricks", "All commands"):
+            tabs[name] = ttk.Frame(nb, padding=8); nb.add(tabs[name], text=name)
+        self.build_quick(tabs["Quick"]); self.build_drive(tabs["Drive"]); self.build_joints(tabs["Joints"])
+        self.build_teach(tabs["Teach"]); self.build_tricks(tabs["Tricks"]); self.build_all(tabs["All commands"])
+        row = ttk.Frame(left); row.pack(fill="x", pady=(6, 0))
+        ttk.Label(row, text="Say to Johnny").pack(side="left", padx=(0, 6))
         self.say = ttk.Entry(row); self.say.pack(side="left", fill="x", expand=True)
         self.say.bind("<Return>", lambda e: self.send(self.say.get()))
         ttk.Button(row, text="Send", command=lambda: self.send(self.say.get())).pack(side="left", padx=(6, 0))
-        self.reply = ttk.Label(cmds, text="", style="Dim.TLabel"); self.reply.grid(row=3, column=0, columnspan=5, sticky="w", pady=(4, 0))
+        self.reply = ttk.Label(left, text="", style="Dim.TLabel"); self.reply.pack(anchor="w", pady=(4, 0))
 
         # ---- radar
         rad = ttk.LabelFrame(right, text="Radar", padding=8); rad.pack(fill="x", pady=(0, 10))
@@ -209,6 +216,7 @@ class App:
                 self.gain.set(v.get("gain", 24)); self.gain_lbl.config(text=f"{v.get('gain', 24)} dB")
                 self.dual.set(bool(v.get("dual"))); self.synced = True
             self.draw_radar(st.get("radar"))
+            self.sync_arm(st)
             lvl = v.get("level", 0)
             self.meter.delete("all")
             w = self.meter.winfo_width() or 360
@@ -260,6 +268,169 @@ class App:
         self.cam_note.config(text=note)
 
     # ---------------------------------------------------------------- commands
+    # ---------------------------------------------------------------- control tabs
+    def act(self, path, body, what, confirm=None):
+        """POST to the board and show its answer under the tabs."""
+        if confirm and not messagebox.askyesno("Johnny", confirm): return
+        self.reply.config(text=f"{what} ...")
+        self.bg(lambda: self.b.post(path, body), lambda r: self.reply.config(
+            text=f"{what}: " + (str(r) if isinstance(r, Exception) else r.get("msg", "ok" if r.get("ok") else "failed"))))
+
+    def grid_buttons(self, parent, items, cols, start_row=0):
+        for i, (label, fn) in enumerate(items):
+            ttk.Button(parent, text=label, command=fn).grid(row=start_row + i // cols, column=i % cols, sticky="ew", padx=2, pady=2)
+        for c in range(cols): parent.columnconfigure(c, weight=1)
+
+    def build_quick(self, f):
+        self.grid_buttons(f, [(c, lambda c=c: self.send(c)) for c in COMMANDS], 5)
+
+    DRIVE = [("base", "Base", "◀ left", "right ▶"), ("lift", "Lift", "▼ down", "up ▲"), ("reach", "Reach", "◀ in", "out ▶"),
+             ("tilt", "Wrist tilt", "▼", "▲"), ("twist", "Wrist twist", "↺", "↻"), ("grip", "Gripper", "open", "close")]
+
+    def build_drive(self, f):
+        self.driving, self.drive_busy = None, False
+        ttk.Label(f, text="Hold a button to move, let go to stop.", style="Dim.TLabel").grid(row=0, column=0, columnspan=6, sticky="w")
+        for i, (axis, name, neg, pos) in enumerate(self.DRIVE):
+            r, c = 1 + i // 2, (i % 2) * 3
+            ttk.Label(f, text=name).grid(row=r, column=c, sticky="e", padx=(8, 4), pady=2)
+            for k, (txt, sign) in enumerate(((neg, -1), (pos, 1))):
+                b = ttk.Button(f, text=txt, width=9); b.grid(row=r, column=c + 1 + k, sticky="ew", padx=2, pady=2)
+                b.bind("<ButtonPress-1>", lambda e, a=axis, sg=sign: self.drive_start(a, sg))
+                b.bind("<ButtonRelease-1>", lambda e: self.drive_stop())
+        r = ttk.Frame(f); r.grid(row=5, column=0, columnspan=6, sticky="ew", pady=(8, 0))
+        ttk.Label(r, text="Speed").pack(side="left")
+        self.speed = tk.IntVar(value=10)
+        ttk.Scale(r, from_=3, to=30, variable=self.speed).pack(side="left", fill="x", expand=True, padx=6)
+        ttk.Button(r, text="Limp (pose by hand)", command=lambda: self.act("/api/torque", {"on": False}, "limp")).pack(side="left", padx=2)
+        ttk.Button(r, text="Hold", command=lambda: self.act("/api/torque", {"on": True}, "hold")).pack(side="left", padx=2)
+        ttk.Button(r, text="Go home", command=lambda: self.send("go home")).pack(side="left", padx=2)
+
+    def drive_start(self, axis, sign):
+        self.driving = (axis, sign); self.drive_tick()
+
+    def drive_stop(self): self.driving = None
+
+    def drive_tick(self):
+        if not self.driving: return
+        if not self.drive_busy:                        # one request in flight at a time: a slow board never piles up moves
+            axis, sign = self.driving
+            body = {axis: sign, "step": int(self.speed.get()), "ms": 120}
+            self.drive_busy = True
+            def done(r):
+                self.drive_busy = False
+                if isinstance(r, dict) and not r.get("ok"): self.reply.config(text="drive: " + r.get("msg", "refused"))
+            self.bg(lambda: self.b.post("/api/drive", body, timeout=2), done)
+        self.root.after(100, self.drive_tick)
+
+    JOINTS = ["Gripper", "Wrist twist", "Wrist", "Elbow", "Shoulder", "Base"]
+
+    def build_joints(self, f):
+        self.jvars, self.jlbls, self.jscales, self.jdrag, self.jsent = [], [], [], None, 0
+        for i, name in enumerate(self.JOINTS):
+            ttk.Label(f, text=name, width=11).grid(row=i, column=0, sticky="w", pady=1)
+            v = tk.IntVar(value=500)
+            sc = ttk.Scale(f, from_=0, to=1000, variable=v, command=lambda val, i=i: self.joint_move(i, val))
+            sc.grid(row=i, column=1, sticky="ew", padx=6)
+            sc.bind("<ButtonPress-1>", lambda e, i=i: setattr(self, "jdrag", i))
+            sc.bind("<ButtonRelease-1>", lambda e, i=i: self.joint_release(i))
+            lb = ttk.Label(f, text="500", width=5); lb.grid(row=i, column=2, sticky="e")
+            self.jvars.append(v); self.jlbls.append(lb); self.jscales.append(sc)
+        f.columnconfigure(1, weight=1)
+        ttk.Label(f, text="Drag a slider to move one joint. The arm follows smoothly.", style="Dim.TLabel").grid(row=6, column=0, columnspan=3, sticky="w", pady=(4, 0))
+
+    def joint_move(self, i, val):
+        p = int(float(val)); self.jlbls[i].config(text=str(p))
+        if self.jdrag != i or time.time() - self.jsent < 0.1: return
+        self.jsent = time.time()
+        self.bg(lambda: self.b.post("/api/jog", {"id": i + 1, "pos": p}, timeout=2))   # servo bus ID = joint + 1
+
+    def joint_release(self, i):
+        p = int(self.jvars[i].get())
+        self.bg(lambda: self.b.post("/api/jog", {"id": i + 1, "pos": p}, timeout=2), lambda r: setattr(self, "jdrag", None))
+
+    TEACH = [("Home", "home", "where he rests"), ("Drop", "drop", "where \"put it down\" sets things"),
+             ("Hand-off", "give", "where \"give it to me\" hands you things"), ("Helper", "helper", "the \"hold this for me\" spot"),
+             ("Bell", "bell", "over the bell"), ("Look", "look", "the camera's look pose"),
+             ("Red bin", "bin0", "where red things go"), ("Blue bin", "bin1", "where blue things go"), ("Tower", "tower", "first tower block")]
+
+    def build_teach(self, f):
+        ttk.Label(f, text="Pose the arm (Drive, Joints or Limp), then save where it is as:", style="Dim.TLabel").grid(row=0, column=0, columnspan=5, sticky="w")
+        self.grid_buttons(f, [(lbl, lambda w=w, lbl=lbl, why=why: self.act("/api/teach", {"what": w}, f"taught {lbl}",
+                                confirm=f"Save the arm's pose right now as {lbl} ({why})?")) for lbl, w, why in self.TEACH], 5, 1)
+        ttk.Label(f, text="Camera calibration (3+ points): put a block down, Mark it, pose the open gripper on it, Add.",
+                  style="Dim.TLabel").grid(row=3, column=0, columnspan=5, sticky="w", pady=(8, 0))
+        self.grid_buttons(f, [("1 · Mark target", lambda: self.act("/api/teach", {"what": "calib_mark"}, "mark")),
+                              ("2 · Add point", lambda: self.act("/api/teach", {"what": "calib_add"}, "calibration point")),
+                              ("Undo last", lambda: self.act("/api/teach", {"what": "calib_undo"}, "undo")),
+                              ("Clear all", lambda: self.act("/api/teach", {"what": "calib_clear"}, "clear calibration",
+                                                             confirm="Forget every camera calibration point?"))], 4, 4)
+        self.calib_lbl = ttk.Label(f, text="", style="Dim.TLabel"); self.calib_lbl.grid(row=5, column=0, columnspan=5, sticky="w")
+
+    def build_tricks(self, f):
+        top = ttk.Frame(f); top.pack(fill="x")
+        ttk.Button(top, text="● Record", command=lambda: self.act("/api/moves", {"action": "record"}, "recording: move the arm")).pack(side="left", padx=2)
+        ttk.Label(top, text="name").pack(side="left", padx=(10, 4))
+        self.trick_name = ttk.Entry(top, width=14); self.trick_name.pack(side="left")
+        ttk.Button(top, text="Save", command=lambda: self.act("/api/moves", {"action": "save", "name": self.trick_name.get().strip() or "trick"}, "saved")).pack(side="left", padx=2)
+        ttk.Button(top, text="Cancel", command=lambda: self.act("/api/moves", {"action": "cancel"}, "cancelled")).pack(side="left", padx=2)
+        self.rec_lbl = ttk.Label(f, text="Record, move the arm (Limp it and pose by hand, or Drive), then Save with a name. "
+                                 "Then \"Johnny, do the <name>\" plays it.", style="Dim.TLabel", wraplength=520)
+        self.rec_lbl.pack(anchor="w", pady=(6, 4))
+        self.trick_box = ttk.Frame(f); self.trick_box.pack(fill="x")
+        self.tricks_seen = None
+
+    def build_all(self, f):
+        top = ttk.Frame(f); top.pack(fill="x")
+        ttk.Label(top, text="Everything Johnny can do (tap to run):", style="Dim.TLabel").pack(side="left")
+        ttk.Button(top, text="Refresh", command=self.load_phrases).pack(side="right")
+        cv = tk.Canvas(f, bg=BG, highlightthickness=0, height=150); sb = ttk.Scrollbar(f, orient="vertical", command=cv.yview)
+        self.phr = ttk.Frame(cv); self.phr.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        cv.create_window((0, 0), window=self.phr, anchor="nw"); cv.configure(yscrollcommand=sb.set)
+        cv.pack(side="left", fill="both", expand=True, pady=(4, 0)); sb.pack(side="right", fill="y", pady=(4, 0))
+        cv.bind_all("<MouseWheel>", lambda e: cv.yview_scroll(-e.delta // 120, "units") if str(e.widget).startswith(str(cv)) else None)
+        self.root.after(1500, self.load_phrases)
+
+    def load_phrases(self):
+        def done(r):
+            if isinstance(r, Exception): self.reply.config(text=f"commands: {r}"); return
+            board = r if isinstance(r, list) else r.get("phrases", [])
+            # the board's own voice list on Johnny is just "stop"; the real vocabulary is the brain's action menu
+            # (johnny.py COMMANDS, all plain router text) plus the camera colors and recorded tricks
+            try:
+                import johnny; brain = list(johnny.COMMANDS)
+            except Exception: brain = list(COMMANDS)
+            cam = self.st.get("cam", {})
+            colors = [f"pick up the {sl['name']}" for sl in cam.get("slots", []) if sl.get("name")] if cam.get("enabled") else []
+            tricks = [f"do the {t[1]}" for t in self.tricks_seen or []]
+            ph, seen = [], set()
+            for p in brain + colors + tricks + board:
+                if p not in seen: seen.add(p); ph.append(p)
+            for w in self.phr.winfo_children(): w.destroy()
+            self.grid_buttons(self.phr, [(p, lambda p=p: self.send(p)) for p in ph], 4)
+            self.reply.config(text=f"{len(ph)} commands")
+        self.bg(lambda: self.b.s.get(self.b.base + "/api/phrases", timeout=6).json(), done)
+
+    def sync_arm(self, st):
+        arm, mv = st.get("arm", {}), st.get("moves", {})
+        pos, lim = arm.get("pos") or [], arm.get("lim") or []
+        for i, p in enumerate(pos[:len(self.jvars)]):
+            if i < len(lim): self.jscales[i].config(from_=lim[i][0], to=lim[i][1])
+            if self.jdrag != i:
+                self.jvars[i].set(p); self.jlbls[i].config(text=str(p))
+        n = len(st.get("calib") or [])
+        self.calib_lbl.config(text=f"{n} calibration point{'s' if n != 1 else ''}" + ("  (need 3+)" if n < 3 else "  - ready to pick"))
+        if mv.get("recording"): self.rec_lbl.config(text=f"● recording: {mv.get('frames', 0)} frames so far. Save or Cancel when done.")
+        tl = [(t.get("i", k), t.get("name", "")) if isinstance(t, dict) else (k, t) for k, t in enumerate(mv.get("list") or [])]
+        if tl != self.tricks_seen:
+            self.tricks_seen = tl
+            for w in self.trick_box.winfo_children(): w.destroy()
+            if not tl: ttk.Label(self.trick_box, text="No tricks recorded yet.", style="Dim.TLabel").grid(row=0, column=0, sticky="w")
+            for row, (slot, name) in enumerate(tl):          # slot = the board's move number (gaps after a delete)
+                ttk.Label(self.trick_box, text=name).grid(row=row, column=0, sticky="w", padx=(0, 10))
+                ttk.Button(self.trick_box, text="Play", command=lambda i=slot, n=name: self.act("/api/moves", {"action": "play", "i": i}, f"play {n}")).grid(row=row, column=1, padx=2)
+                ttk.Button(self.trick_box, text="Delete", command=lambda i=slot, n=name: self.act("/api/moves", {"action": "delete", "i": i}, f"deleted {n}",
+                                                                                                   confirm=f"Delete the trick \"{n}\"?")).grid(row=row, column=2, padx=2)
+
     def send(self, text):
         text = text.strip()
         if not text: return
