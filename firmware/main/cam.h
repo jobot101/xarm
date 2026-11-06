@@ -3,7 +3,7 @@
 #include "core.h"
 #include "driver/i2c_master.h"
 
-esp_err_t cam_init(i2c_master_bus_handle_t bus);
+esp_err_t cam_begin(i2c_master_bus_handle_t bus);
 bool cam_get(int slot, box_t *out);     // latest reading; returns true if a blob is in view
 bool cam_ok(void);                       // I2C talking
 bool cam_enabled(void);                  // the camera switch (Workshop -> Settings), read at boot

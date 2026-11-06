@@ -56,7 +56,7 @@ void cam_enable_save(bool on)
     if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) { nvs_set_u8(h, "cam_on", on); nvs_commit(h); nvs_close(h); }
 }
 
-esp_err_t cam_init(i2c_master_bus_handle_t bus)
+esp_err_t cam_begin(i2c_master_bus_handle_t bus)
 {
     s_bus = bus;                             // the I2C scan works either way
     nvs_handle_t h;
