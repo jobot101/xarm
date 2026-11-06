@@ -15,6 +15,7 @@
 #include "chat.h"
 #include "school.h"
 #include "sdkconfig.h"
+#include "pc.h"
 #include "led_strip.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -124,7 +125,11 @@ static void talk_meter(const int16_t *b, int n)
     float rms = sqrtf(acc / n) / 6000.0f;          // mastered speech peaks around 0.5-1
     s_talk_lvl = rms > 1 ? 1 : rms;
 }
+#if CONFIG_XARM_JOHNNY
+float fx_talk_level(void) { return pc_talk_level(); }   // Johnny's voice comes from the PC
+#else
 float fx_talk_level(void) { return s_talking ? s_talk_lvl : 0; }
+#endif
 
 // play one clip straight to the speaker; slower clips (speech at 11/12 kHz in the flash bank) are
 // resampled to 16 kHz (linear) on the way
@@ -287,6 +292,9 @@ static void sound_task(void *arg)
 
 static void enqueue(int g, int pick, bool low)
 {
+#if CONFIG_XARM_JOHNNY
+    return;                                   // Johnny: Muffin's bank never plays; the PC does all the talking
+#endif
     if (!s_sq || g < 0 || g >= SND_GROUPS) return;
     if (low && (s_talking || uxQueueMessagesWaiting(s_sq))) return;   // blips never wait in line
     req_t r = { (uint16_t)g, (int8_t)pick, low, esp_timer_get_time() };
@@ -295,7 +303,11 @@ static void enqueue(int g, int pick, bool low)
 
 static void play(int g) { enqueue(g, -1, false); }
 void fx_play(int g) { play(g); }
+#if CONFIG_XARM_JOHNNY
+bool fx_speaking(void) { return pc_speaking(); }
+#else
 bool fx_speaking(void) { return s_talking || (s_sq && uxQueueMessagesWaiting(s_sq)); }
+#endif
 
 static volatile int64_t s_quiet_until;
 void fx_quiet(int minutes) { s_quiet_until = minutes > 0 ? esp_timer_get_time() + (int64_t)minutes * 60000000 : 0; }
@@ -340,6 +352,7 @@ static led_strip_handle_t s_led;
 static volatile led_mode_t s_mode = L_BOOT;
 static volatile int s_flash, s_show_t, s_show = -1;
 static volatile bool s_working, s_listen;
+static volatile fx_pc_t s_pc = FX_PC_IDLE;   // Johnny build only: what the PC brain is doing
 
 static void px(int i, rgb_t c, float k)
 {
@@ -374,6 +387,12 @@ static void led_task(void *arg)
             break;
         case L_IDLE:                                         // rose window: sunlight drifting through the glass
             if (s_sleep) { fill(AMETHYST, 0.03f + 0.12f * (0.5f - 0.5f * cosf(t * 0.025f))); break; }
+#if CONFIG_XARM_JOHNNY
+            if (s_pc == FX_PC_NONE)   { fill(GOLD, 0.02f + 0.10f * (0.5f - 0.5f * cosf(t * 0.03f))); break; }   // waiting for the PC
+            if (s_pc == FX_PC_LISTEN) { fill(SAPPHIRE, 0.25f + 0.55f * breathe); break; }
+            if (s_pc == FX_PC_THINK)  { spinner(t, SAPPHIRE, SAPPHIRE, 3); break; }
+            if (s_pc == FX_PC_TALK)   { fill(GOLD, 0.15f + 0.85f * pc_talk_level()); break; }   // glows with his voice
+#endif
             if (s_listen) { fill(SAPPHIRE, 0.25f + 0.55f * breathe); break; }   // ears open after "Hey Muffin"
             for (int i = 0; i < LED_N; i++)
                 px(i, ROSE[(i + t / 90) % LED_N], 0.10f + 0.22f * (0.5f - 0.5f * cosf(t * 0.05f + i * 0.9f)));
@@ -393,7 +412,7 @@ static void led_task(void *arg)
         // soft organ blips while it works, so you can hear it thinking
         if (s_working && ++since_chirp > rnd(25, 45)) { enqueue(SND_S_CHIRP, -1, true); since_chirp = 0; }
         // idle chatter: once, a few minutes after people stop playing (not when nobody's been around)
-        if (CONFIG_XARM_CHATTER_MIN > 0 && s_mode == L_IDLE && t % 30 == 0) {
+        if (!JOHNNY && CONFIG_XARM_CHATTER_MIN > 0 && s_mode == L_IDLE && t % 30 == 0) {
             int64_t now = esp_timer_get_time(), quiet = now - s_last_activity_us;
             static int64_t s_chatted_after;
             if (s_last_activity_us && s_chatted_after != s_last_activity_us &&
@@ -476,4 +495,5 @@ void fx_greet(int jewel, unsigned seed)
 }
 
 void fx_listening(bool on) { s_listen = on; }
+void fx_pc(fx_pc_t m) { s_pc = m; }
 void fx_sleep(bool on) { s_sleep = on; }

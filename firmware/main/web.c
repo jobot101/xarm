@@ -28,6 +28,8 @@
 #include "sdkconfig.h"
 #include "audio.h"
 #include "school.h"
+#include "pc.h"
+#include <unistd.h>
 
 static const char *TAG = "web";
 extern const uint8_t app_start[] asm("_binary_index_html_gz_start");
@@ -256,6 +258,7 @@ static esp_err_t h_state(httpd_req_t *r)
     char sv[24];
     update_sound_version(sv, sizeof sv);
     cJSON_AddStringToObject(fw, "sounds", sv);
+    if (JOHNNY) pc_json(j);                   // "brain": {name, pc connected, talking}
     esp_err_t e = send_json(r, j);
     s_state_ms = (int)((esp_timer_get_time() - t0) / 1000);
     return e;
@@ -727,10 +730,18 @@ static esp_err_t h_app(httpd_req_t *r)
     return httpd_resp_send(r, (const char *)app_start, app_end - app_start);
 }
 
+// a socket closed (or was purged): the PC link drops if it was the brain's
+static void on_close(httpd_handle_t hd, int fd)
+{
+    if (JOHNNY) pc_sock_closed(fd);
+    close(fd);
+}
+
 bool web_start(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 26;
+    c.max_uri_handlers = 27;
+    c.close_fn = on_close;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
     c.stack_size = 8192;                      // /api/state builds a big JSON tree; 4 KB default is tight
@@ -762,6 +773,9 @@ bool web_start(void)
         {"/api/sys",    HTTP_GET,  h_sys},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
+#if JOHNNY
+    pc_register(h);                           // ws://<board>/ws: the PC brain (before the "/*" catch-all)
+#endif
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);
     ESP_LOGI(TAG, "web up on :80");
     return true;

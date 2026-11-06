@@ -51,6 +51,7 @@ button.danger { color: var(--bad); }
 .btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .pill { font-size: 12px; padding: 5px 10px; border-radius: 99px; }
 .pill.warn { background: var(--warn); color: #fff; border-color: var(--ink); }
+.pill.ok { background: var(--ok, #2f7d32); color: #fff; }
 .say { display: flex; gap: 8px; margin-top: 12px; }
 input { background: #fff; border: 1.5px solid #9a958a; border-radius: 9px; padding: 9px 10px; min-width: 0; }
 .say input { flex: 1; }

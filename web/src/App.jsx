@@ -63,21 +63,26 @@ export default function App() {
   }
   const holdEnd = () => { clearInterval(holdTimer.current); setHold(0) }
 
+  // Johnny build: the brain is on the shop PC. No lessons, no School: straight to the controls
+  const johnny = !!s?.brain
+  const shown = johnny ? 'workshop' : mode
+
   return (
-    <div className={`app mode-${mode}`}>
+    <div className={`app mode-${shown}`}>
       <header className="hall">
         <button className="rose-btn" onPointerDown={holdStart} onPointerUp={holdEnd} onPointerLeave={holdEnd} onPointerCancel={holdEnd}
           onContextMenu={e => e.preventDefault()} aria-label="Ragamuffin Hall">
           <RoseWindow size={52} spin={!!s?.busy} progress={hold} />
         </button>
         <div className="hall-name">
-          <b>Muffin</b>
-          <small>Ragamuffin Hall · {mode === 'play' ? 'school' : 'workshop'}</small>
+          <b>{johnny ? 'Johnny' : 'Muffin'}</b>
+          <small>Ragamuffin Hall · {johnny ? 'shop helper' : mode === 'play' ? 'school' : 'workshop'}</small>
         </div>
-        {mode === 'workshop' && <button className="pill" onClick={() => switchMode('play')}>Back to lessons</button>}
+        {johnny && <span className={`pill ${s.brain.pc ? 'ok' : ''}`}>{s.brain.pc ? (s.brain.talking ? 'talking' : 'PC brain on') : 'waiting for the PC'}</span>}
+        {!johnny && mode === 'workshop' && <button className="pill" onClick={() => switchMode('play')}>Back to lessons</button>}
       </header>
 
-      {mode === 'play' ? (
+      {shown === 'play' ? (
         <Learn online={online} />
       ) : (
         <>
@@ -85,7 +90,7 @@ export default function App() {
           <main className="grid">
             <Commands s={s} run={run} />
             <Voice s={s} run={run} />
-            <School run={run} />
+            {!johnny && <School run={run} />}
             {s?.cam?.ok && <Vision s={s} run={run} />}
             <Joints s={s} run={run} title="Jog" torqueBtn />
             <Helper s={s} run={run} />

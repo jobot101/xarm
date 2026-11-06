@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include "router.h"
 #include "cloud.h"
+#include "pc.h"
 #include "core.h"
 #include "audio.h"
 #include "fx.h"
@@ -463,10 +464,15 @@ static void detect_task(void *arg)
         afe_fetch_result_t *r = s_afe->fetch_with_delay(s_afed, portMAX_DELAY);
         if (!r || r->ret_value == ESP_FAIL || !r->data) continue;
         if (r->vad_state == VAD_SPEECH) s_speech_us = esp_timer_get_time();
+        int n = r->data_size / (int)sizeof(int16_t);
+#if JOHNNY
+        pc_mic(r->data, n);                  // Johnny: the PC's ears get everything (echo-cancelled); the PC drives the ring
+        bool cloud = false;
+#else
         fx_listening(s_wake && window_open(esp_timer_get_time()));
         pick_listening(window_open(esp_timer_get_time()));   // leans in, head cocked, while its ears are open
-        int n = r->data_size / (int)sizeof(int16_t);
         bool cloud = s_seg && cloud_ready();
+#endif
 
 
         if (s_reload) { s_reload = false; load_commands(); }

@@ -1,0 +1,4 @@
+# Johnny: shop helper, brain on the PC (pc.c). Layered on sdkconfig.defaults by CI.
+CONFIG_XARM_JOHNNY=y
+CONFIG_XARM_NAME="johnny"
+CONFIG_XARM_UPDATE_URL="https://jobot101.github.io/xarm/fw/johnny/"

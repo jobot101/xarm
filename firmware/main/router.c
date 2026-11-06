@@ -11,6 +11,7 @@
 #include "core.h"
 #include "cam.h"
 #include "fx.h"
+#include "pc.h"
 
 static bool starts(const char *s, const char *p) { return strncmp(s, p, strlen(p)) == 0; }
 static bool has(const char *s, const char *w) { return strstr(s, w) != NULL; }
@@ -44,11 +45,11 @@ bool router_exec_ex(const char *text, char *msg, size_t n, bool app)
     t[k] = 0;
 
     // order matters: specific phrases before generic words
-    if (has(t, "stop") || has(t, "freeze") || has(t, "halt") || has(t, "wait"))                         { pick_stop(); chat_stopped(); school_note_stop(); snprintf(msg, n, "stopped"); return true; }
+    if (has(t, "stop") || has(t, "freeze") || has(t, "halt") || has(t, "wait"))                         { pick_stop(); chat_stopped(); school_note_stop(); pc_stopped(); snprintf(msg, n, "stopped"); return true; }
     // class, sleep, grown-up passphrase, quiz answers
     if (!app && school_filter(t, msg, n)) return true;
     // Muffin's conversation (name, small talk, jokes, yes/no answers...) — before the tricks, which match loosely
-    if ((app || !school_in_lesson()) && chat_exec(t, msg, n)) return true;
+    if (!JOHNNY && (app || !school_in_lesson()) && chat_exec(t, msg, n)) return true;   // Johnny: the PC does the talking
     // third hand
     if (has(t, "hold this") || has(t, "help me") || has(t, "third hand"))  return RUN(K_HOLD, pick_run(OP_HELPER, 0, msg, n));
     if (has(t, "hold it") || has(t, "grip") || has(t, "grab it") || has(t, "squeeze")) return RUN(K_CLOSE, pick_run(OP_CLOSE, 0, msg, n));
@@ -110,6 +111,11 @@ int router_phrases(char out[][48], int max)
     ADD("stop robot");
     ADD("robot stop");
     ADD("freeze robot");
+#if JOHNNY
+    // Johnny: the PC hears everything else; on board only the instant stop, which works with no PC at all
+    ADD("johnny stop"); ADD("stop johnny"); ADD("stop stop");
+    return n;
+#endif
     ADD("go home");
     ADD("drop it");
     ADD("give it to me");

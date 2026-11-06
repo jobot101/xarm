@@ -51,3 +51,7 @@ bool fx_is_quiet(void);
 bool fx_speaking(void);
 float fx_talk_level(void);                                      // how loud Muffin's own voice is right now, 0..1 (0 = not talking)
 void fx_listening(bool on);                                     // "Hey Muffin" window open: ring glows sapphire when idle                                         // something is playing or queued
+
+// Johnny build (pc.c): the PC brain's state on the ring when nothing else is going on
+typedef enum { FX_PC_NONE, FX_PC_IDLE, FX_PC_LISTEN, FX_PC_THINK, FX_PC_TALK } fx_pc_t;   // NONE = no PC connected
+void fx_pc(fx_pc_t m);

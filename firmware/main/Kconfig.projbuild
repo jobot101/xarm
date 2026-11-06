@@ -100,4 +100,17 @@ menu "xArm Voice"
         string "Time zone (POSIX TZ) for when a School day starts"
         default "EST5EDT,M3.2.0,M11.1.0"
 
+    config XARM_JOHNNY
+        bool "Johnny: the brain runs on the shop PC (Muffin off)"
+        default n
+        help
+            The board turns into the arm's hands, ears and mouth only. A PC connects to ws://<board>/ws,
+            gets the mic (16 kHz mono PCM after AEC/AGC), sends back speech to play (same format) and plain
+            router commands. Muffin's voice, chat, School and cloud ears are off; on-board MultiNet keeps
+            only "stop". Built by CI with sdkconfig.johnny, published to fw/johnny/.
+
+    config XARM_NAME
+        string "Network name (mDNS, DHCP hostname, backup WiFi)"
+        default "muffin"
+
 endmenu

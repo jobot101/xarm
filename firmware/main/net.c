@@ -76,7 +76,10 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 // phone — iPhone or Android — always has one address that works, no router or mDNS needed.
 static void ap_config(void)
 {
-    wifi_config_t ap = { .ap = { .ssid = "Muffin", .channel = 6, .max_connection = 4 } };
+    wifi_config_t ap = { .ap = { .channel = 6, .max_connection = 4 } };
+    // backup network = the board's name, capitalized: "Muffin", or "Johnny" on the Johnny build
+    strlcpy((char *)ap.ap.ssid, CONFIG_XARM_NAME, sizeof ap.ap.ssid);
+    if (ap.ap.ssid[0] >= 'a' && ap.ap.ssid[0] <= 'z') ap.ap.ssid[0] -= 32;
     strlcpy((char *)ap.ap.password, CONFIG_XARM_AP_PASS, sizeof ap.ap.password);
     ap.ap.authmode = strlen(CONFIG_XARM_AP_PASS) >= 8 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     esp_wifi_set_config(WIFI_IF_AP, &ap);
@@ -123,7 +126,7 @@ void net_start(void)
     esp_netif_create_default_wifi_ap();
     // DHCP hostname: most home routers then answer http://muffin (or muffin.lan / muffin.home) for every
     // phone. That's the Android path, since Android often can't resolve muffin.local.
-    esp_netif_set_hostname(sta_if, "muffin");
+    esp_netif_set_hostname(sta_if, CONFIG_XARM_NAME);
     wifi_init_config_t ic = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&ic));
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL);
@@ -154,7 +157,7 @@ void net_start(void)
     }
 
     mdns_init();
-    mdns_hostname_set("muffin");
+    mdns_hostname_set(CONFIG_XARM_NAME);
     mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
 }
 

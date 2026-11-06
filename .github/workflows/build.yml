@@ -206,9 +206,71 @@ jobs:
           name: camera
           path: camera/
 
+  # Johnny: same board, brain on the shop PC (firmware/main/pc.c + pc/). Built in parallel with Muffin from the same
+  # code with sdkconfig.johnny layered on top; published to fw/johnny/ (its own auto-update channel). No sound bank:
+  # Johnny's voice comes from the PC, so the bank is rendered silent just to satisfy the build.
+  johnny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: build web app (embedded into firmware)
+        working-directory: web
+        run: python3 ../tools/lessons_json.py && npm ci && npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: silent sound bank (header only matters)
+        run: pip install -q numpy scipy && python3 tools/make_sounds.py --no-voice | tail -2
+      - name: stamp version
+        run: echo "${GITHUB_SHA::7}" > firmware/version.txt
+      - name: build firmware (Johnny)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1
+          target: esp32s3
+          path: firmware
+          command: "idf.py -B build -D SDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.johnny' build 2>&1 | tee build.log; exit ${PIPESTATUS[0]}"
+      - name: report compile errors
+        if: failure()
+        run: |
+          grep -E "error:|undefined reference|FAILED:|CMake Error" firmware/build.log | head -40 | while IFS= read -r l; do
+            echo "::error::${l//%/%25}"
+          done
+      - name: collect flash files
+        run: |
+          sudo chown -R "$USER" firmware/build
+          grep -q "CONFIG_XARM_JOHNNY=y" firmware/build/../sdkconfig || { echo "::error::Johnny overlay not applied"; exit 1; }
+          B=firmware/build; R=johnny; mkdir -p $R
+          cp $B/bootloader/bootloader.bin $B/partition_table/partition-table.bin $B/ota_data_initial.bin $B/xarm-voice.bin $R/
+          cp $B/srmodels/srmodels.bin $R/
+          python3 - <<'PY'
+          import json, os
+          B = "firmware/build"
+          fa = json.load(open(f"{B}/flasher_args.json"))
+          rows = sorted((int(off, 16), os.path.basename(p)) for off, p in fa["flash_files"].items())
+          MODEL = next(l.split(",") for l in open("firmware/partitions.csv") if l.startswith("model"))
+          if not any(n == "srmodels.bin" for _, n in rows): rows.append((int(MODEL[3], 16), "srmodels.bin"))
+          rows.sort()
+          json.dump({"name": "xarm johnny", "version": os.environ["GITHUB_SHA"][:7],
+                     "new_install_prompt_erase": True,
+                     "builds": [{"chipFamily": "ESP32-S3", "parts": [{"path": n, "offset": o} for o, n in rows]}]},
+                    open("johnny/manifest.json", "w"), indent=2)
+          with open("johnny/OFFSETS.txt", "w") as f:
+              for o, n in rows: f.write(f"0x{o:06x}  {n}\n")
+          print(open("johnny/OFFSETS.txt").read())
+          PY
+          ls -la johnny
+      - uses: actions/upload-artifact@v4
+        with:
+          name: johnny
+          path: johnny/
+
   # phone flasher page with both boards' files baked in -> https://jobot101.github.io/xarm/
   pages:
-    needs: [firmware, camera]
+    needs: [firmware, camera, johnny]
     concurrency: { group: gh-pages, cancel-in-progress: false }
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -221,13 +283,15 @@ jobs:
         with: { name: release, path: release }
       - uses: actions/download-artifact@v4
         with: { name: camera, path: camera }
+      - uses: actions/download-artifact@v4
+        with: { name: johnny, path: johnny }
       - name: keep the solenoid files (published separately by solenoid.yml)
         run: mkdir -p keep && git fetch -q --depth 1 origin gh-pages && (git archive FETCH_HEAD sol | tar -x -C keep || true)
       - name: build flasher page
         working-directory: flasher
         run: |
           npm ci && npm run build
-          mkdir -p dist/fw dist/cam dist/sol && cp ../release/* dist/fw/ && cp -r ../camera/* dist/cam/ && (cp ../keep/sol/* dist/sol/ 2>/dev/null || true)
+          mkdir -p dist/fw dist/cam dist/sol && cp ../release/* dist/fw/ && mkdir -p dist/fw/johnny && cp ../johnny/* dist/fw/johnny/ && cp -r ../camera/* dist/cam/ && (cp ../keep/sol/* dist/sol/ 2>/dev/null || true)
       - name: publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:

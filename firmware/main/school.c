@@ -98,6 +98,10 @@ static void load(void)
         if (nvs_get_str(h, "sc_pass", s_pass, &n) != ESP_OK) s_pass[0] = 0;
         nvs_close(h);
     }
+#ifdef CONFIG_XARM_JOHNNY
+    s_on = false;                             // Johnny: no Robot School, the PC brain runs the show
+    s_pass[0] = 0;
+#endif
 }
 
 static void save_settings(void)
@@ -1003,6 +1007,9 @@ static bool set_student(const char *name, char *msg, size_t n)
 bool school_set(const cJSON *b, char *msg, size_t n)
 {
     const cJSON *v;
+#ifdef CONFIG_XARM_JOHNNY
+    snprintf(msg, n, "no Robot School on Johnny"); return false;
+#endif
     bool changed = false, pass_changed = false;
     if (cJSON_IsBool(v = cJSON_GetObjectItem(b, "on"))) {
         s_on = cJSON_IsTrue(v); changed = true;
