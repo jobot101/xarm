@@ -7,3 +7,9 @@ CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 CONFIG_CAMERA_DMA_BUFFER_SIZE_MAX=8192
 # Real bell: solenoid striker on IO8 (bell.c), through a MOSFET
 CONFIG_XARM_BELL_GPIO=8
+# The camera's DMA buffers took the last internal RAM ("wifi:mem fail" -> abort 7 s after boot). On the S3, IRAM
+# and heap share SRAM: keep WiFi/LWIP code in flash (a little slower, plenty for this) and trim WiFi's internal RX.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_LWIP_IRAM_OPTIMIZATION=n
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
