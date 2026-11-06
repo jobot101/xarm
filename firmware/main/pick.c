@@ -999,6 +999,8 @@ static volatile float s_face;
 static volatile bool s_listen;
 static bool s_listen_pose;
 void pick_face(float d) { s_face = d < -1 ? -1 : d > 1 ? 1 : d; s_attn_us = esp_timer_get_time(); }
+static volatile float s_reach_k;                       // 0..1: how far the resting pose reaches out toward a person
+void pick_reach(float k) { s_reach_k = k < 0 ? 0 : k > 1 ? 1 : k; }
 void pick_listening(bool on) { s_listen = on; }
 
 // where it rests: Home, turned toward the last voice, a little slumped when grumpy and perky when delighted;
@@ -1008,6 +1010,8 @@ static void rest_pose(uint16_t p[NSERVO], float lift_k)
     int md = chat_mood();
     pose(p, g_cfg.home, lift_k + (md <= -2 ? -0.08f : md >= 2 ? 0.04f : 0), hand());
     p[5] = clamp_pos(g_cfg.home[5] + (int)(s_face * FACE_MAX));
+    if (s_reach_k > 0.01f)                                   // someone nearby: reach out toward them (base already faces them)
+        for (int i = 1; i < 5; i++) p[i] = clamp_pos(p[i] + (int)(g_reach[i] * s_reach_k));
     if (s_listen_pose) {
         for (int i = 1; i < NSERVO; i++) p[i] = clamp_pos(p[i] + g_reach[i] / 4);   // lean in
         p[1] = clamp_pos(p[1] + 45);                                                // head cocked

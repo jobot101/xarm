@@ -116,6 +116,7 @@ void pc_mic(const int16_t *pcm, int n)
 #define REST_AFTER_S 60             // nobody for a minute: camera stops, ring goes nearly dark
 #define PUTDOWN_AFTER_S 180         // holding a part and nobody for 3 minutes: set it down at the drop spot
 #define FOLLOW_MIN_CM 50            // closer than this, stop turning toward the person
+#define REACH_NEAR_CM 45            // closer than this, don't reach toward them at all
 
 static void radar_event(bool here)
 {
@@ -141,6 +142,10 @@ static void presence_tick(void)
     // Closer than FOLLOW_MIN_CM: hold the heading (no turning toward a hand that's right at the arm).
     int deg, cm = radar_distance_cm(), dir = voice_face();
     if (here && dir && radar_angle(&deg) && cm >= FOLLOW_MIN_CM) pick_face(dir * deg / 35.0f);
+    // reach out toward them: never at someone right at the arm, most for someone a step or two away
+    float reach = !here || radar_away_s() != 0 ? 0
+                : cm < 0 ? 0.3f : cm < REACH_NEAR_CM ? 0 : cm < 80 ? 0.3f : cm < 200 ? 0.8f : 0.4f;
+    pick_reach(reach);
     bool rest = away >= REST_AFTER_S;
     if (rest != s_resting) { s_resting = rest; eye_pause(rest); fx_away(rest); }
     if (here) s_put_down = false;

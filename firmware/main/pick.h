@@ -23,6 +23,7 @@ bool pick_idle(void);                                    // no job running or qu
 int  pick_lesson_next(void);
 void pick_attention(void);                               // someone spoke to it: perk up (idle life)
 void pick_face(float dir);
+void pick_reach(float k);                                // someone nearby (radar): reach out toward them, 0..1 of the reach
 // The chime, played by the arm from the taught Bell pose (the moment of contact).
 //   strength 10..100: how far it backs off before each strike, % of the lift (50 = the old fixed tap)
 //   hit_ms 50..400: the strike's travel time (lower = faster, harder); gap_ms 150..3000: one beat
