@@ -59,11 +59,12 @@ def _people(r: dict) -> list[dict]:
     if not r or not r.get("present"): return []
     pts = r.get("pts") or ([[r["x_cm"], r["y_cm"], 0]] if r.get("x_cm") is not None else [])
     out = []
-    for x, y, v in pts:
+    for p in pts:
         import math
+        x, y, v = p[:3]                          # newer firmware adds a track id and "person" (walked in) / "new"
         out.append({"distance_cm": round(math.hypot(x, y)), "angle_deg": round(math.degrees(math.atan2(x, y))),
                     "side": "ahead" if abs(x) < 10 else ("right" if x > 0 else "left"),
-                    "x_cm": x, "y_cm": y, "moving": abs(v) > 5})
+                    "x_cm": x, "y_cm": y, "moving": abs(v) > 5, "walked_in": len(p) > 4 and p[4] == "person"})
     if not out and r.get("distance_cm", -1) >= 0:
         out.append({"distance_cm": r["distance_cm"], "angle_deg": r.get("angle_deg")})
     return sorted(out, key=lambda p: p["distance_cm"])

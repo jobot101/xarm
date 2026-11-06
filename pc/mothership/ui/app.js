@@ -72,19 +72,20 @@ const card = (title, ...kids) => h("section", { class: "card" }, h("span", { cla
 
 // ---- overview
 let camTimer = null;
-// camera source: "obsbot" (the webcam on this PC, sharp) or "board" (the ribbon camera, blurry but always there).
-// The OBSBOT falls back to the board while something else (Video Control recording) holds it.
-let camSrc = localStorage.getItem("ms-cam") || "obsbot", camFallback = false;
+// camera source: "obsbot" (a webcam on this PC: the OBSBOT, else the bench webcam; see webcam.py) or "board" (the
+// ribbon camera, blurry but always there). The PC webcam falls back to the board while none is plugged in or free.
+let camSrc = localStorage.getItem("ms-cam") || "obsbot", camFallback = false, camName = "";
 function camLoop(img, note) {
   clearTimeout(camTimer);
   const next = ms => { camTimer = setTimeout(() => camLoop(img, note), ms); };
   if (!document.body.contains(img)) return;
   const useObsbot = camSrc === "obsbot" && !camFallback;
   const t = new Image();
-  t.onload = () => { img.src = t.src; note.textContent = useObsbot ? "OBSBOT: live" : `board camera ${S.cam && S.cam.ribbon || ""}: live` + (camSrc === "obsbot" ? "  (OBSBOT busy: falling back)" : ""); next(useObsbot ? 150 : 400); };
+  if (useObsbot && !camName) fetch("/webcam").then(r => r.json()).then(s => { camName = s.device || ""; }).catch(() => {});
+  t.onload = () => { img.src = t.src; note.textContent = useObsbot ? `PC webcam${camName ? " (" + camName + ")" : ""}: live` : `board camera ${S.cam && S.cam.ribbon || ""}: live` + (camSrc === "obsbot" ? "  (PC webcam busy: falling back)" : ""); next(useObsbot ? 150 : 400); };
   t.onerror = async () => {
     if (useObsbot) {                              // find out why, then fall back to the board for a while
-      let why = "OBSBOT not available";
+      let why = "PC webcam not available"; camName = "";
       try { const r = await fetch("/webcam"); const s = await r.json(); why = s.error || why; } catch {}
       note.textContent = why; camFallback = true; setTimeout(() => camFallback = false, 15000); next(300); return;
     }
@@ -94,7 +95,7 @@ function camLoop(img, note) {
 }
 function camSwitch() {
   const b = h("div", { class: "row", style: "margin-top:6px" });
-  for (const [k, label] of [["obsbot", "OBSBOT"], ["board", "Board camera"]])
+  for (const [k, label] of [["obsbot", "PC webcam"], ["board", "Board camera"]])
     b.append(h("button", { class: "small " + (camSrc === k ? "" : "ghost"), onclick: () => { camSrc = k; camFallback = false; localStorage.setItem("ms-cam", k); go("overview"); } }, label));
   return b;
 }
@@ -375,7 +376,7 @@ const FOV = 60;                                   // LD2450: +/-60 degrees
 let scopeData = null, scopeAt = 0, scopeLoop = null, trails = [];
 function radarPts(r) {
   if (!r || !r.present) return [];
-  if (Array.isArray(r.pts) && r.pts.length) return r.pts.map(p => ({ x: p[0], y: p[1], v: p[2] || 0 }));
+  if (Array.isArray(r.pts) && r.pts.length) return r.pts.map(p => ({ x: p[0], y: p[1], v: p[2] || 0, kind: p[4] || "" }));
   if (r.x_cm != null && r.y_cm != null) return [{ x: r.x_cm, y: r.y_cm, v: 0 }];      // older firmware: nearest only
   return [];
 }
@@ -441,6 +442,13 @@ function drawScope(c, pts, t) {
   ((scopeData || S.radar || {}).ignored || []).forEach(([x, y]) => {
     const [px, py] = toXY(x, y); g.fillStyle = "rgba(176,162,142,.7)"; g.beginPath(); g.arc(px, py, 4, 0, 7); g.fill();
   });
+  // swinging in place (a cable, a fan): the radar sees it, MotherShip doesn't count it as a person
+  ((scopeData || S.radar || {}).swinging || []).forEach(([x, y, , , x0, x1, y0, y1]) => {
+    const [ax, ay] = toXY(x0, y1), [bx, by] = toXY(x1, y0), [px, py] = toXY(x, y);
+    g.strokeStyle = "rgba(212,170,85,.6)"; g.setLineDash([4, 3]); g.strokeRect(ax - 4, ay - 4, bx - ax + 8, by - ay + 8); g.setLineDash([]);
+    g.fillStyle = "#d4aa55"; g.beginPath(); g.arc(px, py, 5, 0, 7); g.fill();
+    g.font = "12px DM Sans, Segoe UI"; g.fillText("swinging · not counted", bx + 8, ay + 8);
+  });
   // trails and people
   trails.forEach(tr => tr.forEach((p, k) => {
     const [x, y] = toXY(p.x, p.y), age = (Date.now() - p.t) / 6000;
@@ -452,7 +460,7 @@ function drawScope(c, pts, t) {
     g.fillStyle = glow; g.beginPath(); g.arc(x, y, 18, 0, 7); g.fill();
     g.fillStyle = "#e8f5dc"; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill();
     g.fillStyle = "#f4efe6"; g.font = "13px DM Sans, Segoe UI";
-    g.fillText(`${i + 1} · ${(d / 100).toFixed(1)} m ${ang ? Math.abs(ang) + "° " + (ang > 0 ? "R" : "L") : "ahead"}${Math.abs(p.v) > 5 ? " · moving" : ""}`, x + 10, y - 8);
+    g.fillText(`${i + 1} · ${(d / 100).toFixed(1)} m ${ang ? Math.abs(ang) + "° " + (ang > 0 ? "R" : "L") : "ahead"}${p.kind === "person" ? " · walked in" : ""}${Math.abs(p.v) > 5 ? " · moving" : ""}`, x + 10, y - 8);
   });
   // MotherShip at the bottom, and the 45 cm "no reach" zone
   g.strokeStyle = "rgba(255,155,138,.5)"; g.setLineDash([3, 4]); g.beginPath(); g.arc(ox, oy, 45 / range * R, a0, a1); g.stroke(); g.setLineDash([]);
@@ -465,10 +473,11 @@ function buildRadar(m) {
     h("div", { class: "chips", id: "radarchips" }),
     h("div", { class: "row" },
       h("button", { onclick: learnRoom }, "Learn empty room (30 s)"),
+      h("button", { class: "ghost", onclick: ignoreSwinging }, "Always ignore what's swinging"),
       h("button", { class: "ghost", onclick: async () => { if (!confirm("Forget the ignore zones? Everything the radar sees will count as a person again.")) return;
         const r = await api("/api/radar", { zones: [] }); $("#zoneout").textContent = r.msg || "cleared"; } }, "Clear zones")),
     h("div", { class: "reply", id: "zoneout" }),
-    h("p", { class: "small-text muted" }, "What the LD2450 sees: up to three people, with where they are and a short trail. Grey boxes are ignore zones (learned from an empty room: the arm's own motion, a fan); grey dots inside them don't count. The dashed red arc is 45 cm: closer than that MotherShip stops reaching toward you.")));
+    h("p", { class: "small-text muted" }, "What the LD2450 sees: up to three people, with where they are and a short trail. \"Walked in\" means it came from further away. Gold dots are something swinging back and forth in place (a cable, a fan): MotherShip spots the steady rhythm after several swings and doesn't count it as a person. \"Always ignore what's swinging\" turns those into ignore zones, so they're left out from the start next time. Grey boxes are ignore zones (learned from an empty room: the arm's own motion, a fan); grey dots inside them don't count. The dashed red arc is 45 cm: closer than that MotherShip stops reaching toward you.")));
   startScope(); syncRadarChips();
 }
 async function learnRoom() {
@@ -480,7 +489,7 @@ async function learnRoom() {
     out.textContent = `listening to the empty room… ${Math.ceil((30000 - (Date.now() - t0)) / 1000)} s`;
     try {
       const r = await (await fetch("/b/api/radar", { cache: "no-store" })).json();
-      for (const p of [...(r.pts || []), ...(r.ignored || [])]) seen.push([p[0], p[1]]);
+      for (const p of [...(r.pts || []), ...(r.ignored || []), ...(r.swinging || [])]) seen.push([p[0], p[1]]);
       if (!r.pts && r.present && r.x_cm != null) seen.push([r.x_cm, r.y_cm]);
     } catch {
       const r = S.radar || {}; if (r.present && r.x_cm != null) seen.push([r.x_cm, r.y_cm]);
@@ -501,6 +510,16 @@ async function learnRoom() {
   const r = await api("/api/radar", { zones: keep });
   out.textContent = r.ok ? `${r.msg}: ${keep.map(z => `x ${z[0]}…${z[1]} cm, y ${z[2]}…${z[3]} cm`).join("; ")}`
                          : `couldn't save the zones: ${r.msg || "this firmware has no ignore zones yet"}`;
+}
+
+async function ignoreSwinging() {
+  const out = $("#zoneout"), r = scopeData || S.radar || {};
+  const sw = (r.swinging || []).map(([, , , , x0, x1, y0, y1]) => [Math.round(x0 - 10), Math.round(x1 + 10), Math.max(0, Math.round(y0 - 10)), Math.round(y1 + 10)]);
+  if (!sw.length) { out.textContent = "Nothing's swinging right now."; return; }
+  const zones = [...(r.zones || []), ...sw].slice(0, 4);
+  const res = await api("/api/radar", { zones });
+  out.textContent = res.ok ? `${res.msg}${zones.length < (r.zones || []).length + sw.length ? " (only 4 fit: the newest were left out)" : ""}`
+                           : `couldn't save the zones: ${res.msg || "failed"}`;
 }
 
 function syncRadarChips() {

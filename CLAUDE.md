@@ -75,6 +75,7 @@ The phone gets its files from the `latest` release.
 
 ```
 cd firmware/test && cc -I../main test_core.c ../main/core.c -lm -o t && ./t     # pure logic
+cd firmware/test && cc -I../main test_track.c ../main/track.c -lm -o tt && ./tt   # radar: person vs swinging
 cd web && npm i && npm run build      # also writes firmware/main/www/index.html.gz
 cd web && npm run mock & ARM=http://localhost:8787 npm run dev                    # UI with no hardware
 cd firmware && idf.py set-target esp32s3 && idf.py build flash monitor          # IDF >= 5.5, PC only

@@ -33,7 +33,7 @@ jobs:
 
       - name: host tests
         working-directory: firmware/test
-        run: cc -I../main test_core.c ../main/core.c -lm -o t && ./t
+        run: cc -I../main test_core.c ../main/core.c -lm -o t && ./t && cc -I../main test_track.c ../main/track.c -lm -o tt && ./tt
 
       # voice + bells + organ: rendered offline with Piper (open-source neural TTS) into the sound bank
       - uses: actions/setup-python@v5

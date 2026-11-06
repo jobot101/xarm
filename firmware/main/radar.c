@@ -3,7 +3,10 @@
 //   LD2410-style binary reports  F4 F3 F2 F1 <len16> ... F8 F7 F6 F5   (target state + moving/still distance)
 //   text modules (LD2420/LD2402)  "ON" / "OFF" / "Range 123" / "distance:123"
 // Anything else is kept as a raw sample in /api/state so the format can be read off.
+// LD2450 targets are followed frame to frame by track.c: something swinging in place (a cable, a fan) doesn't count
+// as someone at the bench.
 #include "radar.h"
+#include "track.h"
 #include "sdkconfig.h"
 #include <ctype.h>
 #include <math.h>
@@ -34,6 +37,8 @@ static volatile int64_t s_since_us, s_frame_us;
 static volatile int s_baud, s_dist_cm = -1, s_frames;
 static volatile int s_x_cm, s_y_cm, s_angle = 999, s_targets;     // LD2450 only: nearest target, x left/right, y ahead
 static int16_t s_pts[3][3];
+static trk_t s_trk[TRK_MAX];                     // LD2450 targets outside the ignore zones, followed over time
+static int64_t s_trk_ms;                         // the frame they were last updated on
 #define ZONES 4
 static int16_t s_zone[ZONES][4];                 // x0, x1, y0, y1 in cm; x0 == x1 = unused
 static int s_nzone;
@@ -110,35 +115,59 @@ static bool parse_ld2410(const uint8_t *b, int n)
 
 static int ld_s16(const uint8_t *p) { int v = p[0] | p[1] << 8; return v & 0x8000 ? v - 0x8000 : -v; }
 
-// HLK-LD2450: up to 3 targets with x/y in mm -> nearest one's angle (0 = straight ahead, + = to the module's right)
-static bool parse_ld2450(const uint8_t *b, int n)
+// HLK-LD2450: one 30-byte frame, up to 3 targets with x/y in mm. Targets outside the ignore zones go through the
+// tracker; the ones that aren't swinging in place are people -> nearest one's angle (0 ahead, + = module's right).
+static void ld2450_frame(const uint8_t *b)
 {
-    for (int i = 0; i + 30 <= n; i++) {
-        if (b[i] != 0xAA || b[i + 1] != 0xFF || b[i + 2] != 0x03 || b[i + 3] != 0x00) continue;
-        if (b[i + 28] != 0x55 || b[i + 29] != 0xCC) continue;
-        int best = -1, bd = 1 << 30, cnt = 0, bx = 0, by = 0;
-        for (int t = 0; t < 3; t++) {
-            const uint8_t *p = b + i + 4 + t * 8;
-            if (!(p[0] | p[1] | p[2] | p[3])) { s_pts[t][0] = s_pts[t][1] = s_pts[t][2] = 0; continue; }
-            int x = ld_s16(p), y = ld_s16(p + 2), d = x * x + y * y;
-            s_pts[t][0] = (int16_t)(x / 10); s_pts[t][1] = (int16_t)(y / 10); s_pts[t][2] = (int16_t)ld_s16(p + 4);
-            if (in_zone(x / 10, y / 10)) continue;   // clutter: shown on the scope, never counted as a person
-            cnt++;
-            if (d < bd) { bd = d; best = t; bx = x; by = y; }
-        }
-        s_targets = cnt;
-        set_present(cnt > 0);
-        if (best >= 0) {
-            s_x_cm = bx / 10; s_y_cm = by / 10;
-            s_dist_cm = (int)sqrtf((float)bd) / 10;
-            s_angle = (int)lroundf(atan2f((float)bx, (float)(by > 0 ? by : 1)) * 57.2958f);
-        } else { s_dist_cm = -1; s_angle = 999; }
-        strlcpy(s_fmt, "ld2450", sizeof s_fmt);
-        s_frame_us = esp_timer_get_time();
-        s_frames++;
-        return true;
+    int16_t in[TRK_MAX][3];
+    int n = 0;
+    for (int t = 0; t < 3; t++) {
+        const uint8_t *p = b + 4 + t * 8;
+        if (!(p[0] | p[1] | p[2] | p[3])) { s_pts[t][0] = s_pts[t][1] = s_pts[t][2] = 0; continue; }
+        int x = ld_s16(p), y = ld_s16(p + 2);
+        s_pts[t][0] = (int16_t)(x / 10); s_pts[t][1] = (int16_t)(y / 10); s_pts[t][2] = (int16_t)ld_s16(p + 4);
+        if (in_zone(x / 10, y / 10)) continue;       // clutter: shown on the scope, never counted as a person
+        memcpy(in[n++], s_pts[t], sizeof in[0]);
     }
-    return false;
+    int64_t now = esp_timer_get_time() / 1000;
+    trk_update(s_trk, (const int16_t (*)[3])in, n, now);
+    s_trk_ms = now;
+    float bd = 1e9f, bx = 0, by = 0;
+    int cnt = 0;
+    for (int t = 0; t < TRK_MAX; t++) {
+        const trk_t *k = &s_trk[t];
+        if (!k->on || k->seen_ms != now || k->kind == TRK_SWING) continue;   // in this frame, and not swinging in place
+        cnt++;
+        float d = k->x * k->x + k->y * k->y;
+        if (d < bd) { bd = d; bx = k->x; by = k->y; }
+    }
+    s_targets = cnt;
+    set_present(cnt > 0);
+    if (cnt) {
+        s_x_cm = (int)bx; s_y_cm = (int)by;
+        s_dist_cm = (int)sqrtf(bd);
+        s_angle = (int)lroundf(atan2f(bx, by > 0 ? by : 1) * 57.2958f);
+    } else { s_dist_cm = -1; s_angle = 999; }
+    strlcpy(s_fmt, "ld2450", sizeof s_fmt);
+    s_frame_us = esp_timer_get_time();
+    s_frames++;
+}
+
+// every whole LD2450 frame in acc[0..*na) (the module sends ~10 a second); keeps a partial frame at the end
+static bool parse_ld2450(uint8_t *acc, int *na)
+{
+    int i = 0, done = 0;
+    bool any = false;
+    while (i + 30 <= *na) {
+        const uint8_t *b = acc + i;
+        if (b[0] == 0xAA && b[1] == 0xFF && b[2] == 0x03 && b[3] == 0x00 && b[28] == 0x55 && b[29] == 0xCC) {
+            ld2450_frame(b); any = true; i += 30; done = i;
+        } else i++;
+    }
+    if (!any) done = *na > 29 ? *na - 29 : 0;         // no frame yet: keep only what could be the start of one
+    memmove(acc, acc + done, *na - done);
+    *na -= done;
+    return any;
 }
 
 static bool parse_text(const uint8_t *b, int n)
@@ -179,7 +208,8 @@ static int score(const uint8_t *b, int n)
 
 static void serial_task(void *arg)
 {
-    static uint8_t buf[256];
+    static uint8_t buf[256], acc[160];
+    static int na;
     const int bauds[] = {256000, 115200, 57600, 9600};
     int best = 0, best_s = -1;
     for (int t = 0; t < 2 && best_s < 80; t++)
@@ -197,13 +227,16 @@ static void serial_task(void *arg)
     uart_flush_input(UARTN);
     ESP_LOGI(TAG, "reading the radar at %d baud", best);
     for (;;) {
-        int n = uart_read_bytes(UARTN, buf, sizeof buf, pdMS_TO_TICKS(200));
+        // small reads: an LD2450 frame is 30 bytes, ~10 a second; a big read would sit on several frames at once
+        int n = uart_read_bytes(UARTN, buf, 32, pdMS_TO_TICKS(100));
         if (s_frame_us && esp_timer_get_time() - s_frame_us > 3000000) {   // unplugged or silent: nobody, and say so
             set_present(false);
             if (s_fmt[0]) { ESP_LOGW(TAG, "radar went quiet"); s_fmt[0] = 0; }   // radar_known() false until frames return
         }
         if (n <= 0) continue;
-        if (!parse_ld2450(buf, n) && !parse_ld2410(buf, n) && !parse_text(buf, n)) raw_sample(buf, n < 32 ? n : 32);
+        if (na + n > (int)sizeof acc) na = 0;         // junk that never formed a frame
+        memcpy(acc + na, buf, n); na += n;
+        if (!parse_ld2450(acc, &na) && !parse_ld2410(buf, n) && !parse_text(buf, n)) raw_sample(buf, n < 32 ? n : 32);
     }
 }
 
@@ -286,13 +319,32 @@ void radar_json(cJSON *o)
         cJSON_AddNumberToObject(r, "distance_cm", s_dist_cm);
         if (!strcmp(s_fmt, "ld2450")) {
             cJSON_AddNumberToObject(r, "targets", s_targets);
-            cJSON *pts = cJSON_AddArrayToObject(r, "pts");             // [[x_cm, y_cm, speed_cm_s], ...] people
-            cJSON *ign = cJSON_AddArrayToObject(r, "ignored");         // the same, inside an ignore zone (clutter)
+            // pts [[x_cm, y_cm, speed_cm_s, track id, "person"|"new"], ...]: counted as someone ("person" = walked in)
+            // swinging [[x_cm, y_cm, speed_cm_s, track id, x0, x1, y0, y1], ...]: moving in place, not counted;
+            //   x0..y1 = everywhere it's been, ready to save as an ignore zone
+            // ignored [[x_cm, y_cm, speed_cm_s], ...]: inside an ignore zone
+            cJSON *pts = cJSON_AddArrayToObject(r, "pts");
+            cJSON *sw = cJSON_AddArrayToObject(r, "swinging");
+            cJSON *ign = cJSON_AddArrayToObject(r, "ignored");
+            for (int t = 0; t < TRK_MAX; t++) {
+                trk_t k = s_trk[t];                                    // a copy: the radar task updates them
+                if (!k.on || k.seen_ms != s_trk_ms) continue;
+                cJSON *q = cJSON_CreateArray();
+                cJSON_AddItemToArray(q, cJSON_CreateNumber((int)k.x));
+                cJSON_AddItemToArray(q, cJSON_CreateNumber((int)k.y));
+                cJSON_AddItemToArray(q, cJSON_CreateNumber((int)k.v));
+                cJSON_AddItemToArray(q, cJSON_CreateNumber(k.id));
+                if (k.kind == TRK_SWING) {
+                    float b[4] = {k.bx0, k.bx1, k.by0, k.by1};
+                    for (int i = 0; i < 4; i++) cJSON_AddItemToArray(q, cJSON_CreateNumber((int)b[i]));
+                } else cJSON_AddItemToArray(q, cJSON_CreateString(trk_name(k.kind)));
+                cJSON_AddItemToArray(k.kind == TRK_SWING ? sw : pts, q);
+            }
             for (int t = 0; t < 3; t++) {
-                if (!s_pts[t][0] && !s_pts[t][1]) continue;
+                if ((!s_pts[t][0] && !s_pts[t][1]) || !in_zone(s_pts[t][0], s_pts[t][1])) continue;
                 cJSON *q = cJSON_CreateArray();
                 for (int k = 0; k < 3; k++) cJSON_AddItemToArray(q, cJSON_CreateNumber(s_pts[t][k]));
-                cJSON_AddItemToArray(in_zone(s_pts[t][0], s_pts[t][1]) ? ign : pts, q);
+                cJSON_AddItemToArray(ign, q);
             }
             if (s_angle != 999) {
                 cJSON_AddNumberToObject(r, "angle_deg", s_angle);

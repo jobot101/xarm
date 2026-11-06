@@ -351,11 +351,13 @@ class Johnny:
         if not r.get("present"): return f"radar: nobody at the bench (for {r.get('since_s', 0)} s)"
         pts = r.get("pts") or ([[r["x_cm"], r["y_cm"], 0]] if r.get("x_cm") is not None else [])
         bits = []
-        for x, y, v in sorted(pts, key=lambda p: math.hypot(p[0], p[1])):
+        for x, y, v in sorted((p[:3] for p in pts), key=lambda p: math.hypot(p[0], p[1])):   # newer firmware adds id, kind
             side = "straight ahead" if abs(x) < 10 else f"to your {'right' if x > 0 else 'left'}"
             bits.append(f"{math.hypot(x, y) / 100:.1f} m away {side}{', moving' if abs(v) > 5 else ''}")
         n = len(bits) or 1
-        return f"radar: {'one person' if n == 1 else f'{n} people'} " + ("; ".join(bits) if bits else f"{r.get('distance_cm', 0) / 100:.1f} m away")
+        sw = len(r.get("swinging") or [])
+        return (f"radar: {'one person' if n == 1 else f'{n} people'} " + ("; ".join(bits) if bits else f"{r.get('distance_cm', 0) / 100:.1f} m away")
+                + (f" (and {sw} thing{'s' if sw > 1 else ''} swinging in place, not counted)" if sw else ""))
 
     async def handle(self, text):
         now = time.time()
