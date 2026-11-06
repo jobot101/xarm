@@ -84,7 +84,9 @@ class App:
 
         # ---- eyes
         eyes = ttk.LabelFrame(left, text="What Johnny sees", padding=8); eyes.pack(fill="x")
-        self.cam = tk.Label(eyes, bg="black", width=VIEW[0], height=VIEW[1]); self.cam.pack()
+        # a pixel-sized placeholder: a Label with no image measures width/height in text characters
+        self.tkimg = ImageTk.PhotoImage(Image.new("RGB", VIEW, "black"))
+        self.cam = tk.Label(eyes, image=self.tkimg, bg="black", bd=0); self.cam.pack()
         self.cam_note = ttk.Label(eyes, text="", style="Dim.TLabel"); self.cam_note.pack(anchor="w", pady=(6, 0))
 
         # ---- commands
@@ -200,7 +202,7 @@ class App:
             d.text(((x - w / 2) * sx + 4, (y - h / 2) * sy + 3), sl["name"], fill="white")
             seen.append(sl["name"])
         self.tkimg = ImageTk.PhotoImage(im)
-        self.cam.config(image=self.tkimg, width=VIEW[0], height=VIEW[1])
+        self.cam.config(image=self.tkimg)
         if self.cam_err: note = self.cam_err
         elif not cam.get("ok"): note = f"camera {cam.get('ribbon', '')}: no color reports - is eye.py running?"
         else: note = f"camera {cam.get('ribbon', '')}: sees " + (", ".join(seen) if seen else "nothing it knows")
