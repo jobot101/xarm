@@ -1,4 +1,5 @@
 #include "pick.h"
+#include "bell.h"
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -530,6 +531,12 @@ static void do_dance(void)
 // hover over the bell, strike 3 times
 static void do_bell(void)
 {
+    if (bell_ready()) {                      // a real bell on the solenoid: it rings itself, the arm stays put
+        set("ringing", "ding!");
+        for (int i = 0; i < 3; i++) { bell_strike(0); if (!wait_ms(700)) return; }
+        set("idle", "rang the bell");
+        return;
+    }
     fx_say(SND_BELL);
     set("ringing", "ding!");
     uint16_t up[NSERVO], hit[NSERVO];

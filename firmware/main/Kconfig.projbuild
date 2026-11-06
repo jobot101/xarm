@@ -100,6 +100,11 @@ menu "xArm Voice"
         string "Time zone (POSIX TZ) for when a School day starts"
         default "EST5EDT,M3.2.0,M11.1.0"
 
+    config XARM_BELL_GPIO
+        int "Solenoid bell striker GPIO (-1 = none: the arm mimes the bell and the speaker rings)"
+        default -1
+        range -1 48
+
     config XARM_JOHNNY
         bool "Johnny: the brain runs on the shop PC (Muffin off)"
         default n

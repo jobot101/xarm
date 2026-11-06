@@ -743,7 +743,7 @@ static void on_close(httpd_handle_t hd, int fd)
 bool web_start(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 27;
+    c.max_uri_handlers = 30;
     c.close_fn = on_close;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
@@ -778,6 +778,7 @@ bool web_start(void)
     };
 #if JOHNNY
     pc_register(h);                           // ws://<board>/ws: the PC brain (before the "/*" catch-all)
+    bell_register(h);                         // /api/bell: strike + listen, for tuning the real bell
     eye_register(h);                          // /cam.jpg + /api/blobs: the PC sees through the ribbon camera
 #endif
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);

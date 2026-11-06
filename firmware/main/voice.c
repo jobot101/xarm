@@ -383,7 +383,7 @@ void voice_face_set(int v)
 // room's music it hears.
 #define ENV_N   512
 #define HOP     256                      // samples = 16 ms
-static float s_env[ENV_N], s_lvl[ENV_N];
+static float s_env[ENV_N], s_lvl[ENV_N], s_lvl2[ENV_N];   // s_lvl2: MIC2 (both-mics mode), else -99
 static volatile uint32_t s_env_w;
 static volatile int64_t s_env_us;        // when the newest hop was written
 
@@ -396,12 +396,38 @@ static void env_push(const int16_t *buf, int frames, int ch)
         float db = 10.0f * log10f(acc / HOP / (32768.0f * 32768.0f) + 1e-9f);
         float on = db - prev_db;
         prev_db = db;
+        float db2 = -99;
+        if (ch >= 3) {                       // MRM: channel 2 is MIC2
+            float a2 = 0;
+            for (int i = h; i < h + HOP; i++) a2 += (float)buf[i * ch + 2] * buf[i * ch + 2];
+            db2 = 10.0f * log10f(a2 / HOP / (32768.0f * 32768.0f) + 1e-9f);
+        }
         uint32_t w = s_env_w;
+        s_lvl2[w % ENV_N] = db2;
         s_env[w % ENV_N] = on > 0 ? on : 0;
         s_lvl[w % ENV_N] = db;
         s_env_w = w + 1;
     }
     s_env_us = esp_timer_get_time();
+}
+
+// bell.c's tuning: raw MIC1 / MIC2 loudness (dBFS per 16 ms hop) from `pre` hops before t0_us up to now
+int voice_levels_since(int64_t t0_us, float *mic1, float *mic2, int max, int *pre)
+{
+    uint32_t w = s_env_w;
+    int after = (int)((s_env_us - t0_us) / 16000) + 1, p = 10;
+    if (after < 0) after = 0;
+    int total = after + p;
+    if (total > max) total = max;
+    if (total > ENV_N) total = ENV_N;
+    if ((uint32_t)total > w) total = (int)w;
+    *pre = total > after ? total - after : 0;
+    for (int i = 0; i < total; i++) {
+        uint32_t k = (w - total + i) % ENV_N;
+        mic1[i] = s_lvl[k];
+        if (mic2) mic2[i] = s_lvl2[k];
+    }
+    return total;
 }
 
 bool voice_beat(int *period_ms, int64_t *next_us)

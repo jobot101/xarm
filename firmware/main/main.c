@@ -20,9 +20,11 @@
 #include "voice.h"
 #include "web.h"
 #include "school.h"
+#include "bell.h"
 
 void app_main(void)
 {
+    bell_init();           // first: the solenoid pin goes low before anything can float it high
     esp_err_t e = nvs_flash_init();
     if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
