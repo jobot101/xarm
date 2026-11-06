@@ -125,12 +125,13 @@ def radar_scan() -> str:
     """Who the radar (HLK-LD2450, 24 GHz, ~120 degree view, up to 6 m) sees right now: up to three people, each with
     distance in cm, angle in degrees (0 = straight ahead of MotherShip, + = to its right), x/y in cm and whether
     they are moving. Also how long someone has been there or how long the bench has been empty.
-    A target that never moves at a fixed spot very close (< 30 cm) for a long time is usually part of the setup,
-    not a person."""
+    Targets inside the learned ignore zones (the arm's own motion, a fan) are left out of people and only counted
+    as ignored_clutter."""
     r = _radar()
     if not r or r.get("kind") in (None, "none"): return json.dumps({"radar": "none"})
     return json.dumps({"module": r.get("format") or r.get("kind"), "someone_here": bool(r.get("present")),
-                       "for_s": r.get("since_s"), "people": _people(r)})
+                       "for_s": r.get("since_s"), "people": _people(r),
+                       "ignored_clutter": len(r.get("ignored") or []), "ignore_zones_cm": r.get("zones") or []})
 
 
 @mcp.tool()

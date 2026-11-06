@@ -500,6 +500,26 @@ static esp_err_t h_radar(httpd_req_t *r)
     return e;
 }
 
+static esp_err_t h_radar_post(httpd_req_t *r)
+{
+    cJSON *b = body(r), *z = b ? cJSON_GetObjectItem(b, "zones") : NULL;
+    int16_t zones[4][4] = {{0}};
+    int n = 0;
+    if (cJSON_IsArray(z))
+        for (int i = 0; i < cJSON_GetArraySize(z) && n < 4; i++) {
+            cJSON *q = cJSON_GetArrayItem(z, i);
+            if (!cJSON_IsArray(q) || cJSON_GetArraySize(q) != 4) continue;
+            for (int k = 0; k < 4; k++) zones[n][k] = (int16_t)cJSON_GetArrayItem(q, k)->valueint;
+            if (zones[n][1] > zones[n][0] && zones[n][3] > zones[n][2]) n++;
+        }
+    bool ok = cJSON_IsArray(z);
+    cJSON_Delete(b);
+    if (!ok) return reply(r, false, "send {\"zones\": [[x0, x1, y0, y1], ...]}");
+    char msg[48];
+    snprintf(msg, sizeof msg, "%d ignore zone(s) saved", radar_zones_set(zones, n));
+    return reply(r, true, msg);
+}
+
 // ---------- GET /api/i2c -> {"found":"0x18 0x20 0x40 0x51 0x52","cam":true} ----------
 static esp_err_t h_i2c(httpd_req_t *r)
 {
@@ -882,6 +902,7 @@ bool web_start(void)
         {"/api/chime",  HTTP_POST, h_chime},
         {"/api/levels", HTTP_GET,  h_levels},
         {"/api/radar",  HTTP_GET,  h_radar},
+        {"/api/radar",  HTTP_POST, h_radar_post},
         {"/api/phrases",HTTP_GET,  h_phrases},
         {"/api/sys",    HTTP_GET,  h_sys},
         {"/*",          HTTP_GET,  h_app},       // keep last

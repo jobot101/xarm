@@ -361,6 +361,17 @@ function drawScope(c, pts, t) {
   const grad = g.createRadialGradient(ox, oy, 0, ox, oy, R); grad.addColorStop(0, "rgba(168,201,138,.0)"); grad.addColorStop(1, "rgba(168,201,138,.22)");
   g.fillStyle = grad; g.beginPath(); g.moveTo(ox, oy); g.arc(ox, oy, R, Math.min(sa, sa + dir * 0.35), Math.max(sa, sa + dir * 0.35)); g.closePath(); g.fill();
   g.strokeStyle = "rgba(168,201,138,.6)"; g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox + Math.cos(sa) * R, oy + Math.sin(sa) * R); g.stroke();
+  // ignore zones (learned from an empty room) and the clutter inside them
+  const z = (scopeData || S.radar || {}).zones || [];
+  z.forEach(([x0, x1, y0, y1]) => {
+    const [ax, ay] = toXY(x0, y1), [bx, by] = toXY(x1, y0);
+    g.fillStyle = "rgba(110,99,82,.22)"; g.fillRect(ax, ay, bx - ax, by - ay);
+    g.strokeStyle = "rgba(176,162,142,.5)"; g.setLineDash([2, 3]); g.strokeRect(ax, ay, bx - ax, by - ay); g.setLineDash([]);
+    g.fillStyle = "#b0a28e"; g.font = "11px DM Sans, Segoe UI"; g.fillText("ignored", ax + 3, ay + 12);
+  });
+  ((scopeData || S.radar || {}).ignored || []).forEach(([x, y]) => {
+    const [px, py] = toXY(x, y); g.fillStyle = "rgba(176,162,142,.7)"; g.beginPath(); g.arc(px, py, 4, 0, 7); g.fill();
+  });
   // trails and people
   trails.forEach(tr => tr.forEach((p, k) => {
     const [x, y] = toXY(p.x, p.y), age = (Date.now() - p.t) / 6000;
@@ -383,9 +394,44 @@ function drawScope(c, pts, t) {
 function buildRadar(m) {
   m.append(card("Radar scan", h("canvas", { class: "scope", style: "width:100%;height:440px;display:block" }),
     h("div", { class: "chips", id: "radarchips" }),
-    h("p", { class: "small-text muted" }, "What the LD2450 sees: up to three people, with where they are and a short trail. The dashed red arc is 45 cm: closer than that MotherShip stops reaching toward you.")));
+    h("div", { class: "row" },
+      h("button", { onclick: learnRoom }, "Learn empty room (30 s)"),
+      h("button", { class: "ghost", onclick: async () => { if (!confirm("Forget the ignore zones? Everything the radar sees will count as a person again.")) return;
+        const r = await api("/api/radar", { zones: [] }); $("#zoneout").textContent = r.msg || "cleared"; } }, "Clear zones")),
+    h("div", { class: "reply", id: "zoneout" }),
+    h("p", { class: "small-text muted" }, "What the LD2450 sees: up to three people, with where they are and a short trail. Grey boxes are ignore zones (learned from an empty room: the arm's own motion, a fan); grey dots inside them don't count. The dashed red arc is 45 cm: closer than that MotherShip stops reaching toward you.")));
   startScope(); syncRadarChips();
 }
+async function learnRoom() {
+  const out = $("#zoneout");
+  if (!confirm("Leave the room (or at least the radar's view) for 30 seconds after you press OK.\n\nEverything the radar sees while you're gone becomes an ignore zone.")) return;
+  const seen = [], t0 = Date.now();
+  while (Date.now() - t0 < 30000) {
+    out.textContent = `listening to the empty room… ${Math.ceil((30000 - (Date.now() - t0)) / 1000)} s`;
+    try {
+      const r = await (await fetch("/b/api/radar", { cache: "no-store" })).json();
+      for (const p of [...(r.pts || []), ...(r.ignored || [])]) seen.push([p[0], p[1]]);
+      if (!r.pts && r.present && r.x_cm != null) seen.push([r.x_cm, r.y_cm]);
+    } catch {
+      const r = S.radar || {}; if (r.present && r.x_cm != null) seen.push([r.x_cm, r.y_cm]);
+    }
+    await new Promise(res => setTimeout(res, 300));
+  }
+  if (!seen.length) { out.textContent = "The room was empty: nothing to ignore."; return; }
+  // cluster: points within 40 cm of a cluster's box join it; keep clusters seen in at least 10% of the samples
+  const cl = [];
+  for (const [x, y] of seen) {
+    let c = cl.find(c => x > c.x0 - 40 && x < c.x1 + 40 && y > c.y0 - 40 && y < c.y1 + 40);
+    if (!c) cl.push(c = { x0: x, x1: x, y0: y, y1: y, n: 0 });
+    c.x0 = Math.min(c.x0, x); c.x1 = Math.max(c.x1, x); c.y0 = Math.min(c.y0, y); c.y1 = Math.max(c.y1, y); c.n++;
+  }
+  const keep = cl.filter(c => c.n >= Math.max(3, seen.length * 0.1)).sort((a, b) => b.n - a.n).slice(0, 4)
+                 .map(c => [Math.round(c.x0 - 10), Math.round(c.x1 + 10), Math.max(0, Math.round(c.y0 - 10)), Math.round(c.y1 + 10)]);
+  const r = await api("/api/radar", { zones: keep });
+  out.textContent = r.ok ? `${r.msg}: ${keep.map(z => `x ${z[0]}…${z[1]} cm, y ${z[2]}…${z[3]} cm`).join("; ")}`
+                         : `couldn't save the zones: ${r.msg || "this firmware has no ignore zones yet"}`;
+}
+
 function syncRadarChips() {
   const c = $("#radarchips"); if (!c) return;
   const r = scopeData || S.radar || {}, pts = radarPts(r);

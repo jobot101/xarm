@@ -6,6 +6,7 @@
 #pragma once
 #include <stdbool.h>
 #include "cJSON.h"
+#include <stdint.h>
 
 void radar_init(void);
 bool radar_known(void);            // a reading we understand (presence pin, or a recognized serial format)
@@ -13,4 +14,7 @@ int  radar_away_s(void);           // seconds since someone was last seen (0 whi
 int  radar_distance_cm(void);      // -1 if nobody or not reported
 bool radar_angle(int *deg);        // LD2450 only: nearest person's angle (0 ahead, + right); false if no direction
 bool radar_present(void);          // presence output high (false if none, or if the pin is carrying serial data)
-void radar_json(cJSON *o);         // /api/state "radar": {gpio, level, edges_s, kind, present, since_s}
+void radar_json(cJSON *o);
+// ignore zones: rectangles {x0, x1, y0, y1} in cm (x + = to the right, y = straight out) where targets are clutter,
+// e.g. the arm's own idle motion. Saved in NVS; up to 4. Returns how many were kept.
+int  radar_zones_set(const int16_t z[][4], int n);         // /api/state "radar": {gpio, level, edges_s, kind, present, since_s}

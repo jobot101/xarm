@@ -15,6 +15,7 @@
 #include "esp_attr.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/idf_additions.h"
@@ -32,7 +33,40 @@ static volatile bool s_level, s_present, s_serial;
 static volatile int64_t s_since_us, s_frame_us;
 static volatile int s_baud, s_dist_cm = -1, s_frames;
 static volatile int s_x_cm, s_y_cm, s_angle = 999, s_targets;     // LD2450 only: nearest target, x left/right, y ahead
-static int16_t s_pts[3][3];                                       // LD2450: every target, x / y cm and speed cm/s (0,0 = none)
+static int16_t s_pts[3][3];
+#define ZONES 4
+static int16_t s_zone[ZONES][4];                 // x0, x1, y0, y1 in cm; x0 == x1 = unused
+static int s_nzone;
+
+static bool in_zone(int x, int y)
+{
+    for (int i = 0; i < s_nzone; i++)
+        if (x >= s_zone[i][0] && x <= s_zone[i][1] && y >= s_zone[i][2] && y <= s_zone[i][3]) return true;
+    return false;
+}
+
+static void zones_load(void)
+{
+    nvs_handle_t h;
+    size_t n = sizeof s_zone;
+    s_nzone = 0;
+    if (nvs_open("xarm", NVS_READONLY, &h) != ESP_OK) return;
+    if (nvs_get_blob(h, "rzones", s_zone, &n) == ESP_OK)
+        for (int i = 0; i < ZONES; i++) if (s_zone[i][1] > s_zone[i][0]) s_nzone = i + 1;
+    nvs_close(h);
+}
+
+int radar_zones_set(const int16_t z[][4], int n)
+{
+    if (n < 0) n = 0;
+    if (n > ZONES) n = ZONES;
+    memset(s_zone, 0, sizeof s_zone);
+    for (int i = 0; i < n; i++) memcpy(s_zone[i], z[i], sizeof s_zone[i]);
+    s_nzone = n;
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) { nvs_set_blob(h, "rzones", s_zone, sizeof s_zone); nvs_commit(h); nvs_close(h); }
+    return n;
+}                                       // LD2450: every target, x / y cm and speed cm/s (0,0 = none)
 static char s_fmt[12] = "", s_raw[100] = "";
 static esp_timer_handle_t s_tmr;
 static bool s_ok;
@@ -87,6 +121,7 @@ static bool parse_ld2450(const uint8_t *b, int n)
             if (!(p[0] | p[1] | p[2] | p[3])) { s_pts[t][0] = s_pts[t][1] = s_pts[t][2] = 0; continue; }
             int x = ld_s16(p), y = ld_s16(p + 2), d = x * x + y * y;
             s_pts[t][0] = (int16_t)(x / 10); s_pts[t][1] = (int16_t)(y / 10); s_pts[t][2] = (int16_t)ld_s16(p + 4);
+            if (in_zone(x / 10, y / 10)) continue;   // clutter: shown on the scope, never counted as a person
             cnt++;
             if (d < bd) { bd = d; best = t; bx = x; by = y; }
         }
@@ -212,7 +247,8 @@ void radar_init(void)
     esp_timer_start_periodic(s_tmr, 1000000);
     s_since_us = esp_timer_get_time();
     s_ok = true;
-    ESP_LOGI(TAG, "radar on GPIO%d", PIN);
+    zones_load();
+    ESP_LOGI(TAG, "radar on GPIO%d, %d ignore zone(s)", PIN, s_nzone);
 }
 
 bool radar_present(void) { return s_ok && s_present; }
@@ -236,12 +272,13 @@ void radar_json(cJSON *o)
         cJSON_AddNumberToObject(r, "distance_cm", s_dist_cm);
         if (!strcmp(s_fmt, "ld2450")) {
             cJSON_AddNumberToObject(r, "targets", s_targets);
-            cJSON *pts = cJSON_AddArrayToObject(r, "pts");             // [[x_cm, y_cm, speed_cm_s], ...] every target seen
+            cJSON *pts = cJSON_AddArrayToObject(r, "pts");             // [[x_cm, y_cm, speed_cm_s], ...] people
+            cJSON *ign = cJSON_AddArrayToObject(r, "ignored");         // the same, inside an ignore zone (clutter)
             for (int t = 0; t < 3; t++) {
                 if (!s_pts[t][0] && !s_pts[t][1]) continue;
                 cJSON *q = cJSON_CreateArray();
                 for (int k = 0; k < 3; k++) cJSON_AddItemToArray(q, cJSON_CreateNumber(s_pts[t][k]));
-                cJSON_AddItemToArray(pts, q);
+                cJSON_AddItemToArray(in_zone(s_pts[t][0], s_pts[t][1]) ? ign : pts, q);
             }
             if (s_angle != 999) {
                 cJSON_AddNumberToObject(r, "angle_deg", s_angle);
@@ -250,6 +287,12 @@ void radar_json(cJSON *o)
             }
         }
         cJSON_AddStringToObject(r, "raw", s_raw);
+        cJSON *zs = cJSON_AddArrayToObject(r, "zones");
+        for (int i = 0; i < s_nzone; i++) {
+            cJSON *q = cJSON_CreateArray();
+            for (int k = 0; k < 4; k++) cJSON_AddItemToArray(q, cJSON_CreateNumber(s_zone[i][k]));
+            cJSON_AddItemToArray(zs, q);
+        }
     } else {
         cJSON_AddBoolToObject(r, "level", s_level);
         cJSON_AddNumberToObject(r, "edges_s", s_rate);
