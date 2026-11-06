@@ -346,6 +346,7 @@ void fx_hush(void)
 
 // ---------------------------------------------------------------- lights
 typedef enum { L_BOOT, L_IDLE, L_THINK, L_WORK, L_HOLD, L_WARN, L_STOP, L_UPDATE, L_PARTY } led_mode_t;
+static volatile bool s_away;                  // Johnny: nobody at the bench for a minute (radar): a faint glow only
 static volatile bool s_sleep;                 // Robot School is out for the day: a slow, dim amethyst breath
 
 static led_strip_handle_t s_led;
@@ -388,6 +389,7 @@ static void led_task(void *arg)
         case L_IDLE:                                         // rose window: sunlight drifting through the glass
             if (s_sleep) { fill(AMETHYST, 0.03f + 0.12f * (0.5f - 0.5f * cosf(t * 0.025f))); break; }
 #if CONFIG_XARM_JOHNNY
+            if (s_away && s_pc != FX_PC_TALK) { fill(GOLD, 0.01f); break; }
             if (s_pc == FX_PC_NONE)   { fill(GOLD, 0.02f + 0.10f * (0.5f - 0.5f * cosf(t * 0.03f))); break; }   // waiting for the PC
             if (s_pc == FX_PC_LISTEN) { fill(SAPPHIRE, 0.25f + 0.55f * breathe); break; }
             if (s_pc == FX_PC_THINK)  { spinner(t, SAPPHIRE, SAPPHIRE, 3); break; }
@@ -497,3 +499,4 @@ void fx_greet(int jewel, unsigned seed)
 void fx_listening(bool on) { s_listen = on; }
 void fx_pc(fx_pc_t m) { s_pc = m; }
 void fx_sleep(bool on) { s_sleep = on; }
+void fx_away(bool on) { s_away = on; }

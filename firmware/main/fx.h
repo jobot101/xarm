@@ -42,6 +42,7 @@ void fx_hush(void);                                             // cut the curre
 void fx_play(int group);                                        // a sound effect group (SND_S_*)
 bool fx_bank_ok(void);                                          // a matching sound bank is loaded
 bool fx_has(int group);                                         // that group has clips (SD-only ones need the card)
+void fx_away(bool on);                                          // Johnny: nobody at the bench (radar): ring nearly dark
 void fx_sleep(bool on);                                         // Robot School is out: dim amethyst ring
 const char *fx_bank_src(void);                                  // "sd" (full quality) / "flash" / "none"
 void fx_bank_release(void);                                     // before rewriting the bank in flash

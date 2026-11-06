@@ -20,6 +20,8 @@
 #include "cam.h"
 #include "store.h"
 #include "fx.h"
+#include "radar.h"
+#include "eye.h"
 
 static const char *TAG = "pc";
 
@@ -91,6 +93,8 @@ static void hello(void)
     cJSON_AddStringToObject(j, "version", esp_app_get_description()->version);
     cJSON_AddNumberToObject(j, "rate", AUDIO_RATE);
     cJSON_AddBoolToObject(j, "camera", cam_enabled());
+    cJSON_AddBoolToObject(j, "radar", radar_known());        // false: no radar we understand, always listen
+    cJSON_AddBoolToObject(j, "present", s_here);
     cJSON *sl = cJSON_AddArrayToObject(j, "slots");    // colors it can pick: "pick up the <slot>"
     for (int i = 0; i < NSLOT; i++) if (g_cfg.slot_name[i][0]) cJSON_AddItemToArray(sl, cJSON_CreateString(g_cfg.slot_name[i]));
     cJSON *m = cJSON_AddArrayToObject(j, "moves");      // recorded tricks: "do the <name>"
@@ -106,6 +110,37 @@ void pc_mic(const int16_t *pcm, int n)
     xStreamBufferSend(s_mic, pcm, n * sizeof(int16_t), 0);   // full = the PC fell behind: drop, never block the ears
 }
 
+// ---------------------------------------------------------------- the radar: who's at the bench
+#define REST_AFTER_S 60             // nobody for a minute: camera stops, ring goes nearly dark
+#define PUTDOWN_AFTER_S 180         // holding a part and nobody for 3 minutes: set it down at the drop spot
+static bool s_here = true, s_resting, s_put_down;
+
+static void radar_event(bool here)
+{
+    if (s_fd < 0) return;
+    cJSON *j = cJSON_CreateObject();
+    cJSON_AddStringToObject(j, "ev", "radar");
+    cJSON_AddBoolToObject(j, "present", here);
+    cJSON_AddNumberToObject(j, "cm", radar_distance_cm());
+    send_json(j);
+}
+
+static void presence_tick(void)
+{
+    int away = radar_away_s();                 // -1: no radar reading we understand -> act as if someone's here
+    bool here = away <= 0;
+    if (here != s_here) { s_here = here; radar_event(here); }
+    bool rest = away >= REST_AFTER_S;
+    if (rest != s_resting) { s_resting = rest; eye_pause(rest); fx_away(rest); }
+    if (here) s_put_down = false;
+    else if (!s_put_down && away >= PUTDOWN_AFTER_S && pick_holding() && pick_idle()) {
+        char msg[96] = "";
+        s_put_down = true;
+        router_exec_ex("put it down", msg, sizeof msg, true);
+        ESP_LOGI(TAG, "nobody here for %d s and I'm holding something: put it down -> %s", away, msg);
+    }
+}
+
 static void tx_task(void *arg)
 {
     static uint8_t buf[2048];                  // 64 ms per frame
@@ -113,6 +148,8 @@ static void tx_task(void *arg)
     int64_t last_state = 0;
     for (;;) {
         size_t n = xStreamBufferReceive(s_mic, buf, sizeof buf, pdMS_TO_TICKS(60));
+        static int64_t last_presence;
+        if (esp_timer_get_time() - last_presence > 500000) { last_presence = esp_timer_get_time(); presence_tick(); }
         if (s_fd < 0) { last[0] = 0; continue; }
         if (n) send_raw(HTTPD_WS_TYPE_BINARY, buf, n & ~1u);
         if (s_spoke) { s_spoke = false; ev("spoke"); }

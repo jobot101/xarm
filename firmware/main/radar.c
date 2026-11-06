@@ -6,6 +6,7 @@
 #include "radar.h"
 #include "sdkconfig.h"
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,7 @@ static volatile uint32_t s_edges, s_rate;
 static volatile bool s_level, s_present, s_serial;
 static volatile int64_t s_since_us, s_frame_us;
 static volatile int s_baud, s_dist_cm = -1, s_frames;
+static volatile int s_x_cm, s_y_cm, s_angle = 999, s_targets;     // LD2450 only: nearest target, x left/right, y ahead
 static char s_fmt[12] = "", s_raw[100] = "";
 static esp_timer_handle_t s_tmr;
 static bool s_ok;
@@ -70,6 +72,37 @@ static bool parse_ld2410(const uint8_t *b, int n)
     return false;
 }
 
+static int ld_s16(const uint8_t *p) { int v = p[0] | p[1] << 8; return v & 0x8000 ? v - 0x8000 : -v; }
+
+// HLK-LD2450: up to 3 targets with x/y in mm -> nearest one's angle (0 = straight ahead, + = to the module's right)
+static bool parse_ld2450(const uint8_t *b, int n)
+{
+    for (int i = 0; i + 30 <= n; i++) {
+        if (b[i] != 0xAA || b[i + 1] != 0xFF || b[i + 2] != 0x03 || b[i + 3] != 0x00) continue;
+        if (b[i + 28] != 0x55 || b[i + 29] != 0xCC) continue;
+        int best = -1, bd = 1 << 30, cnt = 0, bx = 0, by = 0;
+        for (int t = 0; t < 3; t++) {
+            const uint8_t *p = b + i + 4 + t * 8;
+            if (!(p[0] | p[1] | p[2] | p[3])) continue;
+            int x = ld_s16(p), y = ld_s16(p + 2), d = x * x + y * y;
+            cnt++;
+            if (d < bd) { bd = d; best = t; bx = x; by = y; }
+        }
+        s_targets = cnt;
+        set_present(cnt > 0);
+        if (best >= 0) {
+            s_x_cm = bx / 10; s_y_cm = by / 10;
+            s_dist_cm = (int)sqrtf((float)bd) / 10;
+            s_angle = (int)lroundf(atan2f((float)bx, (float)(by > 0 ? by : 1)) * 57.2958f);
+        } else { s_dist_cm = -1; s_angle = 999; }
+        strlcpy(s_fmt, "ld2450", sizeof s_fmt);
+        s_frame_us = esp_timer_get_time();
+        s_frames++;
+        return true;
+    }
+    return false;
+}
+
 static bool parse_text(const uint8_t *b, int n)
 {
     static char line[48];
@@ -97,7 +130,10 @@ static bool parse_text(const uint8_t *b, int n)
 static int score(const uint8_t *b, int n)
 {
     if (n < 8) return 0;
-    for (int i = 0; i + 4 <= n; i++) if (b[i] == 0xF4 && b[i + 1] == 0xF3 && b[i + 2] == 0xF2 && b[i + 3] == 0xF1) return 100;
+    for (int i = 0; i + 4 <= n; i++) {
+        if (b[i] == 0xF4 && b[i + 1] == 0xF3 && b[i + 2] == 0xF2 && b[i + 3] == 0xF1) return 100;   // LD2410
+        if (b[i] == 0xAA && b[i + 1] == 0xFF && b[i + 2] == 0x03 && b[i + 3] == 0x00) return 100;   // LD2450
+    }
     int ok = 0;
     for (int i = 0; i < n; i++) ok += isprint(b[i]) || b[i] == '\r' || b[i] == '\n';
     return ok * 90 / n;
@@ -125,7 +161,7 @@ static void serial_task(void *arg)
     for (;;) {
         int n = uart_read_bytes(UARTN, buf, sizeof buf, pdMS_TO_TICKS(200));
         if (n <= 0) continue;
-        if (!parse_ld2410(buf, n) && !parse_text(buf, n)) raw_sample(buf, n < 32 ? n : 32);
+        if (!parse_ld2450(buf, n) && !parse_ld2410(buf, n) && !parse_text(buf, n)) raw_sample(buf, n < 32 ? n : 32);
         if (s_frame_us && esp_timer_get_time() - s_frame_us > 3000000) set_present(false);   // went quiet
     }
 }
@@ -178,6 +214,10 @@ void radar_init(void)
 }
 
 bool radar_present(void) { return s_ok && s_present; }
+bool radar_known(void) { return s_ok && (!s_serial || s_fmt[0]); }
+int radar_away_s(void) { return !radar_known() ? -1 : s_present ? 0 : (int)((esp_timer_get_time() - s_since_us) / 1000000); }
+int radar_distance_cm(void) { return s_present ? s_dist_cm : -1; }
+bool radar_angle(int *deg) { if (!s_present || s_angle == 999) return false; *deg = s_angle; return true; }
 
 void radar_json(cJSON *o)
 {
@@ -192,6 +232,14 @@ void radar_json(cJSON *o)
         cJSON_AddStringToObject(r, "format", s_fmt[0] ? s_fmt : (s_baud ? "unknown" : "finding baud"));
         cJSON_AddNumberToObject(r, "frames", s_frames);
         cJSON_AddNumberToObject(r, "distance_cm", s_dist_cm);
+        if (!strcmp(s_fmt, "ld2450")) {
+            cJSON_AddNumberToObject(r, "targets", s_targets);
+            if (s_angle != 999) {
+                cJSON_AddNumberToObject(r, "angle_deg", s_angle);
+                cJSON_AddNumberToObject(r, "x_cm", s_x_cm);
+                cJSON_AddNumberToObject(r, "y_cm", s_y_cm);
+            }
+        }
         cJSON_AddStringToObject(r, "raw", s_raw);
     } else {
         cJSON_AddBoolToObject(r, "level", s_level);

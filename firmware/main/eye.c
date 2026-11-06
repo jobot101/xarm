@@ -11,12 +11,19 @@
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "store.h"
 #include "cam.h"
 
 static const char *TAG = "eye";
 static bool s_ok;
 static char s_sensor[16] = "none";
+static volatile bool s_paused;
+static SemaphoreHandle_t s_lock;              // a frame being sent vs. pausing the capture
+
+// esp32-camera's capture start/stop (cam_hal.c): not in its public header, but plain global functions
+void cam_stop(void);
+void cam_start(void);
 
 // Pins from xiaozhi-esp32 boards/waveshare/esp32-s3-audio-board/config.h. SCCB rides the shared I2C bus (port 0,
 // made in main.c), so the camera driver must use the new i2c_master driver too (CONFIG_SCCB_HARDWARE_I2C_DRIVER_NEW).
@@ -82,7 +89,8 @@ bool eye_init(i2c_master_bus_handle_t bus)
         camera_sensor_info_t *i = esp_camera_sensor_get_info(&s->id);
         if (i) strlcpy(s_sensor, i->name, sizeof s_sensor);
     }
-    s_ok = true;
+    s_lock = xSemaphoreCreateMutex();
+    s_ok = s_lock != NULL;
     ESP_LOGI(TAG, "camera %s up, waiting for the PC to look (GET /cam.jpg)", s_sensor);
     return true;
 }
@@ -90,9 +98,27 @@ bool eye_init(i2c_master_bus_handle_t bus)
 bool eye_ok(void) { return s_ok; }
 const char *eye_sensor(void) { return s_sensor; }
 
+void eye_pause(bool on)
+{
+    if (!s_ok || on == s_paused) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (on) cam_stop(); else cam_start();
+    s_paused = on;
+    xSemaphoreGive(s_lock);
+    ESP_LOGI(TAG, "%s", on ? "camera resting: nobody here" : "camera awake");
+}
+
 static esp_err_t h_jpg(httpd_req_t *r)
 {
-    camera_fb_t *fb = s_ok ? esp_camera_fb_get() : NULL;
+    if (s_ok && s_paused) {
+        httpd_resp_set_status(r, "503 Service Unavailable");
+        httpd_resp_set_hdr(r, "Retry-After", "2");
+        return httpd_resp_sendstr(r, "camera resting: nobody here");
+    }
+    if (!s_ok) { httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "no camera frame"); return ESP_OK; }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    camera_fb_t *fb = s_paused ? NULL : esp_camera_fb_get();
+    xSemaphoreGive(s_lock);
     if (!fb) { httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "no camera frame"); return ESP_OK; }
     uint8_t *buf = fb->buf;
     size_t len = fb->len;
@@ -145,6 +171,7 @@ void eye_register(httpd_handle_t h)
 }
 
 #else   // Muffin: no ribbon camera
+void eye_pause(bool on) { (void)on; }
 bool eye_init(i2c_master_bus_handle_t bus) { (void)bus; return false; }
 bool eye_ok(void) { return false; }
 const char *eye_sensor(void) { return "none"; }

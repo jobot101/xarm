@@ -14,3 +14,4 @@ bool eye_init(i2c_master_bus_handle_t bus);   // wakes the camera; true if a sen
 bool eye_ok(void);
 const char *eye_sensor(void);                 // "OV2640", ... or "none"
 void eye_register(httpd_handle_t h);          // adds /cam.jpg and /api/blobs
+void eye_pause(bool on);                      // stop capturing (nobody here): frees CPU, /cam.jpg answers 503

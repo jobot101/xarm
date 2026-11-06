@@ -116,6 +116,9 @@ def main():
                 if not st.get("cam", {}).get("enabled"):
                     print("eyes: the camera is switched off on the board (Workshop -> Settings -> Camera)"); time.sleep(10); continue
             r = s.get(base + "/cam.jpg", timeout=5)
+            if r.status_code == 503:                            # nobody at the bench: the board rests the camera
+                if last_say != "resting": print("eyes: camera resting (nobody here)"); last_say = "resting"
+                time.sleep(2); continue
             if r.status_code != 200 or not r.content.startswith(b"\xff\xd8"):
                 raise RuntimeError(f"no picture ({r.status_code}): {r.text[:80]}")
             img = Image.open(io.BytesIO(r.content)).convert("RGB")

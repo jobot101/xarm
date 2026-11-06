@@ -176,7 +176,8 @@ class App:
                 if r.status_code == 200 and r.content[:2] == b"\xff\xd8":
                     self.img, self.cam_err = Image.open(io.BytesIO(r.content)).convert("RGB"), ""
                 else:
-                    self.cam_err = ("no camera picture: this firmware has no ribbon camera yet" if r.status_code in (200, 404, 405)
+                    self.cam_err = ("camera resting: nobody at the bench (radar)" if r.status_code == 503 else
+                                    "no camera picture: this firmware has no ribbon camera yet" if r.status_code in (200, 404, 405)
                                     else f"camera: {r.status_code} {r.text[:60]}")
             except Exception as e: self.cam_err = "camera: " + type(e).__name__
             time.sleep(0.25 if not self.cam_err else 3)
@@ -230,8 +231,9 @@ class App:
         span = f"{t // 60} min" if t >= 120 else f"{t} s"
         self.rdot.create_oval(3, 3, 23, 23, fill=OK if here else PANEL, outline=OK if here else DIM, width=2)
         self.rtxt.config(text=("someone's here" if here else "nobody") + f"  ({span})", foreground=INK if here else DIM)
-        d = r.get("distance_cm", -1)
-        self.rsub.config(text=(f"{d / 100:.1f} m  " if here and d is not None and d >= 0 else "") +
+        d, ang = r.get("distance_cm", -1), r.get("angle_deg")
+        where = (f"{d / 100:.1f} m" if here and d is not None and d >= 0 else "") +                 (f", {abs(ang)}° {'right' if ang > 0 else 'left'}" if here and ang not in (None, 0) else ", ahead" if here and ang == 0 else "")
+        self.rsub.config(text=(where + "  " if where else "") +
                          (f"{r.get('format')} {r.get('baud')} baud" if r.get("kind") == "serial" else f"GPIO{r.get('gpio')} level {int(bool(r.get('level')))}"))
 
     def draw_cam(self):

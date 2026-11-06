@@ -246,6 +246,7 @@ class Johnny:
         self.state = {"state": "idle", "holding": False, "busy": False}
         self.speaking_until = 0.0
         self.window_until = 0.0
+        self.radar, self.present, self.left_at = False, True, 0.0   # board's radar: no one at the bench = don't listen
         self.replies = {}
         self.next_id = 1
         self.loop = None
@@ -270,6 +271,10 @@ class Johnny:
         await asyncio.sleep(0.4)
         while time.time() - t0 < timeout and self.state.get("busy"):
             await asyncio.sleep(0.2)
+
+    def someone(self):
+        """Is anybody at the bench? Without a radar reading we understand, always assume so."""
+        return not self.radar or self.present or time.time() - self.left_at < 10
 
     async def say(self, text):
         if not text: return
@@ -360,7 +365,7 @@ class Johnny:
         try:
             async for m in self.ws:
                 if isinstance(m, bytes):
-                    if self.busy or time.time() < self.speaking_until:
+                    if self.busy or time.time() < self.speaking_until or not self.someone():
                         self.ears.reset(); continue          # half duplex: never hear himself
                     utt = self.ears.feed(m)
                     if utt: work.put_nowait(utt)
@@ -370,10 +375,15 @@ class Johnny:
                 if ev == "hello":
                     self.brain.moves = e.get("moves", [])
                     self.brain.slots = e.get("slots", []) if e.get("camera") else []
+                    self.radar, self.present = bool(e.get("radar")), e.get("present", True)
                     print(f"board: {e.get('name')} {e.get('version')} - moves {self.brain.moves} - eyes {self.brain.slots or 'off'}")
                     await self.send(volume=self.cfg["volume"])
                 elif ev == "state":
                     self.state = e
+                elif ev == "radar":
+                    self.present = bool(e.get("present"))
+                    if not self.present: self.left_at = time.time()
+                    print("radar:", "someone's here" if self.present else "nobody - not listening")
                 elif ev == "cmd" and e.get("id") in self.replies:
                     f = self.replies.pop(e["id"])
                     if not f.done(): f.set_result(e)
