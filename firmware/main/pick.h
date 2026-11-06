@@ -25,7 +25,8 @@ void pick_attention(void);                               // someone spoke to it:
 void pick_face(float dir);
 void pick_reach(float k);                                // someone nearby (radar): reach out toward them, 0..1 of the reach
 // The chime, played by the arm from the taught Bell pose (the moment of contact).
-//   strength 10..100: how far it backs off before each strike, % of the lift (50 = the old fixed tap)
+//   strength 5..25: how far it backs off before each strike, % of the lift. Capped at 25: short fast taps only,
+//   a full-distance swing can wreck the chime
 //   hit_ms 50..400: the strike's travel time (lower = faster, harder); gap_ms 150..3000: one beat
 //   pattern: up to 32 of  x strike  ! accent  o soft  . rest   ("xxx" = three even strikes)
 typedef struct { int16_t strength, hit_ms, gap_ms; char pattern[33]; } chime_t;

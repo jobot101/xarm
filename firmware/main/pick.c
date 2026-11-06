@@ -530,14 +530,15 @@ static void do_dance(void)
 }
 
 // hover over the bell, strike 3 times
-static chime_t s_chime = { 50, 110, 470, "xxx" };
+#define CHIME_MAX_STRENGTH 25       // % of the lift: taps, never a full-distance swing
+static chime_t s_chime = { 15, 110, 470, "xxx" };
 static chime_t s_play;
 static volatile bool s_play_set;
 
 static void chime_clean(chime_t *c)
 {
-    if (c->strength < 10) c->strength = 10;
-    if (c->strength > 100) c->strength = 100;
+    if (c->strength < 5) c->strength = 5;
+    if (c->strength > CHIME_MAX_STRENGTH) c->strength = CHIME_MAX_STRENGTH;
     if (c->hit_ms < 50) c->hit_ms = 50;
     if (c->hit_ms > 400) c->hit_ms = 400;
     if (c->gap_ms < 150) c->gap_ms = 150;
@@ -606,7 +607,7 @@ static void do_bell(void)
         char ch = c.pattern[i];
         if (ch == '.') { if (!wait_ms(c.gap_ms)) return; continue; }
         float kk = ch == '!' ? k * 1.4f : ch == 'o' ? k * 0.55f : k;
-        if (kk > 1.0f) kk = 1.0f;
+        if (kk > CHIME_MAX_STRENGTH / 100.0f) kk = CHIME_MAX_STRENGTH / 100.0f;   // an accent is faster-sounding, never further
         int wind = 120 + (int)(kk * 120);         // further back takes a little longer to wind up
         bell_back(up, kk);
         if (!go(up, wind)) return;

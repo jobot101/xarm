@@ -19,12 +19,12 @@
 #endif
 #define PIN CONFIG_XARM_BELL_GPIO
 #define MS_MIN 3
-#define MS_MAX 250                 // longer and the plunger just sits on the bell (and the coil heats)
+#define MS_MAX 30                  // taps only: a long pulse drives the plunger its full travel (can wreck the bell)
 #define REST_MS 120                // between pulses: lets the plunger fall back and the coil cool
 
 static const char *TAG = "bell";
 static SemaphoreHandle_t s_lock;
-static int s_ms = 40;
+static int s_ms = 12;
 static int64_t s_last_us;
 
 bool bell_ready(void) { return PIN >= 0 && s_lock; }
@@ -50,7 +50,7 @@ static void load(void)
     done = true;
     nvs_handle_t h;
     uint8_t v;
-    if (nvs_open("xarm", NVS_READONLY, &h) == ESP_OK) { if (nvs_get_u8(h, "bell_ms", &v) == ESP_OK && v) s_ms = v; nvs_close(h); }
+    if (nvs_open("xarm", NVS_READONLY, &h) == ESP_OK) { if (nvs_get_u8(h, "bell_ms", &v) == ESP_OK && v) s_ms = v > MS_MAX ? MS_MAX : v; nvs_close(h); }
 }
 
 static void save_ms(int ms)

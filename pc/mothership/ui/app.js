@@ -208,7 +208,7 @@ function syncTricks(force) {
 
 // ---- chime
 function buildChime(m) {
-  const c = S.chime || { strength: 50, hit_ms: 110, gap_ms: 470, pattern: "xxx" };
+  const c = S.chime || { strength: 15, hit_ms: 110, gap_ms: 470, pattern: "xxx" };
   const mk = (label, key, lo, hi, unit) => {
     const r = h("input", { type: "range", min: lo, max: hi, value: c[key], "data-c": key }), v = h("span", { class: "val" }, c[key] + unit);
     r.addEventListener("input", () => v.textContent = r.value + unit);
@@ -229,8 +229,8 @@ function buildChime(m) {
     reply(out, drawLevels(plot, lv, `${b.pattern} at ${b.strength}%`));
   };
   m.append(card("Chime",
-    h("p", { class: "small-text muted" }, "The arm plays the chime from its taught strike point. Strength is how far it backs off before each strike."),
-    mk("Strength", "strength", 10, 100, "%"), mk("Strike speed", "hit_ms", 50, 400, " ms"), mk("Beat", "gap_ms", 150, 1500, " ms"),
+    h("p", { class: "small-text muted" }, "The arm plays the chime from its taught strike point with short, fast taps. Strength is how far it backs off before each strike, capped at 25% so it never swings the full distance."),
+    mk("Strength", "strength", 5, 25, "%"), mk("Strike speed", "hit_ms", 50, 400, " ms"), mk("Beat", "gap_ms", 150, 1500, " ms"),
     h("div", { class: "row" }, h("span", { class: "lab muted", style: "width:120px" }, "Pattern"), pat,
       h("span", { class: "small-text muted" }, h("code", {}, "x"), " strike  ", h("code", {}, "!"), " accent  ", h("code", {}, "o"), " soft  ", h("code", {}, "."), " rest")),
     h("div", { class: "row" }, PRESETS.map(([n, p]) => h("button", { class: "small ghost", onclick: () => pat.value = p }, n))),
@@ -238,7 +238,7 @@ function buildChime(m) {
       h("button", { onclick: ring }, "Ring"),
       h("button", { class: "ghost", onclick: async () => { const r = await api("/api/chime", { ...body(), save: true, play: false }); reply(out, r.ok ? `saved: “ring the bell” plays ${body().pattern}` : "not saved"); } }, "Save as default"),
       h("button", { class: "ghost", onclick: async () => { if (!confirm("Save the arm's pose right now as the chime's strike point?\n\nPose it first: closed gripper just touching the chime.")) return; reply(out, (await api("/api/teach", { what: "bell" })).msg); } }, "Teach strike point"),
-      h("button", { class: "ghost", onclick: async () => { const r = await api("/api/bell", { ms: 60 }); reply(out, r.ok ? drawLevels(plot, r, "solenoid 60 ms") : "no solenoid in this firmware"); } }, "Solenoid test")),
+      h("button", { class: "ghost", onclick: async () => { const r = await api("/api/bell", { ms: 12 }); reply(out, r.ok ? drawLevels(plot, r, "solenoid tap 12 ms") : "no solenoid in this firmware"); } }, "Solenoid test")),
     plot, out));
 }
 function ringStats(db, pre) {
