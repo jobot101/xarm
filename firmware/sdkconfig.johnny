@@ -23,3 +23,6 @@ CONFIG_XARM_BELL_ABOVE=1
 CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
 # (a first squeeze that also shrank the system task stacks and WiFi buffers failed to boot and rolled back: not repeated)
 CONFIG_LWIP_MAX_SOCKETS=13
+# The IMU rides on the arm's head at the end of a long I2C run: half-speed bus (every device on it is slow anyway)
+CONFIG_XARM_I2C_HZ=50000
+CONFIG_SCCB_CLK_FREQ=50000

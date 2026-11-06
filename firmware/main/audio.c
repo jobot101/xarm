@@ -47,7 +47,7 @@ void audio_mic_dual_save(bool on)
 // TCA9555 port 1 bit 0 -> output high. Read-modify-write so buttons on the other pins keep working.
 static void pa_enable(i2c_master_bus_handle_t bus)
 {
-    i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = TCA9555_ADDR, .scl_speed_hz = 100000 };
+    i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = TCA9555_ADDR, .scl_speed_hz = CONFIG_XARM_I2C_HZ };
     i2c_master_dev_handle_t h;
     if (i2c_master_bus_add_device(bus, &d, &h) != ESP_OK) return;
     uint8_t reg, v;

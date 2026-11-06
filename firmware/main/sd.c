@@ -1,6 +1,7 @@
 // The TF slot (Waveshare wiki): CLK GPIO40, CMD GPIO42, D0 GPIO41, D1/D2 not connected, D3 on the TCA9555
 // (EXIO3). That's SDMMC 1-bit mode, with D3 driven high so the card starts in SD mode, not SPI mode.
 // D1-D3 must be GPIO_NUM_NC here: the S3 defaults put them on 8/9/10, and GPIO10 is the I2C clock.
+#include "sdkconfig.h"
 #include "sd.h"
 #include <stdio.h>
 #include <string.h>
@@ -20,7 +21,7 @@ static sdmmc_card_t *s_card;
 // EXIO3 = TCA9555 port 0 bit 3 -> output, high. Read-modify-write: the buttons and resets share the port.
 static void d3_high(i2c_master_bus_handle_t bus)
 {
-    i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = TCA9555_ADDR, .scl_speed_hz = 100000 };
+    i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = TCA9555_ADDR, .scl_speed_hz = CONFIG_XARM_I2C_HZ };
     i2c_master_dev_handle_t h;
     if (i2c_master_bus_add_device(bus, &d, &h) != ESP_OK) return;
     uint8_t reg, v;

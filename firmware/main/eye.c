@@ -46,7 +46,7 @@ void cam_start(void);
 // Read-modify-write, like sd.c: the buttons, the SD card's D3 and the LCD resets share the port.
 static void wake(i2c_master_bus_handle_t bus)
 {
-    i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = TCA9555_ADDR, .scl_speed_hz = 100000 };
+    i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = TCA9555_ADDR, .scl_speed_hz = CONFIG_XARM_I2C_HZ };
     i2c_master_dev_handle_t h;
     if (i2c_master_bus_add_device(bus, &d, &h) != ESP_OK) return;
     uint8_t reg, v;

@@ -704,7 +704,7 @@ void school_init(i2c_master_bus_handle_t bus)
         nvs_close(h);
     }
     s_boot_day = -(int32_t)(boots & 0x3FFFFFFF);
-    i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = 0x51, .scl_speed_hz = 100000 };
+    i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = 0x51, .scl_speed_hz = CONFIG_XARM_I2C_HZ };
     if (i2c_master_bus_add_device(bus, &d, &s_rtc) != ESP_OK) s_rtc = NULL;
     rtc_read();
     xTaskCreate(task, "school", JOHNNY ? 2560 : 4096, NULL, 3, NULL);

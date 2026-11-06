@@ -119,6 +119,11 @@ menu "xArm Voice"
         default 0
         range 0 1
 
+    config XARM_I2C_HZ
+        int "I2C clock for the shared bus, Hz (100000; lower, e.g. 50000, for a long run to a sensor on the arm)"
+        default 100000
+        range 10000 400000
+
     config XARM_JOHNNY
         bool "Johnny: the brain runs on the shop PC (Muffin off)"
         default n
