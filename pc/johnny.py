@@ -25,12 +25,17 @@ DEFAULTS = {
     "model": "",                          # blank = whatever LM Studio has loaded
     "whisper_model": "auto",              # auto: large-v3-turbo on a GPU, small.en on CPU
     "elevenlabs_api_key": "",
-    "elevenlabs_voice_id": "",            # Johnny's voice (the same one the Oracle phone uses)
+    "elevenlabs_voice_id": "",            # Verna, the Oracle phone's operator (make it with mothership/design_verna.py)
     "elevenlabs_model": "eleven_flash_v2_5",
     "volume": 40,                         # the board's speaker, 0-100 (quiet shop voice)
     "follow_up_s": 10,                    # after he answers, no need to say "Johnny" for this long
 }
 RATE = 16000
+# Verna's voice settings (Oracle Phone, render/voices.yaml): MotherShip speaks in the operator's voice
+# fixed lines pre-rendered by mothership/design_verna.py render (16 kHz PCM in mothership/lines/<name>.pcm)
+PRERENDERED = {"MotherShip online.": "online", "Hello.": "hello1", "Evening, friend.": "hello2", "Welcome back.": "hello3",
+               "Hey there.": "hello4", "Brain's down. Check LM Studio.": "brain_down"}
+VERNA_SETTINGS = {"stability": 0.5, "similarity_boost": 0.8, "style": 0.2, "use_speaker_boost": True, "speed": 1.04}
 # "MotherShip": Whisper writes it as "MotherShip", "Mothership", "mother ship" or "Shop MotherShip"
 WAKE = re.compile(r"\b(hey |ok |okay )?(shop )?mother[\s-]?ship\b[,.!?]?", re.I)
 
@@ -140,7 +145,7 @@ class Voice:
                                  params={"output_format": "pcm_16000", "optimize_streaming_latency": 3},
                                  headers={"xi-api-key": c["elevenlabs_api_key"]}, stream=True, timeout=20,
                                  json={"text": text, "model_id": c["elevenlabs_model"],
-                                       "voice_settings": {"stability": 0.5, "similarity_boost": 0.85}})
+                                       "voice_settings": c.get("elevenlabs_settings") or VERNA_SETTINGS})
                 r.raise_for_status()
                 left = b""
                 for chunk in r.iter_content(4096):
@@ -288,6 +293,9 @@ class Johnny:
         q = asyncio.Queue()
         def pump():                                   # the HTTP stream runs in a thread
             try:
+                pre = os.path.join(HERE, "mothership", "lines", PRERENDERED.get(text, "-") + ".pcm")
+                if os.path.exists(pre):               # a fixed line rendered ahead in Verna's voice: instant, no cloud
+                    self.loop.call_soon_threadsafe(q.put_nowait, open(pre, "rb").read()); return
                 for c in self.voice.stream(text): self.loop.call_soon_threadsafe(q.put_nowait, c)
             finally:
                 self.loop.call_soon_threadsafe(q.put_nowait, None)

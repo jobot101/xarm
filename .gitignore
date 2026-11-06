@@ -20,3 +20,6 @@ solenoid/version.h
 
 # Hiwonder action files (.rob) stay local: their files, not ours
 pc/mothership/actions/
+pc/mothership/lines/
+pc/mothership/verna_take_*.mp3
+pc/mothership/verna_previews.json
