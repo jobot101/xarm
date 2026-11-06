@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shop MotherShip</title>
+<link rel="icon" href="emblem.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sorts+Mill+Goudy:ital@0;1&family=DM+Sans:wght@300;400;500;700&display=swap">
+<style>
+/* Ragamuffin look (same as Video Control): warm black, cream type, brass accents, Goudy serif headings, DM Sans body.
+   Works offline too: falls back to Georgia and Segoe UI. */
+:root{
+  --bg:#0d0b09;--surface:#1a140d;--raise:#231b12;--ink:#e8e0d0;--paper:#f4efe6;--muted:#b0a28e;
+  --line:rgba(184,146,58,.3);--line-soft:rgba(184,146,58,.16);
+  --brass:#b8923a;--brass-light:#d4aa55;--brass-soft:rgba(184,146,58,.14);
+  --good:#a8c98a;--good-soft:rgba(168,201,138,.13);--drop:#6e6352;--error:#ff9b8a;--error-soft:rgba(255,155,138,.12);
+  --blue:#8fb3e0;
+  --serif:"Sorts Mill Goudy",Georgia,serif;--sans:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:5px;color-scheme:dark
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--ink);font:16px/1.55 var(--sans)}
+::selection{background:var(--brass);color:var(--bg)}
+h1,h2,h3{font-family:var(--serif);font-weight:400;color:var(--paper);margin:0;letter-spacing:.005em}
+h1{font-size:30px;line-height:1.1}
+h2{font-size:26px;line-height:1.15}
+.muted{color:var(--muted)}
+
+.app{max-width:1500px;margin:0 auto;padding:0 clamp(16px,3vw,40px) 48px;display:grid;gap:22px}
+.top{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:14px 0;border-bottom:1px solid var(--line);background:rgba(13,11,9,.94);backdrop-filter:blur(6px)}
+.brand{display:flex;align-items:center;gap:14px}
+.brand img{width:40px;height:40px}
+.brand .eyebrow{display:block;margin-bottom:2px}
+.brand h1 em{font-style:italic;color:var(--brass-light)}
+.eyebrow,.step{font:500 12px/1.2 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--brass-light)}
+.topright{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+.maincol{display:grid;gap:22px;min-width:0}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px;display:grid;gap:16px;align-content:start}
+.card > .step:first-child,.card > .row:first-child .step{padding-bottom:10px;border-bottom:1px solid var(--line-soft)}
+.side{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px;position:sticky;top:86px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.small-text{font-size:14px;margin:0}
+.grid2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:1100px){.grid2{grid-template-columns:1fr}}
+
+button{font:500 15px/1.2 var(--sans);letter-spacing:.02em;cursor:pointer;border-radius:var(--r);padding:10px 18px;
+  border:1px solid var(--brass);background:var(--brass);color:var(--bg);transition:background .15s,border-color .15s,color .15s;
+  user-select:none;touch-action:none}
+button:hover:not(:disabled){background:var(--brass-light);border-color:var(--brass-light)}
+button.ghost{background:transparent;color:var(--brass-light);border-color:#8c7a55}
+button.ghost:hover:not(:disabled){background:var(--brass-soft);color:var(--paper);border-color:var(--brass)}
+button.ghost:active:not(:disabled),button.ghost.held{background:var(--brass);color:var(--bg)}
+button.small{padding:5px 11px;font-size:14px}
+button.stop{background:#8f2f22;border-color:#c0503d;color:#fff;font-size:17px;padding:12px 30px;letter-spacing:.12em}
+button.stop:hover:not(:disabled){background:#b23b2a;border-color:#e06a55}
+button:disabled{opacity:.4;cursor:default}
+:focus-visible{outline:2px solid #fff;outline-offset:3px}
+input[type=text],input[type=number],select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
+input[type=text]:focus,select:focus{border-color:var(--brass);outline:none}
+input[type=text]{flex:1;min-width:200px}
+input[type=range]{accent-color:var(--brass);flex:1;min-width:160px}
+.toggle{width:19px;height:19px;accent-color:var(--brass)}
+label.check{display:flex;gap:10px;align-items:center}
+
+/* side list (like the shoot list) */
+.nav{display:grid;gap:2px}
+.nav button{display:grid;gap:3px;text-align:left;background:transparent;color:var(--ink);border:1px solid transparent;border-left:2px solid transparent;
+  border-radius:var(--r);padding:9px 11px;font-weight:400}
+.nav button:hover{background:var(--raise);border-color:transparent;border-left-color:var(--line)}
+.nav button.sel,.nav button.sel:hover{background:var(--brass-soft);border-color:var(--line-soft);border-left-color:var(--brass)}
+.nav .name{font-family:var(--serif);font-size:17px;color:var(--paper)}
+.nav .detail{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hint{background:var(--brass-soft);border:1px solid var(--line-soft);border-radius:var(--r);padding:12px 14px;font-size:14px}
+
+.pill{font:500 11px/1.4 var(--sans);letter-spacing:.1em;text-transform:uppercase;border-radius:99px;padding:3px 11px;
+  background:var(--brass-soft);color:var(--brass-light);white-space:nowrap}
+.pill.done{background:var(--good-soft);color:var(--good)}
+.pill.failed{background:var(--error-soft);color:var(--error)}
+.pill.incomplete{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.pill.working{background:var(--brass);color:var(--bg)}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line-soft);border-radius:var(--r);padding:8px 12px;background:var(--bg);font-size:14px;color:var(--muted);min-width:120px}
+.chip b{display:block;font:400 17px/1.2 var(--serif);color:var(--paper)}
+.err{background:var(--error-soft);color:var(--error);border:1px solid rgba(255,155,138,.25);border-radius:var(--r);padding:10px 14px}
+
+/* MotherShip pieces */
+.view{width:100%;aspect-ratio:4/3;background:#000;border:1px solid var(--line-soft);border-radius:var(--r);object-fit:contain;display:block}
+.viewnote{font-size:13px;color:var(--muted)}
+.btns{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.btns button{padding:10px 12px}
+.pad{display:grid;grid-template-columns:120px 1fr 1fr;gap:8px 10px;align-items:center;max-width:560px}
+.pad .lab{color:var(--muted);font-size:14px;text-align:right}
+.slider{display:grid;grid-template-columns:120px minmax(0,1fr) 70px;gap:12px;align-items:center}
+.slider .lab{color:var(--muted);font-size:14px}
+.slider .val{font:400 17px/1 var(--serif);color:var(--paper);text-align:right}
+canvas.plot{width:100%;height:130px;background:var(--bg);border:1px solid var(--line-soft);border-radius:var(--r);display:block}
+.meter{height:10px;background:var(--bg);border:1px solid var(--line-soft);border-radius:99px;overflow:hidden}
+.meter > i{display:block;height:100%;background:var(--good);width:0;transition:width .2s}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block;background:var(--drop);margin-right:8px;vertical-align:middle}
+.dot.on{background:var(--good);box-shadow:0 0 10px rgba(168,201,138,.6)}
+.dot.warn{background:var(--brass-light)}
+.say{display:flex;gap:10px}
+.reply{font-size:14px;color:var(--muted);min-height:1.5em}
+.list{display:grid;gap:6px}
+.list .item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line-soft);border-radius:var(--r);background:var(--bg)}
+.list .item .nm{font-family:var(--serif);font-size:17px;color:var(--paper)}
+code{font:13px ui-monospace,Consolas,monospace;color:var(--brass-light)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <img src="emblem.png" alt="">
+      <div><span class="eyebrow">Ragamuffin Workshop</span><h1>Shop <em>MotherShip</em></h1></div>
+    </div>
+    <div class="topright">
+      <span id="p-state" class="pill incomplete">connecting</span>
+      <span id="p-brain" class="pill incomplete">brain</span>
+      <span id="p-radar" class="pill incomplete">radar</span>
+      <span id="p-fw" class="pill incomplete">fw</span>
+      <button class="stop" id="stop">STOP</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="side">
+      <span class="step">Sections</span>
+      <nav class="nav" id="nav"></nav>
+      <div class="hint" id="sidehint">Say <b>“MotherShip, …”</b> or use these controls. STOP always works.</div>
+    </aside>
+    <main class="maincol" id="main"></main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
