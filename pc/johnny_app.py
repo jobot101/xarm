@@ -100,6 +100,12 @@ class App:
         ttk.Button(row, text="Send", command=lambda: self.send(self.say.get())).pack(side="left", padx=(6, 0))
         self.reply = ttk.Label(cmds, text="", style="Dim.TLabel"); self.reply.grid(row=3, column=0, columnspan=5, sticky="w", pady=(4, 0))
 
+        # ---- radar
+        rad = ttk.LabelFrame(right, text="Radar", padding=8); rad.pack(fill="x", pady=(0, 10))
+        self.rdot = tk.Canvas(rad, width=26, height=26, bg=BG, highlightthickness=0); self.rdot.pack(side="left")
+        self.rtxt = ttk.Label(rad, text="no radar in this firmware yet", style="Big.TLabel"); self.rtxt.pack(side="left", padx=8)
+        self.rsub = ttk.Label(rad, text="", style="Dim.TLabel"); self.rsub.pack(side="right")
+
         # ---- bell
         bell = ttk.LabelFrame(right, text="Bell", padding=8); bell.pack(fill="x")
         r = ttk.Frame(bell); r.pack(fill="x")
@@ -177,6 +183,7 @@ class App:
             if not self.synced and v:
                 self.gain.set(v.get("gain", 24)); self.gain_lbl.config(text=f"{v.get('gain', 24)} dB")
                 self.dual.set(bool(v.get("dual"))); self.synced = True
+            self.draw_radar(st.get("radar"))
             lvl = v.get("level", 0)
             self.meter.delete("all")
             w = self.meter.winfo_width() or 360
@@ -184,6 +191,22 @@ class App:
             self.meter.create_text(6, 9, anchor="w", fill=INK, text=f"{lvl * 0.6 - 60:.0f} dBFS  {v.get('status', '')}")
         self.draw_cam()
         self.root.after(200, self.tick)
+
+    def draw_radar(self, r):
+        self.rdot.delete("all")
+        if not r or r.get("kind") == "none":
+            self.rdot.create_oval(3, 3, 23, 23, outline=DIM, width=2)
+            self.rtxt.config(text="no radar" if r else "no radar in this firmware yet", foreground=DIM)
+            self.rsub.config(text=f"GPIO{r['gpio']}" if r and r.get("gpio", -1) >= 0 else ""); return
+        if r.get("kind") == "serial":
+            self.rdot.create_oval(3, 3, 23, 23, fill=BRASS, width=0)
+            self.rtxt.config(text="radar is talking serial", foreground=BRASS)
+            self.rsub.config(text=f"{r.get('edges_s', 0)} edges/s on GPIO{r.get('gpio')}"); return
+        here, t = r.get("present"), int(r.get("since_s", 0))
+        span = f"{t // 60} min" if t >= 120 else f"{t} s"
+        self.rdot.create_oval(3, 3, 23, 23, fill=OK if here else PANEL, outline=OK if here else DIM, width=2)
+        self.rtxt.config(text=("someone's here" if here else "nobody") + f"  ({span})", foreground=INK if here else DIM)
+        self.rsub.config(text=f"GPIO{r.get('gpio')}  level {int(bool(r.get('level')))}  {r.get('edges_s', 0)} edges/s")
 
     def draw_cam(self):
         cam = self.st.get("cam", {})

@@ -30,6 +30,7 @@
 #include "school.h"
 #include "eye.h"
 #include "bell.h"
+#include "radar.h"
 #include "pc.h"
 #include <unistd.h>
 
@@ -125,6 +126,7 @@ static esp_err_t h_state(httpd_req_t *r)
         for (int i = 0; i < NSERVO; i++) cJSON_AddItemToArray(la, u16arr(l[i], 2));
     }
 
+    radar_json(j);
     cJSON *cam = cJSON_AddObjectToObject(j, "cam");
     cJSON_AddBoolToObject(cam, "enabled", cam_enabled());
     cJSON_AddBoolToObject(cam, "ok", cam_ok());

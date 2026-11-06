@@ -105,6 +105,11 @@ menu "xArm Voice"
         default -1
         range -1 48
 
+    config XARM_RADAR_GPIO
+        int "mmWave presence radar GPIO (-1 = none)"
+        default -1
+        range -1 48
+
     config XARM_JOHNNY
         bool "Johnny: the brain runs on the shop PC (Muffin off)"
         default n
