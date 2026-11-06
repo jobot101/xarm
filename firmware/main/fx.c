@@ -1,4 +1,5 @@
 #include "fx.h"
+#include "psram_task.h"
 #include <math.h>
 #include <string.h>
 #include "audio.h"
@@ -435,7 +436,7 @@ void fx_start(void)
         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
     };
     led_strip_rmt_config_t rc = { .clk_src = RMT_CLK_SRC_DEFAULT, .resolution_hz = 10 * 1000 * 1000 };
-    if (led_strip_new_rmt_device(&lc, &rc, &s_led) == ESP_OK) xTaskCreate(led_task, "fx_led", 3072, NULL, 2, NULL);
+    if (led_strip_new_rmt_device(&lc, &rc, &s_led) == ESP_OK) task_psram(led_task, "fx_led", 3072, NULL, 2, NULL, tskNO_AFFINITY);
     else ESP_LOGW(TAG, "LED ring init failed");
     bank_attach();
     memset(s_lastpick, 0xFF, sizeof s_lastpick);

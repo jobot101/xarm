@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "eye.h"
+#include "psram_task.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -76,7 +77,7 @@ esp_err_t cam_begin(i2c_master_bus_handle_t bus)
     esp_err_t e = i2c_master_bus_add_device(bus, &d, &s_dev);
     if (e != ESP_OK) { ESP_LOGE(TAG, "add device: %s", esp_err_to_name(e)); return e; }
     if (i2c_master_probe(bus, CAM_ADDR, 100) != ESP_OK) ESP_LOGW(TAG, "no ack at 0x52 — check wiring / color firmware");
-    xTaskCreate(task, "cam", 3072, NULL, 4, NULL);
+    task_psram(task, "cam", 3072, NULL, 4, NULL, tskNO_AFFINITY);   // I2C polling only
     return ESP_OK;
 }
 

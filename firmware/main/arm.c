@@ -1,4 +1,5 @@
 #include "arm.h"
+#include "psram_task.h"
 #include <math.h>
 #include <string.h>
 #include "driver/uart.h"
@@ -211,12 +212,12 @@ void arm_init(void)
     ESP_ERROR_CHECK(uart_param_config(UART, &c));
     ESP_ERROR_CHECK(uart_set_pin(UART, CONFIG_XARM_UART_TX, CONFIG_XARM_UART_RX,
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-    xTaskCreate(rx_task, "arm_rx", 3072, NULL, 6, NULL);
-    xTaskCreate(poll_task, "arm_poll", 3072, NULL, 3, NULL);
+    task_psram(rx_task, "arm_rx", 3072, NULL, 6, NULL, tskNO_AFFINITY);       // UART in, no flash
+    task_psram(poll_task, "arm_poll", 3072, NULL, 3, NULL, tskNO_AFFINITY);
     // start from where the arm really is, so the first move glides instead of jumping from 500
     uint16_t p[NSERVO];
     if (arm_read(p)) { lock(); place(p); for (int i = 0; i < NSERVO; i++) s_j[i].sent = p[i]; unlock(); }
-    xTaskCreatePinnedToCore(stream_task, "arm_stream", 3072, NULL, 7, NULL, 0);
+    task_psram(stream_task, "arm_stream", 3072, NULL, 7, NULL, 0);
     ESP_LOGI(TAG, "uart tx=%d rx=%d, streaming %d Hz", CONFIG_XARM_UART_TX, CONFIG_XARM_UART_RX, 1000 / TICK_MS);
 }
 

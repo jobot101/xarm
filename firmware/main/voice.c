@@ -425,12 +425,19 @@ void voice_face_set(int v)
 // room's music it hears.
 #define ENV_N   512
 #define HOP     256                      // samples = 16 ms
+#if CONFIG_XARM_JOHNNY
+static float *s_env, *s_lvl, *s_lvl2;                    // 3 x 512 floats, allocated in PSRAM at start (6 KB internal saved)
+#else
 static float s_env[ENV_N], s_lvl[ENV_N], s_lvl2[ENV_N];   // s_lvl2: MIC2 (both-mics mode), else -99
+#endif
 static volatile uint32_t s_env_w;
 static volatile int64_t s_env_us;        // when the newest hop was written
 
 static void env_push(const int16_t *buf, int frames, int ch)
 {
+#if CONFIG_XARM_JOHNNY
+    if (!s_env) return;
+#endif
     static float prev_db = -90;
     for (int h = 0; h + HOP <= frames; h += HOP) {
         float acc = 0;
@@ -456,6 +463,9 @@ static void env_push(const int16_t *buf, int frames, int ch)
 // bell.c's tuning: raw MIC1 / MIC2 loudness (dBFS per 16 ms hop) from `pre` hops before t0_us up to now
 int voice_levels_since(int64_t t0_us, float *mic1, float *mic2, int max, int *pre)
 {
+#if CONFIG_XARM_JOHNNY
+    if (!s_env) { *pre = 0; return 0; }
+#endif
     uint32_t w = s_env_w;
     int after = (int)((s_env_us - t0_us) / 16000) + 1, p = 10;
     if (after < 0) after = 0;
@@ -474,6 +484,9 @@ int voice_levels_since(int64_t t0_us, float *mic1, float *mic2, int max, int *pr
 
 bool voice_beat(int *period_ms, int64_t *next_us)
 {
+#if CONFIG_XARM_JOHNNY
+    if (!s_env) return false;
+#endif
     static float e[ENV_N];
     uint32_t w = s_env_w;
     if (w < ENV_N) return false;
@@ -633,6 +646,12 @@ static bool afe_start(srmodel_list_t *models)
 
 static void spawn(TaskFunction_t fn, const char *name, uint32_t stack, int core)
 {
+#if JOHNNY   // internal RAM first only on Muffin; Johnny puts both voice stacks (12 KB) in PSRAM from the start
+    if (xTaskCreatePinnedToCoreWithCaps(fn, name, stack, NULL, 5, NULL, core, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
+        if (fn == detect_task) s_ext_stack = true;
+        return;
+    }
+#endif
     if (xTaskCreatePinnedToCore(fn, name, stack, NULL, 5, NULL, core) == pdPASS) return;
 #if JOHNNY   // Johnny's voice tasks only stream audio and handle "stop": no flash writes, so a PSRAM stack is safe.
             // (Muffin's run router commands that write NVS, which must not happen on an external stack.)
@@ -648,6 +667,10 @@ static void spawn(TaskFunction_t fn, const char *name, uint32_t stack, int core)
 
 void voice_start(i2c_master_bus_handle_t bus)
 {
+#if CONFIG_XARM_JOHNNY
+    s_env = heap_caps_calloc(ENV_N * 3, sizeof(float), MALLOC_CAP_SPIRAM);
+    if (s_env) { s_lvl = s_env + ENV_N; s_lvl2 = s_env + 2 * ENV_N; }
+#endif
     tune_load();
     s_in = audio_in();
     if (!s_in) { strlcpy(s_status, "no mic — audio codec didn't start", sizeof s_status); ESP_LOGE(TAG, "%s", s_status); return; }

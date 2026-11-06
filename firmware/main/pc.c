@@ -22,6 +22,7 @@
 #include "fx.h"
 #include "radar.h"
 #include "bell.h"
+#include "psram_task.h"
 #include "voice.h"
 #include "eye.h"
 
@@ -296,7 +297,9 @@ void pc_register(httpd_handle_t h)
     s_spk = xStreamBufferCreateWithCaps(SPK_BYTES, 2, MALLOC_CAP_SPIRAM);
     s_mic = xStreamBufferCreateWithCaps(MIC_BYTES, 2048, MALLOC_CAP_SPIRAM);
     if (!s_tx || !s_spk || !s_mic) { ESP_LOGE(TAG, "no memory for the PC link"); return; }
-    xTaskCreate(spk_task, "pc_spk", 4096, NULL, 5, NULL);
+    // pc_spk only plays audio; pc_tx streams the mic and runs presence_tick (bell_strike, pick_attention: no flash)
+    // and voice_pump — which DOES run router commands that may write NVS, so pc_tx must keep an internal stack.
+    task_psram(spk_task, "pc_spk", 4096, NULL, 5, NULL, tskNO_AFFINITY);
     xTaskCreate(tx_task, "pc_tx", 4096, NULL, 3, NULL);
     httpd_uri_t u = { .uri = "/ws", .method = HTTP_GET, .handler = h_ws, .is_websocket = true };
     httpd_register_uri_handler(h, &u);

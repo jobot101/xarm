@@ -409,6 +409,10 @@ int cloud_intent(const char *heard, char *out, size_t n)
 
 void cloud_init(void)
 {
+#if CONFIG_XARM_JOHNNY
+    ESP_LOGI(TAG, "cloud ears: off on this build (the PC hears everything)");   // saves a 12 KB internal stack
+    return;
+#endif
     nvs_load();
     s_pcm = heap_caps_malloc(MAX_SAMPLES * sizeof(int16_t), MALLOC_CAP_SPIRAM);
     s_resp = heap_caps_malloc(RESP_MAX, MALLOC_CAP_SPIRAM);

@@ -580,6 +580,9 @@ static esp_err_t h_sys(httpd_req_t *r)
     cJSON_AddNumberToObject(j, "heap_min_kb", (int)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
     cJSON_AddNumberToObject(j, "heap_block_kb", (int)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
     cJSON_AddNumberToObject(j, "psram_kb", (int)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
+    cJSON_AddNumberToObject(j, "heap_total_kb", (int)(heap_caps_get_total_size(MALLOC_CAP_INTERNAL) / 1024));
+    cJSON_AddNumberToObject(j, "dma_kb", (int)(heap_caps_get_free_size(MALLOC_CAP_DMA) / 1024));
+    cJSON_AddNumberToObject(j, "dma_block_kb", (int)(heap_caps_get_largest_free_block(MALLOC_CAP_DMA) / 1024));
     cJSON_AddNumberToObject(j, "uptime_s", (int)(esp_timer_get_time() / 1000000));
     cJSON_AddNumberToObject(j, "state_ms", s_state_ms);
     return send_json(r, j);
