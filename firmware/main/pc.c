@@ -21,6 +21,7 @@
 #include "store.h"
 #include "fx.h"
 #include "radar.h"
+#include "bell.h"
 #include "voice.h"
 #include "eye.h"
 
@@ -128,14 +129,31 @@ static void radar_event(bool here)
     send_json(j);
 }
 
+#define GREET_AWAY_S 60             // a real arrival: the bench was empty at least this long
+#define GREET_EVERY_S 180           // and the chime greets at most this often
+
 static void presence_tick(void)
 {
+    static int64_t greeted_us;
+    static int empty_for;                      // how long the bench had been empty when someone showed up
     int away = radar_away_s();                 // -1: no radar reading we understand -> act as if someone's here
+    if (away > 0) empty_for = away;
     bool here = away <= 0;
     if (here != s_here) {
         s_here = here;
         radar_event(here);
-        if (here) pick_attention();            // someone walked up: perk up (wakes him from a nap)
+        if (here) {
+            pick_attention();                  // someone walked up: perk up (wakes it from a nap)
+            int64_t now = esp_timer_get_time();
+            // ...and greet them with one tap on the chime: a real arrival only, not too often, never mid-job
+            if (away == 0 && empty_for >= GREET_AWAY_S && (!greeted_us || now - greeted_us > (int64_t)GREET_EVERY_S * 1000000)
+                && pick_idle() && bell_ready()) {
+                greeted_us = now;
+                bell_strike(0);                // the saved tap (capped at 30 ms in bell.c)
+                ESP_LOGI(TAG, "someone walked up after %d s: greeting tap", empty_for);
+            }
+            empty_for = 0;
+        }
     }
     // follow: the nearest person's angle (LD2450) turns the resting pose's base, like "turn toward voices" does.
     // Workshop -> Voice -> Turn toward voices sets the direction (1, flipped -1) or switches it off (0).
