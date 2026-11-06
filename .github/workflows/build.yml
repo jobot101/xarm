@@ -292,12 +292,11 @@ jobs:
         with: { name: mothership, path: mothership }
       - name: keep the solenoid files (published separately by solenoid.yml)
         run: mkdir -p keep && git fetch -q --depth 1 origin gh-pages && (git archive FETCH_HEAD sol | tar -x -C keep || true)
-      # fw/johnny/ is the old name of MotherShip's channel: the same files, so boards and flashers still on it move over
       - name: build flasher page
         working-directory: flasher
         run: |
           npm ci && npm run build
-          mkdir -p dist/fw dist/cam dist/sol && cp ../release/* dist/fw/ && mkdir -p dist/fw/mothership dist/fw/johnny && cp ../mothership/* dist/fw/mothership/ && cp ../mothership/* dist/fw/johnny/ && cp -r ../camera/* dist/cam/ && (cp ../keep/sol/* dist/sol/ 2>/dev/null || true)
+          mkdir -p dist/fw dist/cam dist/sol && cp ../release/* dist/fw/ && mkdir -p dist/fw/mothership && cp ../mothership/* dist/fw/mothership/ && cp -r ../camera/* dist/cam/ && (cp ../keep/sol/* dist/sol/ 2>/dev/null || true)
       - name: publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
