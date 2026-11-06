@@ -209,7 +209,7 @@ function buildTricks(m) {
 
 Make sure the arm has room to swing.`)) return;
         const r = await (await fetch("/actions/play", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: a.name, speed: $("#acspd").value / 100 }) })).json();
-        $("#acout").textContent = r.msg; } }, "Play"))) : [h("p", { class: "small-text muted" }, "No action files in johnny/mothership/actions.")]));
+        $("#acout").textContent = r.msg; } }, "Play"))) : [h("p", { class: "small-text muted" }, "No action files in brain/panel/actions.")]));
   }).catch(() => {});
 }
 let tricksSeen = "";

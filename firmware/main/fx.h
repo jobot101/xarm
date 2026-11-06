@@ -42,7 +42,7 @@ void fx_hush(void);                                             // cut the curre
 void fx_play(int group);                                        // a sound effect group (SND_S_*)
 bool fx_bank_ok(void);                                          // a matching sound bank is loaded
 bool fx_has(int group);                                         // that group has clips (SD-only ones need the card)
-void fx_away(bool on);                                          // Johnny: nobody at the bench (radar): ring nearly dark
+void fx_away(bool on);                                          // MotherShip: nobody at the bench (radar): ring nearly dark
 void fx_sleep(bool on);                                         // Robot School is out: dim amethyst ring
 const char *fx_bank_src(void);                                  // "sd" (full quality) / "flash" / "none"
 void fx_bank_release(void);                                     // before rewriting the bank in flash
@@ -53,6 +53,6 @@ bool fx_speaking(void);
 float fx_talk_level(void);                                      // how loud Muffin's own voice is right now, 0..1 (0 = not talking)
 void fx_listening(bool on);                                     // "Hey Muffin" window open: ring glows sapphire when idle                                         // something is playing or queued
 
-// Johnny build (pc.c): the PC brain's state on the ring when nothing else is going on
+// MotherShip build (pc.c): the PC brain's state on the ring when nothing else is going on
 typedef enum { FX_PC_NONE, FX_PC_IDLE, FX_PC_LISTEN, FX_PC_THINK, FX_PC_TALK } fx_pc_t;   // NONE = no PC connected
 void fx_pc(fx_pc_t m);

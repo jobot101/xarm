@@ -1,4 +1,4 @@
-# Johnny's PC brain (johnny.py) + the USB flasher (flash_johnny.py)
+# MotherShip's brain (brain.py) + the USB flasher (flash_mothership.py)
 websockets>=12
 requests
 numpy

@@ -54,7 +54,7 @@ void app_main(void)
     fx_event(update_new_version() ? FX_UPDATED : FX_BOOT);   // fresh firmware: fanfare + "Ready to rumble!"
     arm_init();
     cam_begin(bus);
-    radar_init();          // mmWave presence on a GPIO (Johnny: IO7)
+    radar_init();          // mmWave presence on a GPIO (MotherShip: IO7)
     pick_init();
     school_init(bus);      // Robot School: the daily class (after kids, sounds and motion)
     net_start();

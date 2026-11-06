@@ -1,6 +1,6 @@
-// eye.h — Johnny: the audio board's own DVP camera (the ribbon connector on the back).
+// eye.h — MotherShip: the audio board's own DVP camera (the ribbon connector on the back).
 //
-// The board only takes pictures. The shop PC (pc/eye.py) pulls them, finds the slot colors and posts the blobs
+// The board only takes pictures. The shop PC (the brain's eye.py) pulls them, finds the slot colors and posts the blobs
 // back, and cam.c serves those blobs to pick.c exactly as if the Hiwonder vision module had sent them over I2C.
 //   GET  /cam.jpg     latest frame, 320x240 JPEG
 //   POST /api/blobs   {"blobs": [[x,y,w,h] | null, ...]}  one per slot, centre x,y and size on the 240x240 frame

@@ -1,8 +1,8 @@
 """design_verna.py — create Verna's voice (the Oracle phone's operator) with ElevenLabs Voice Design and give it to
-Shop MotherShip. Uses the API key in ../johnny.json (never printed).
+Shop MotherShip. Uses the API key in ../brain.json (never printed).
 
     python design_verna.py previews        # makes 3 takes of Verna, saves them as verna_take_1..3.mp3 to listen to
-    python design_verna.py pick 2          # turns take 2 into a saved voice; writes its voice_id to johnny.json and
+    python design_verna.py pick 2          # turns take 2 into a saved voice; writes its voice_id to brain.json and
                                            # to the Oracle phone's render/voices.yaml (verna.voice_id)
     python design_verna.py render          # pre-renders MotherShip's fixed lines in Verna's voice (lines/*.pcm)
 
@@ -11,8 +11,8 @@ Verna's design and settings come from Oracle Phone/oracle-characters/oracle-char
 import base64, json, os, re, sys, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)                          # the johnny folder
-CFG = os.path.join(ROOT, "johnny.json")
+ROOT = os.path.dirname(HERE)                          # the brain folder
+CFG = os.path.join(ROOT, "brain.json")
 ORACLE_VOICES = r"C:\Users\mark\Documents\Ragamuffin Workshop\Oracle Phone\oracle-characters\oracle-characters\render\voices.yaml"
 DESIGN = ("woman, mid-30s, alto, quick and dry, rural central Pennsylvania with a light Pennsylvania Dutch lilt, "
           "clipped and efficient, warm underneath, never rushed")
@@ -28,7 +28,7 @@ def cfg(): return json.load(open(CFG, encoding="utf-8"))
 
 def call(path, body=None, raw=False):
     c = cfg()
-    if not c.get("elevenlabs_api_key"): sys.exit("Put your ElevenLabs API key in johnny.json (elevenlabs_api_key) first.")
+    if not c.get("elevenlabs_api_key"): sys.exit("Put your ElevenLabs API key in brain.json (elevenlabs_api_key) first.")
     req = urllib.request.Request("https://api.elevenlabs.io" + path, data=json.dumps(body).encode() if body is not None else None,
                                  method="POST" if body is not None else "GET",
                                  headers={"xi-api-key": c["elevenlabs_api_key"], "Content-Type": "application/json"})
@@ -57,7 +57,7 @@ def pick(n):
     vid = r["voice_id"]
     c = cfg(); c["elevenlabs_voice_id"] = vid
     json.dump(c, open(CFG, "w", encoding="utf-8"), indent=2)
-    print("johnny.json -> elevenlabs_voice_id set")
+    print("brain.json -> elevenlabs_voice_id set")
     if os.path.exists(ORACLE_VOICES):                 # the phone shares the same Verna
         s = open(ORACLE_VOICES, encoding="utf-8").read()
         s2 = re.sub(r"(?m)^(verna:\n(?:  .*\n)*?  voice_id: )''", lambda m: m.group(1) + f"'{vid}'", s, count=1)

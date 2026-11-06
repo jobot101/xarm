@@ -1,8 +1,8 @@
-// eye.c — Johnny's eyes: the board's DVP camera, read by the PC. See eye.h.
+// eye.c — MotherShip's eyes: the board's DVP camera, read by the PC. See eye.h.
 #include "eye.h"
 #include "sdkconfig.h"
 
-#if CONFIG_XARM_JOHNNY
+#if CONFIG_XARM_MOTHERSHIP
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
@@ -151,7 +151,7 @@ static esp_err_t h_jpg(httpd_req_t *r)
     return e;
 }
 
-// {"blobs": [[x,y,w,h] | null, ...]} from pc/eye.py
+// {"blobs": [[x,y,w,h] | null, ...]} from the brain (eye.py on the shop PC)
 static esp_err_t h_blobs(httpd_req_t *r)
 {
     char body[256];

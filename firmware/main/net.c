@@ -77,7 +77,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 static void ap_config(void)
 {
     wifi_config_t ap = { .ap = { .channel = 6, .max_connection = 4 } };
-    // backup network = the board's name, capitalized: "Muffin", or "Johnny" on the Johnny build
+    // backup network = the board's name, capitalized: "Muffin", or "MotherShip" on the MotherShip build
     strlcpy((char *)ap.ap.ssid, CONFIG_XARM_NAME, sizeof ap.ap.ssid);
     if (ap.ap.ssid[0] >= 'a' && ap.ap.ssid[0] <= 'z') ap.ap.ssid[0] -= 32;
     strlcpy((char *)ap.ap.password, CONFIG_XARM_AP_PASS, sizeof ap.ap.password);

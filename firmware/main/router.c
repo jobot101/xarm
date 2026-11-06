@@ -49,7 +49,7 @@ bool router_exec_ex(const char *text, char *msg, size_t n, bool app)
     // class, sleep, grown-up passphrase, quiz answers
     if (!app && school_filter(t, msg, n)) return true;
     // Muffin's conversation (name, small talk, jokes, yes/no answers...) — before the tricks, which match loosely
-    if (!JOHNNY && (app || !school_in_lesson()) && chat_exec(t, msg, n)) return true;   // Johnny: the PC does the talking
+    if (!MOTHERSHIP && (app || !school_in_lesson()) && chat_exec(t, msg, n)) return true;   // MotherShip: the PC does the talking
     // third hand
     if (has(t, "hold this") || has(t, "help me") || has(t, "third hand"))  return RUN(K_HOLD, pick_run(OP_HELPER, 0, msg, n));
     if (has(t, "hold it") || has(t, "grip") || has(t, "grab it") || has(t, "squeeze")) return RUN(K_CLOSE, pick_run(OP_CLOSE, 0, msg, n));
@@ -111,8 +111,8 @@ int router_phrases(char out[][48], int max)
     ADD("stop robot");
     ADD("robot stop");
     ADD("freeze robot");
-#if JOHNNY
-    // Shop MotherShip (Johnny build): the PC hears everything else; on board only the instant stop, which works
+#if MOTHERSHIP
+    // Shop MotherShip (MotherShip build): the PC hears everything else; on board only the instant stop, which works
     // with no PC at all
     ADD("mother ship stop"); ADD("stop mother ship"); ADD("stop stop");
     return n;

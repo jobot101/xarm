@@ -126,8 +126,8 @@ static void talk_meter(const int16_t *b, int n)
     float rms = sqrtf(acc / n) / 6000.0f;          // mastered speech peaks around 0.5-1
     s_talk_lvl = rms > 1 ? 1 : rms;
 }
-#if CONFIG_XARM_JOHNNY
-float fx_talk_level(void) { return pc_talk_level(); }   // Johnny's voice comes from the PC
+#if CONFIG_XARM_MOTHERSHIP
+float fx_talk_level(void) { return pc_talk_level(); }   // MotherShip's voice comes from the PC
 #else
 float fx_talk_level(void) { return s_talking ? s_talk_lvl : 0; }
 #endif
@@ -293,8 +293,8 @@ static void sound_task(void *arg)
 
 static void enqueue(int g, int pick, bool low)
 {
-#if CONFIG_XARM_JOHNNY
-    return;                                   // Johnny: Muffin's bank never plays; the PC does all the talking
+#if CONFIG_XARM_MOTHERSHIP
+    return;                                   // MotherShip: Muffin's bank never plays; the PC does all the talking
 #endif
     if (!s_sq || g < 0 || g >= SND_GROUPS) return;
     if (low && (s_talking || uxQueueMessagesWaiting(s_sq))) return;   // blips never wait in line
@@ -304,7 +304,7 @@ static void enqueue(int g, int pick, bool low)
 
 static void play(int g) { enqueue(g, -1, false); }
 void fx_play(int g) { play(g); }
-#if CONFIG_XARM_JOHNNY
+#if CONFIG_XARM_MOTHERSHIP
 bool fx_speaking(void) { return pc_speaking(); }
 #else
 bool fx_speaking(void) { return s_talking || (s_sq && uxQueueMessagesWaiting(s_sq)); }
@@ -347,14 +347,14 @@ void fx_hush(void)
 
 // ---------------------------------------------------------------- lights
 typedef enum { L_BOOT, L_IDLE, L_THINK, L_WORK, L_HOLD, L_WARN, L_STOP, L_UPDATE, L_PARTY } led_mode_t;
-static volatile bool s_away;                  // Johnny: nobody at the bench for a minute (radar): a faint glow only
+static volatile bool s_away;                  // MotherShip: nobody at the bench for a minute (radar): a faint glow only
 static volatile bool s_sleep;                 // Robot School is out for the day: a slow, dim amethyst breath
 
 static led_strip_handle_t s_led;
 static volatile led_mode_t s_mode = L_BOOT;
 static volatile int s_flash, s_show_t, s_show = -1;
 static volatile bool s_working, s_listen;
-static volatile fx_pc_t s_pc = FX_PC_IDLE;   // Johnny build only: what the PC brain is doing
+static volatile fx_pc_t s_pc = FX_PC_IDLE;   // MotherShip build only: what the PC brain is doing
 
 static void px(int i, rgb_t c, float k)
 {
@@ -389,7 +389,7 @@ static void led_task(void *arg)
             break;
         case L_IDLE:                                         // rose window: sunlight drifting through the glass
             if (s_sleep) { fill(AMETHYST, 0.03f + 0.12f * (0.5f - 0.5f * cosf(t * 0.025f))); break; }
-#if CONFIG_XARM_JOHNNY
+#if CONFIG_XARM_MOTHERSHIP
             if (s_away && s_pc != FX_PC_TALK) { fill(GOLD, 0.01f); break; }
             if (s_pc == FX_PC_NONE)   { fill(GOLD, 0.02f + 0.10f * (0.5f - 0.5f * cosf(t * 0.03f))); break; }   // waiting for the PC
             if (s_pc == FX_PC_LISTEN) { fill(SAPPHIRE, 0.25f + 0.55f * breathe); break; }
@@ -415,7 +415,7 @@ static void led_task(void *arg)
         // soft organ blips while it works, so you can hear it thinking
         if (s_working && ++since_chirp > rnd(25, 45)) { enqueue(SND_S_CHIRP, -1, true); since_chirp = 0; }
         // idle chatter: once, a few minutes after people stop playing (not when nobody's been around)
-        if (!JOHNNY && CONFIG_XARM_CHATTER_MIN > 0 && s_mode == L_IDLE && t % 30 == 0) {
+        if (!MOTHERSHIP && CONFIG_XARM_CHATTER_MIN > 0 && s_mode == L_IDLE && t % 30 == 0) {
             int64_t now = esp_timer_get_time(), quiet = now - s_last_activity_us;
             static int64_t s_chatted_after;
             if (s_last_activity_us && s_chatted_after != s_last_activity_us &&

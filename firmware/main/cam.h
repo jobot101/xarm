@@ -10,6 +10,6 @@ bool cam_enabled(void);                  // the camera switch (Workshop -> Setti
 void cam_enable_save(bool on);           // saved; takes effect after a restart
 void cam_raw_hex(char *out, size_t n);   // last raw bytes, for checking the data format
 int  cam_scan(char *out, size_t n);
-// Johnny's ribbon camera (eye.c): the PC finds the colors and posts the blobs here. cam_ok() is then true while
+// MotherShip's ribbon camera (eye.c): the PC finds the colors and posts the blobs here. cam_ok() is then true while
 // they keep arriving (1.5 s).
 void cam_feed(int slot, const box_t *b, bool seen);      // probe the I2C bus -> "0x18 0x20 ..."; returns count

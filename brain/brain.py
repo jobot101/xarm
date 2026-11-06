@@ -1,15 +1,15 @@
-"""johnny.py — Shop MotherShip's brain (the Johnny firmware build), running on the shop PC.
+"""brain.py — Shop MotherShip's brain (the MotherShip firmware build), running on the shop PC.
 
-The arm board (Johnny build) is ears, mouth and hands; this is everything else:
+The arm board (MotherShip build) is ears, mouth and hands; this is everything else:
   mic audio from the board -> voice detector -> Whisper (local, faster-whisper)
   -> "MotherShip ..." -> the local model in LM Studio picks what to say + which arm commands to run
-  -> ElevenLabs speaks it in Johnny's voice (Windows' own voice if that's down) -> back to the board's speaker.
+  -> ElevenLabs speaks it in MotherShip's voice (Windows' own voice if that's down) -> back to the board's speaker.
 
-    python johnny.py                 # board at johnny.local
-    python johnny.py --board 192.168.1.50
-    python johnny.py --text          # no board: type to Johnny, see what he'd say and do
+    python brain.py                 # board at shop-mothership.local
+    python brain.py --board 192.168.1.50
+    python brain.py --text          # no board: type to MotherShip, see what he'd say and do
 
-Settings live in johnny.json next to this file (made on first run). Keys can also come from the environment:
+Settings live in brain.json next to this file (made on first run). Keys can also come from the environment:
 ELEVENLABS_API_KEY. "stop" is handled on the board itself, so it works even with this program down.
 """
 import argparse, asyncio, io, json, os, re, sys, threading, time, wave
@@ -18,7 +18,7 @@ from collections import deque
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CFG_PATH = os.path.join(HERE, "johnny.json")
+CFG_PATH = os.path.join(HERE, "brain.json")
 DEFAULTS = {
     "board": "shop-mothership.local",
     "lmstudio_url": "http://localhost:1234/v1",
@@ -28,7 +28,7 @@ DEFAULTS = {
     "elevenlabs_voice_id": "",            # Verna, the Oracle phone's operator (make it with mothership/design_verna.py)
     "elevenlabs_model": "eleven_flash_v2_5",
     "volume": 40,                         # the board's speaker, 0-100 (quiet shop voice)
-    "follow_up_s": 10,                    # after he answers, no need to say "Johnny" for this long
+    "follow_up_s": 10,                    # after he answers, no need to say "MotherShip" for this long
 }
 RATE = 16000
 # Verna's voice settings (Oracle Phone, render/voices.yaml): MotherShip speaks in the operator's voice
@@ -81,7 +81,7 @@ def load_cfg():
         cfg.update(json.load(open(CFG_PATH)))
     else:
         json.dump(DEFAULTS, open(CFG_PATH, "w"), indent=2)
-        print(f"made {CFG_PATH}: put Johnny's ElevenLabs voice id + key in it")
+        print(f"made {CFG_PATH}: put MotherShip's ElevenLabs voice id + key in it")
     cfg["elevenlabs_api_key"] = cfg["elevenlabs_api_key"] or os.environ.get("ELEVENLABS_API_KEY", "")
     return cfg
 
@@ -146,7 +146,7 @@ class Voice:
         import requests
         self.rq, self.cfg = requests, cfg
         self.cloud_ok = bool(cfg["elevenlabs_api_key"] and cfg["elevenlabs_voice_id"])
-        if not self.cloud_ok: print("voice: no ElevenLabs key/voice id in johnny.json, using the Windows voice")
+        if not self.cloud_ok: print("voice: no ElevenLabs key/voice id in brain.json, using the Windows voice")
 
     def stream(self, text):
         """yields 16 kHz mono int16 PCM chunks as they arrive"""
@@ -172,7 +172,7 @@ class Voice:
 
     def local(self, text):
         import pyttsx3, tempfile
-        f = os.path.join(tempfile.gettempdir(), "johnny_say.wav")
+        f = os.path.join(tempfile.gettempdir(), "brain_say.wav")
         eng = pyttsx3.init()
         for v in eng.getProperty("voices"):
             if "david" in v.name.lower(): eng.setProperty("voice", v.id)   # the deepest stock Windows voice
@@ -261,7 +261,7 @@ class Ears:
 
 
 # ------------------------------------------------------------------ the link to the board
-class Johnny:
+class Brain:
     def __init__(self, cfg, board):
         self.cfg, self.board = cfg, board
         self.brain, self.voice, self.ears = Brain(cfg), Voice(cfg), Ears(cfg)
@@ -491,4 +491,4 @@ if __name__ == "__main__":
     a = ap.parse_args()
     cfg = load_cfg()
     if a.text: text_mode(cfg); sys.exit()
-    asyncio.run(Johnny(cfg, a.board or cfg["board"]).run())
+    asyncio.run(Brain(cfg, a.board or cfg["board"]).run())

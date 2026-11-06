@@ -1,6 +1,6 @@
 """server.py — Shop MotherShip control panel: serves ui/ and passes /b/... through to the arm board.
 
-    python server.py                  # http://127.0.0.1:47620/  (board from ../johnny.json or board_ip.txt)
+    python server.py                  # http://127.0.0.1:47620/  (board from ../brain.json or board_ip.txt)
     python server.py --board 192.168.1.27 --no-browser
 
 The board's web API has no CORS headers, so the page talks to it through here: /b/api/state -> http://<board>/api/state.
@@ -11,14 +11,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI = os.path.join(HERE, "ui")
-ROOT = os.path.dirname(HERE)                     # the johnny folder: johnny.json, board_ip.txt
+ROOT = os.path.dirname(HERE)                     # the brain folder: brain.json, board_ip.txt
 sys.path.insert(0, HERE)                         # actions.py
 PORT = 47620
 
 
 def board_host(cli=None):
     if cli: return cli
-    try: host = json.load(open(os.path.join(ROOT, "johnny.json"))).get("board", "shop-mothership.local")
+    try: host = json.load(open(os.path.join(ROOT, "brain.json"))).get("board", "shop-mothership.local")
     except (OSError, ValueError): host = "shop-mothership.local"
     cache = os.path.join(ROOT, "board_ip.txt")
     try:
@@ -73,9 +73,9 @@ class H(BaseHTTPRequestHandler):
             lib = actions.library()
             return self.send(200, json.dumps({"actions": [{"name": n, "frames": len(actions.load(f)), "secs": sum(t for t, _ in actions.load(f)) / 1000} for n, f in lib.items()],
                                               "last": getattr(H, "last_action", "")}).encode())
-        if self.path == "/commands":                 # the brain's action menu (johnny.py COMMANDS), all plain router text
+        if self.path == "/commands":                 # the brain's action menu (brain.py COMMANDS), all plain router text
             try:
-                sys.path.insert(0, ROOT); import johnny; cmds = list(johnny.COMMANDS)
+                sys.path.insert(0, ROOT); import brain; cmds = list(brain.COMMANDS)
             except Exception: cmds = []
             return self.send(200, json.dumps(cmds).encode())
         p = self.path.split("?")[0]

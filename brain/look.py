@@ -1,4 +1,4 @@
-"""look.py — check with the PC webcam (the OBSBOT, else the bench webcam) that Johnny really did what the board says it did.
+"""look.py — check with the PC webcam (the OBSBOT, else the bench webcam) that MotherShip really did what the board says it did.
 
     python look.py snap shot.jpg                          # one frame
     python look.py cmd "go home" --secs 5                 # film a router command
@@ -23,8 +23,8 @@ CAMERAS = [("OBSBOT Tiny 2 StreamCamera", "1280x720", 0.5),  # (DirectShow name,
 
 
 def board():
-    try: b = json.load(open(os.path.join(HERE, "johnny.json"))).get("board", "johnny.local")
-    except (OSError, ValueError): b = "johnny.local"
+    try: b = json.load(open(os.path.join(HERE, "brain.json"))).get("board", "shop-mothership.local")
+    except (OSError, ValueError): b = "shop-mothership.local"
     return "http://" + b
 
 

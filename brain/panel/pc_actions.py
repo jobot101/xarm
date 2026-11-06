@@ -1,6 +1,6 @@
 """pc_actions.py — a fixed menu of things MotherShip may run on the shop PC.
 
-The menu IS the folder `../pc_actions/` (next to johnny.json). Every .bat, .ps1 or .py in it is one action:
+The menu IS the folder `../pc_actions/` (next to brain.json). Every .bat, .ps1 or .py in it is one action:
   - its name is the file name without the extension, e.g. `take a snapshot.bat` -> "take a snapshot"
   - its first comment line (`rem ...`, `# ...`, `:: ...`) is the description the model reads
 Nothing outside that folder can run: the model picks a name, this module finds the file, and that's the only

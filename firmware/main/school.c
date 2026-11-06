@@ -1,7 +1,7 @@
 // school.c — Muffin's Robot School (see school.h). One task runs the class as a plain script; the voice
 // task feeds it answers through school_filter() / school_allow() / school_note_stop().
 #include "school.h"
-#include "pc.h"   // JOHNNY
+#include "pc.h"   // MOTHERSHIP
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,8 +99,8 @@ static void load(void)
         if (nvs_get_str(h, "sc_pass", s_pass, &n) != ESP_OK) s_pass[0] = 0;
         nvs_close(h);
     }
-#ifdef CONFIG_XARM_JOHNNY
-    s_on = false;                             // Johnny: no Robot School, the PC brain runs the show
+#ifdef CONFIG_XARM_MOTHERSHIP
+    s_on = false;                             // MotherShip: no Robot School, the PC brain runs the show
     s_pass[0] = 0;
 #endif
 }
@@ -707,7 +707,7 @@ void school_init(i2c_master_bus_handle_t bus)
     i2c_device_config_t d = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = 0x51, .scl_speed_hz = CONFIG_XARM_I2C_HZ };
     if (i2c_master_bus_add_device(bus, &d, &s_rtc) != ESP_OK) s_rtc = NULL;
     rtc_read();
-    xTaskCreate(task, "school", JOHNNY ? 2560 : 4096, NULL, 3, NULL);
+    xTaskCreate(task, "school", MOTHERSHIP ? 2560 : 4096, NULL, 3, NULL);
     ESP_LOGI(TAG, "%s, %d min a day, clock: %s", s_on ? "on" : "off", s_minutes, s_clock_src);
 }
 
@@ -1008,8 +1008,8 @@ static bool set_student(const char *name, char *msg, size_t n)
 bool school_set(const cJSON *b, char *msg, size_t n)
 {
     const cJSON *v;
-#ifdef CONFIG_XARM_JOHNNY
-    snprintf(msg, n, "no Robot School on Johnny"); return false;
+#ifdef CONFIG_XARM_MOTHERSHIP
+    snprintf(msg, n, "no Robot School on MotherShip"); return false;
 #endif
     bool changed = false, pass_changed = false;
     if (cJSON_IsBool(v = cJSON_GetObjectItem(b, "on"))) {

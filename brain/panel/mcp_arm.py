@@ -7,7 +7,7 @@ Safety lives here, not in the model's prompt:
     NEAR_CM (radar) every move takes twice as long
   - nothing runs while the arm is busy with a job; `stop` always works
   - no torque-off tool: going limp drops the arm
-Talks to the board's HTTP API (standard library only). Board address: ../johnny.json or ../board_ip.txt.
+Talks to the board's HTTP API (standard library only). Board address: ../brain.json or ../board_ip.txt.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ mcp = FastMCP("mothership")
 
 
 def _board() -> str:
-    try: host = json.load(open(os.path.join(ROOT, "johnny.json"))).get("board", "shop-mothership.local")
+    try: host = json.load(open(os.path.join(ROOT, "brain.json"))).get("board", "shop-mothership.local")
     except (OSError, ValueError): host = "shop-mothership.local"
     try: return socket.gethostbyname(host)
     except OSError:

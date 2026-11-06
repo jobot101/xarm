@@ -1,10 +1,10 @@
-"""johnny_app.py — Shop MotherShip's desktop app: see what it sees, tune the bell and the mics, send him commands.
+"""brain_app.py — Shop MotherShip's desktop app: see what it sees, tune the bell and the mics, send him commands.
 
-    python johnny_app.py                     # board from johnny.json (johnny.local)
-    python johnny_app.py --board 192.168.1.27
+    python brain_app.py                     # board from brain.json (shop-mothership.local)
+    python brain_app.py --board 192.168.1.27
 
 Talks to the board's web API only (/api/state, /cam.jpg, /api/bell, /api/voice, /api/cmd), so it runs alongside
-johnny.py (the brain) and eye.py (the color finder) without getting in their way. Needs: requests, pillow.
+brain.py (the brain) and eye.py (the color finder) without getting in their way. Needs: requests, pillow.
 """
 import argparse, io, json, os, socket, statistics, threading, time
 import tkinter as tk
@@ -24,7 +24,7 @@ BG, PANEL, INK, DIM, BRASS, RED, BLUE, OK = "#211a14", "#2d241c", "#f1e6d2", "#a
 
 
 def load_board():
-    try: return json.load(open(os.path.join(HERE, "johnny.json"))).get("board", "shop-mothership.local")
+    try: return json.load(open(os.path.join(HERE, "brain.json"))).get("board", "shop-mothership.local")
     except (OSError, ValueError): return "shop-mothership.local"
 
 
@@ -41,7 +41,7 @@ def ring_stats(db, pre):
 
 
 def resolve(host):
-    """The board's address. Windows often can't look up "johnny.local" (mDNS), so the last address that worked is
+    """The board's address. Windows often can't look up "shop-mothership.local" (mDNS), so the last address that worked is
     kept in board_ip.txt and used when the name doesn't resolve."""
     cache = os.path.join(HERE, "board_ip.txt")
     try:
@@ -391,10 +391,10 @@ class App:
         def done(r):
             if isinstance(r, Exception): self.reply.config(text=f"commands: {r}"); return
             board = r if isinstance(r, list) else r.get("phrases", [])
-            # the board's own voice list on Johnny is just "stop"; the real vocabulary is the brain's action menu
-            # (johnny.py COMMANDS, all plain router text) plus the camera colors and recorded tricks
+            # the board's own voice list on MotherShip is just "stop"; the real vocabulary is the brain's action menu
+            # (brain.py COMMANDS, all plain router text) plus the camera colors and recorded tricks
             try:
-                import johnny; brain = list(johnny.COMMANDS)
+                import brain as brain_py; brain = list(brain_py.COMMANDS)
             except Exception: brain = list(COMMANDS)
             colors = []
             tricks = [f"do the {t[1]}" for t in self.tricks_seen or []]

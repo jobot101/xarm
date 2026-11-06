@@ -1,4 +1,4 @@
-// pc.c — Johnny: the shop PC is the brain, this board is the arm's hands, ears and mouth. Protocol in pc.h.
+// pc.c — MotherShip: the shop PC is the brain, this board is the arm's hands, ears and mouth. Protocol in pc.h.
 #include "pc.h"
 #include <math.h>
 #include <string.h>

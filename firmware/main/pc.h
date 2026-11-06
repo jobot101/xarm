@@ -1,4 +1,4 @@
-// pc.h — Johnny: the arm's brain runs on the shop PC (CONFIG_XARM_JOHNNY).
+// pc.h — MotherShip: the arm's brain runs on the shop PC (CONFIG_XARM_MOTHERSHIP).
 //
 // The PC connects to ws://<board>/ws and the board becomes hands, ears and mouth:
 //   board -> PC  binary: mic audio, 16 kHz mono int16 LE, after the AFE (echo-cancelled, gain-leveled)
@@ -18,11 +18,11 @@
 #include "cJSON.h"
 #include "sdkconfig.h"
 
-// 1 on the Johnny build, for use in plain C expressions (a bool Kconfig that is off is not defined at all)
-#ifdef CONFIG_XARM_JOHNNY
-#define JOHNNY 1
+// 1 on the MotherShip build, for use in plain C expressions (a bool Kconfig that is off is not defined at all)
+#ifdef CONFIG_XARM_MOTHERSHIP
+#define MOTHERSHIP 1
 #else
-#define JOHNNY 0
+#define MOTHERSHIP 0
 #endif
 
 void pc_register(httpd_handle_t h);     // web.c: adds /ws

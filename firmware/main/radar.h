@@ -1,4 +1,4 @@
-// radar.h — a mmWave presence radar on one GPIO (Johnny: IO7). CONFIG_XARM_RADAR_GPIO = -1 means none.
+// radar.h — a mmWave presence radar on one GPIO (MotherShip: IO7). CONFIG_XARM_RADAR_GPIO = -1 means none.
 //
 // Hi-Link modules either drive a plain presence output (high = someone there) or send UART frames on that pin.
 // radar.c doesn't assume: it counts edges per second. A few edges and a steady level = presence output;

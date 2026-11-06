@@ -18,7 +18,7 @@ static box_t s_box[2];
 static bool s_seen[2];
 static uint8_t s_raw[2][CAM_BYTES];
 static volatile bool s_ok;
-static bool s_ext;                       // Johnny: blobs come from the PC, not the I2C module
+static bool s_ext;                       // MotherShip: blobs come from the PC, not the I2C module
 static volatile int64_t s_feed_us;
 
 static void task(void *arg)
@@ -66,7 +66,7 @@ esp_err_t cam_begin(i2c_master_bus_handle_t bus)
     if (nvs_open("xarm", NVS_READONLY, &h) == ESP_OK) { nvs_get_u8(h, "cam_on", &v); nvs_close(h); }
     s_enabled = v;
     if (!s_enabled) { ESP_LOGI(TAG, "camera switched off"); return ESP_OK; }
-#if CONFIG_XARM_JOHNNY
+#if CONFIG_XARM_MOTHERSHIP
     if (eye_init(bus)) { s_ext = true; ESP_LOGI(TAG, "ribbon camera %s: the PC finds the colors", eye_sensor()); return ESP_OK; }
 #endif
     i2c_device_config_t d = {

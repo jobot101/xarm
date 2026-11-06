@@ -1174,8 +1174,8 @@ static void idle_life(void)
 static void task(void *arg)
 {
     job_t j;
-#if CONFIG_XARM_JOHNNY
-    // Muffin wakes with a wave (school.c), which also starts idle life. Johnny has no wake-up, so after a reboot he
+#if CONFIG_XARM_MOTHERSHIP
+    // Muffin wakes with a wave (school.c), which also starts idle life. MotherShip has no wake-up, so after a reboot he
     // never "finished a job" and never sat at Home: no breathing, glances or naps until the first command.
     // Settle at Home once the arm answers, and count that as the first job.
     for (int i = 0; i < 50 && !arm_link_ok(); i++) vTaskDelay(pdMS_TO_TICKS(200));

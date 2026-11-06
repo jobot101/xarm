@@ -39,5 +39,5 @@ CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 CONFIG_HTTPD_WS_SUPPORT=y
 
-# esp32-camera (Johnny's ribbon camera): SCCB shares the i2c_master bus. The legacy driver would abort at boot.
+# esp32-camera (MotherShip's ribbon camera): SCCB shares the i2c_master bus. The legacy driver would abort at boot.
 CONFIG_SCCB_HARDWARE_I2C_DRIVER_NEW=y

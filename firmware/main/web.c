@@ -278,7 +278,7 @@ static esp_err_t h_state(httpd_req_t *r)
     char sv[24];
     update_sound_version(sv, sizeof sv);
     cJSON_AddStringToObject(fw, "sounds", sv);
-    if (JOHNNY) pc_json(j);                   // "brain": {name, pc connected, talking}
+    if (MOTHERSHIP) pc_json(j);                   // "brain": {name, pc connected, talking}
     esp_err_t e = send_json(r, j);
     s_state_ms = (int)((esp_timer_get_time() - t0) / 1000);
     return e;
@@ -866,7 +866,7 @@ static esp_err_t h_app(httpd_req_t *r)
 // a socket closed (or was purged): the PC link drops if it was the brain's
 static void on_close(httpd_handle_t hd, int fd)
 {
-    if (JOHNNY) pc_sock_closed(fd);
+    if (MOTHERSHIP) pc_sock_closed(fd);
     close(fd);
 }
 
@@ -910,7 +910,7 @@ bool web_start(void)
         {"/api/sys",    HTTP_GET,  h_sys},
         {"/*",          HTTP_GET,  h_app},       // keep last
     };
-#if JOHNNY
+#if MOTHERSHIP
     pc_register(h);                           // ws://<board>/ws: the PC brain (before the "/*" catch-all)
     bell_register(h);                         // /api/bell: strike + listen, for tuning the real bell
     eye_register(h);                          // /cam.jpg + /api/blobs: the PC sees through the ribbon camera

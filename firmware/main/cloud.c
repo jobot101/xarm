@@ -409,7 +409,7 @@ int cloud_intent(const char *heard, char *out, size_t n)
 
 void cloud_init(void)
 {
-#if CONFIG_XARM_JOHNNY
+#if CONFIG_XARM_MOTHERSHIP
     ESP_LOGI(TAG, "cloud ears: off on this build (the PC hears everything)");   // saves a 12 KB internal stack
     return;
 #endif
