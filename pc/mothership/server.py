@@ -73,7 +73,7 @@ class H(BaseHTTPRequestHandler):
         p = self.path.split("?")[0]
         p = "index.html" if p in ("/", "") else p.lstrip("/")
         f = os.path.normpath(os.path.join(UI, p))
-        if not f.startswith(UI) or not os.path.isfile(f): return self.send(404, b"not found", "text/plain")
+        if not f.startswith(UI + os.sep) or not os.path.isfile(f): return self.send(404, b"not found", "text/plain")
         self.send(200, open(f, "rb").read(), mimetypes.guess_type(f)[0] or "application/octet-stream")
 
     def do_POST(self):
@@ -84,10 +84,14 @@ class H(BaseHTTPRequestHandler):
                 except Exception: pass
             return self.proxy("POST")
         if self.path == "/actions/play":
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            try: body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            except ValueError: return self.send(400, json.dumps({"ok": False, "msg": "bad JSON"}).encode())
             import actions
-            threading.Thread(target=lambda: setattr(H, "last_action", actions.play(H.board, body.get("name", ""), body.get("speed", 0.5), log=lambda *a: None)), daemon=True).start()
-            return self.send(200, json.dumps({"ok": True, "msg": f"playing {body.get('name')}"}).encode())
+            name = body.get("name", "")
+            if not actions.find(name): return self.send(200, json.dumps({"ok": False, "msg": f"no action called {name!r}"}).encode())
+            if actions.playing(): return self.send(200, json.dumps({"ok": False, "msg": "another action is already playing"}).encode())
+            threading.Thread(target=lambda: setattr(H, "last_action", actions.play(H.board, name, body.get("speed", 0.5), log=lambda *a: None)), daemon=True).start()
+            return self.send(200, json.dumps({"ok": True, "msg": f"playing {name} (watch the arm; STOP ends it)"}).encode())
         self.send(404, b"not found", "text/plain")
 
 

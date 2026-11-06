@@ -49,13 +49,21 @@ def library() -> dict[str, str]:
     return out
 
 
+def _norm(s: str) -> str: return "".join(ch for ch in s.lower() if ch.isalnum())
+
+
 def find(name: str) -> str | None:
-    lib, key = library(), name.strip().lower()
+    """Exact match first (ignoring case, spaces and the degree sign), else the SHORTEST name containing the words:
+    "place left 45" -> "Place Left 45°", not "Grip and Place Left 45°"."""
+    lib, key = library(), _norm(name)
+    if not key: return None
     for n, f in lib.items():
-        if n.lower() == key: return f
-    for n, f in lib.items():
-        if key in n.lower(): return f
-    return None
+        if _norm(n) == key: return f
+    hits = [(len(n), f) for n, f in lib.items() if key in _norm(n)]
+    return min(hits)[1] if hits else None
+
+
+def playing() -> bool: return _lock.locked()
 
 
 def stop(): _stop.set()
@@ -86,7 +94,7 @@ def play(board: str, name: str, speed: float = 0.5, log=print) -> str:
         for k, (ms, pos) in enumerate(frames):
             if _stop.is_set(): return f"stopped after {k} of {len(frames)} frames"
             st = call("/api/state")
-            if st.get("state") not in ("idle", None) and k: return f"stopped: the arm started '{st.get('state')}'"
+            if k and st.get("busy"): return f"stopped: the arm started a job ({st.get('state')})"
             r = st.get("radar") or {}
             near = bool(r.get("present")) and 0 <= (r.get("distance_cm") if r.get("distance_cm") is not None else -1) < NEAR_CM
             goal = clamp(pos)

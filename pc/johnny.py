@@ -273,6 +273,7 @@ class Johnny:
         try:
             r = await asyncio.wait_for(fut, 5)
         except asyncio.TimeoutError:
+            self.replies.pop(i, None)
             return {"ok": False, "msg": "no answer"}
         print(f"   arm: {text} -> {r.get('msg')}")
         return r
@@ -289,27 +290,39 @@ class Johnny:
         return not self.radar or not self.radar_seen or self.present or time.time() - self.left_at < 120
 
     async def say(self, text):
+        """Speak one line. Lines queue up (never two streams interleaved on the socket); "stop" cancels the one
+        playing. The mic gate closes as soon as a line starts, so TTS latency can't let an utterance slip in."""
         if not text: return
-        q = asyncio.Queue()
-        def pump():                                   # the HTTP stream runs in a thread
+        if not hasattr(self, "_say_lock"): self._say_lock = asyncio.Lock()
+        async with self._say_lock:
+            self.talk_task = asyncio.current_task()
+            self.speaking_until = time.time() + 1.5               # provisional, until the first audio arrives
+            q = asyncio.Queue()
+            def pump():                                   # the HTTP stream runs in a thread
+                try:
+                    pre = os.path.join(HERE, "mothership", "lines", PRERENDERED.get(text, "-") + ".pcm")
+                    if os.path.exists(pre):               # a fixed line rendered ahead in Verna's voice: instant, no cloud
+                        self.loop.call_soon_threadsafe(q.put_nowait, open(pre, "rb").read()); return
+                    for c in self.voice.stream(text): self.loop.call_soon_threadsafe(q.put_nowait, c)
+                finally:
+                    self.loop.call_soon_threadsafe(q.put_nowait, None)
+            threading.Thread(target=pump, daemon=True).start()
+            t0, sent = time.time(), 0
             try:
-                pre = os.path.join(HERE, "mothership", "lines", PRERENDERED.get(text, "-") + ".pcm")
-                if os.path.exists(pre):               # a fixed line rendered ahead in Verna's voice: instant, no cloud
-                    self.loop.call_soon_threadsafe(q.put_nowait, open(pre, "rb").read()); return
-                for c in self.voice.stream(text): self.loop.call_soon_threadsafe(q.put_nowait, c)
+                while (c := await q.get()) is not None:
+                    for k in range(0, len(c), 4096):           # stay at most ~2 s ahead of the speaker
+                        part = c[k:k + 4096]
+                        ahead = sent / (RATE * 2) - (time.time() - t0)
+                        if ahead > 2: await asyncio.sleep(ahead - 2)
+                        await self.ws.send(part)
+                        sent += len(part)
+                        self.speaking_until = t0 + sent / (RATE * 2) + 0.6
+                print(f"   said {sent / (RATE * 2):.1f} s")
+            except asyncio.CancelledError:
+                self.speaking_until = 0
+                print(f"   cut off after {sent / (RATE * 2):.1f} s")
             finally:
-                self.loop.call_soon_threadsafe(q.put_nowait, None)
-        threading.Thread(target=pump, daemon=True).start()
-        t0, sent = time.time(), 0
-        while (c := await q.get()) is not None:
-            for k in range(0, len(c), 4096):           # stay at most ~2 s ahead of the speaker
-                part = c[k:k + 4096]
-                ahead = sent / (RATE * 2) - (time.time() - t0)
-                if ahead > 2: await asyncio.sleep(ahead - 2)
-                await self.ws.send(part)
-                sent += len(part)
-                self.speaking_until = t0 + sent / (RATE * 2) + 0.6
-        print(f"   said {sent / (RATE * 2):.1f} s")
+                self.talk_task = None
 
     def arm_words(self):
         s = self.state
@@ -344,7 +357,7 @@ class Johnny:
         if not heard:
             heard = "(said your name and nothing else)"
         try:
-            out = await self.loop.run_in_executor(None, self.brain.think, heard, self.arm_words())
+            out = await self.loop.run_in_executor(None, lambda: self.brain.think(heard, self.arm_words()))
         except Exception as e:
             print("brain error:", e)
             out = {"say": "Brain's down. Check LM Studio.", "actions": []}
@@ -355,7 +368,7 @@ class Johnny:
             r = await self.cmd(a)
             if r.get("ok"): await self.wait_arm()
         await talk
-        self.window_until = self.speaking_until + self.cfg["follow_up_s"]
+        self.window_until = max(self.speaking_until, time.time()) + self.cfg["follow_up_s"]
         await self.send(led="listen", listening=True)
 
     async def run(self):
@@ -402,12 +415,14 @@ class Johnny:
                     utt = self.ears.feed(m)
                     if utt: work.put_nowait(utt)
                     continue
-                e = json.loads(m)
+                try: e = json.loads(m)
+                except ValueError: continue                   # one bad frame mustn't drop the whole link
                 ev = e.get("ev")
                 if ev == "hello":
                     self.brain.moves = e.get("moves", [])
                     self.brain.slots = e.get("slots", []) if e.get("camera") else []
                     self.radar, self.present = bool(e.get("radar")), e.get("present", True)
+                    self.radar_seen = self.radar_seen or bool(self.present)
                     print(f"board: {e.get('name')} {e.get('version')} - moves {self.brain.moves} - eyes {self.brain.slots or 'off'}")
                     await self.send(volume=self.cfg["volume"])
                     asyncio.create_task(self.say("MotherShip online."))
@@ -415,13 +430,15 @@ class Johnny:
                     self.state = e
                 elif ev == "radar":
                     self.present = bool(e.get("present"))
-                    if self.present: self.radar_seen = True
-                    # a quiet hello when someone walks up (the board taps the chime too); at most every 3 minutes
-                    if self.present and not self.busy and time.time() - getattr(self, "greeted", 0) > 180:
-                        self.greeted = time.time()
-                        import random
-                        asyncio.create_task(self.say(random.choice(["Hello.", "Evening, friend.", "Welcome back.", "Hey there."])))
-                    else: self.left_at = time.time()
+                    if self.present:
+                        self.radar_seen = True
+                        # a quiet hello when someone walks up (the board taps the chime too); at most every 3 minutes
+                        if not self.busy and time.time() - getattr(self, "greeted", 0) > 180:
+                            self.greeted = time.time()
+                            import random
+                            asyncio.create_task(self.say(random.choice(["Hello.", "Evening, friend.", "Welcome back.", "Hey there."])))
+                    else:
+                        self.left_at = time.time()
                     print("radar:", "someone's here" if self.present else
                           "nobody - stop listening in 2 min unless someone shows up" if self.radar_seen else "nobody (hasn't seen anyone yet, still listening)")
                 elif ev == "cmd" and e.get("id") in self.replies:
@@ -430,6 +447,8 @@ class Johnny:
                 elif ev == "stop":
                     print("board heard STOP")
                     self.speaking_until = 0
+                    t = getattr(self, "talk_task", None)
+                    if t and not t.done(): t.cancel()
         finally:
             for t in tasks: t.cancel()
 

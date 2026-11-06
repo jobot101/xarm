@@ -17,6 +17,8 @@ import socket
 import time
 import urllib.request
 
+import asyncio
+
 from mcp.server.fastmcp import FastMCP
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -134,8 +136,7 @@ def radar_scan() -> str:
                        "ignored_clutter": len(r.get("ignored") or []), "ignore_zones_cm": r.get("zones") or []})
 
 
-@mcp.tool()
-def move_joints(gripper: int | None = None, wrist_twist: int | None = None, wrist: int | None = None,
+def _move_joints_sync(gripper: int | None = None, wrist_twist: int | None = None, wrist: int | None = None,
                 elbow: int | None = None, shoulder: int | None = None, base: int | None = None,
                 seconds: float | None = None) -> str:
     """Move one or more joints to absolute positions (0-1000). Leave a joint out to keep it where it is.
@@ -146,8 +147,7 @@ def move_joints(gripper: int | None = None, wrist_twist: int | None = None, wris
     return _move([w if w is not None else c for w, c in zip(want, now)], seconds)
 
 
-@mcp.tool()
-def go_to_pose(name: str) -> str:
+def _go_to_pose_sync(name: str) -> str:
     """Go to a taught pose: home, drop, give (hand-off spot), helper ("hold this" spot) or bell (chime strike point).
     Long moves are made in safe steps of at most 300 units per joint."""
     cfg = _call("/api/config")
@@ -170,7 +170,7 @@ def gripper(action: str = "open", position: int | None = None) -> str:
     if action in ("open", "close") and position is None:
         r = _call("/api/cmd", {"text": "open your hand" if action == "open" else "close your hand"})
         return r.get("msg", "ok")
-    return move_joints(gripper=position if position is not None else 500)
+    return _move_joints_sync(gripper=position if position is not None else 500)
 
 
 @mcp.tool()
@@ -209,12 +209,35 @@ def list_actions() -> str:
     return json.dumps({n: f"{len(actions.load(f))} frames, {sum(t for t, _ in actions.load(f)) / 1000:.1f} s" for n, f in lib.items()})
 
 
-@mcp.tool()
-def play_action(name: str, speed: float = 0.5) -> str:
+def _play_action_sync(name: str, speed: float = 0.5) -> str:
     """Play one of the Hiwonder action sequences by name (see list_actions). speed 0.1-1.0, default 0.5 (half speed).
     Positions are kept inside the joint limits, and it slows down further with someone close."""
     import actions
     return actions.play(BOARD, name, speed, log=lambda *a: None)
+
+
+@mcp.tool()
+async def move_joints(gripper: int | None = None, wrist_twist: int | None = None, wrist: int | None = None,
+                      elbow: int | None = None, shoulder: int | None = None, base: int | None = None,
+                      seconds: float | None = None) -> str:
+    """Move one or more joints to absolute positions (0-1000). Leave a joint out to keep it where it is.
+    Each joint moves at most 300 units per call, stays inside its limits, and the move takes at least
+    0.25 s per 100 units (longer if someone is close). Call arm_state first to see where it is."""
+    return await asyncio.to_thread(_move_joints_sync, gripper, wrist_twist, wrist, elbow, shoulder, base, seconds)
+
+
+@mcp.tool()
+async def go_to_pose(name: str) -> str:
+    """Go to a taught pose: home, drop, give (hand-off spot), helper ("hold this" spot) or bell (chime strike point).
+    Long moves are made in safe steps of at most 300 units per joint."""
+    return await asyncio.to_thread(_go_to_pose_sync, name)
+
+
+@mcp.tool()
+async def play_action(name: str, speed: float = 0.5) -> str:
+    """Play one of the Hiwonder action sequences by name (see list_actions). speed 0.1-1.0, default 0.5 (half speed).
+    Positions are kept inside the joint limits, and it slows down further with someone close. `stop` ends it."""
+    return await asyncio.to_thread(_play_action_sync, name, speed)
 
 
 @mcp.tool()

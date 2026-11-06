@@ -74,7 +74,7 @@ const card = (title, ...kids) => h("section", { class: "card" }, h("span", { cla
 let camTimer = null;
 function camLoop(img, note) {
   clearTimeout(camTimer);
-  const next = () => { camTimer = setTimeout(() => camLoop(img, note), 250); };
+  const next = () => { camTimer = setTimeout(() => camLoop(img, note), 400); };
   if (!document.body.contains(img)) return;
   const t = new Image();
   t.onload = () => { img.src = t.src; note.textContent = `camera ${S.cam && S.cam.ribbon || ""}: live`; next(); };
@@ -104,7 +104,7 @@ function chips() {
 }
 
 // ---- drive: hold a button to move
-let driving = null, driveBusy = false;
+let driving = null, driveBusy = false, driveLoop = false;
 function buildDrive(m) {
   const speed = h("input", { type: "range", min: 3, max: 30, value: 10, oninput: () => $("#spv").textContent = speed.value }), out = h("div", { class: "reply" });
   const pad = h("div", { class: "pad" });
@@ -112,8 +112,8 @@ function buildDrive(m) {
     pad.append(h("span", { class: "lab" }, name));
     for (const [txt, sign] of [[neg, -1], [pos, 1]]) {
       const b = h("button", { class: "ghost" }, txt);
-      const start = e => { e.preventDefault(); b.classList.add("held"); b.setPointerCapture && b.setPointerCapture(e.pointerId); driving = { axis, sign, speed, out }; driveTick(); };
-      const stop = () => { b.classList.remove("held"); driving = null; };
+      const start = e => { e.preventDefault(); b.classList.add("held"); b.setPointerCapture && b.setPointerCapture(e.pointerId); driving = { axis, sign, speed, out }; if (!driveLoop) { driveLoop = true; driveTick(); } };
+      const stop = () => { b.classList.remove("held"); if (driving) { driving = null; api("/api/drive", { base: 0, lift: 0, reach: 0, tilt: 0, twist: 0, grip: 0, ms: 120 }); } };
       b.addEventListener("pointerdown", start); b.addEventListener("pointerup", stop); b.addEventListener("pointercancel", stop); b.addEventListener("lostpointercapture", stop);
       pad.append(b);
     }
@@ -126,7 +126,7 @@ function buildDrive(m) {
       h("button", { class: "ghost", onclick: () => cmd("go home", out) }, "Go home")), out));
 }
 async function driveTick() {
-  if (!driving) return;
+  if (!driving) { driveLoop = false; return; }
   if (!driveBusy) {
     const { axis, sign, speed, out } = driving;
     driveBusy = true;
@@ -142,6 +142,7 @@ function buildJoints(m) {
     const r = h("input", { type: "range", min: 0, max: 1000, value: 500, "data-j": i });
     const v = h("span", { class: "val" }, "500");
     r.addEventListener("pointerdown", () => jDrag = i);
+    for (const ev of ["pointerup", "pointercancel"]) r.addEventListener(ev, () => setTimeout(() => { if (jDrag === i) jDrag = -1; }, 400));
     r.addEventListener("input", () => { v.textContent = r.value; if (Date.now() - jSent > 100) { jSent = Date.now(); api("/api/jog", { id: i + 1, pos: +r.value }); } });
     r.addEventListener("change", () => { api("/api/jog", { id: i + 1, pos: +r.value }).finally(() => jDrag = -1); });
     return h("div", { class: "slider" }, h("span", { class: "lab" }, name), r, v);
@@ -190,7 +191,7 @@ function buildTricks(m) {
 
 Make sure the arm has room to swing.`)) return;
         const r = await (await fetch("/actions/play", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: a.name, speed: $("#acspd").value / 100 }) })).json();
-        $("#acout").textContent = r.msg; } }, "Play"))) : [h("p", { class: "small-text muted" }, "No action files in johnny\mothership\actions.")]));
+        $("#acout").textContent = r.msg; } }, "Play"))) : [h("p", { class: "small-text muted" }, "No action files in johnny/mothership/actions.")]));
   }).catch(() => {});
 }
 let tricksSeen = "";
@@ -229,9 +230,9 @@ function buildChime(m) {
     if (!r.ok) return reply(out, "chime: " + (r.msg || "refused"));
     await new Promise(res => setTimeout(res, 600));
     const until = Date.now() + 40000;
-    while (Date.now() < until && S.state && S.state !== "idle") await new Promise(res => setTimeout(res, 300));
+    while (Date.now() < until && S.busy) await new Promise(res => setTimeout(res, 300));
     await new Promise(res => setTimeout(res, 1200));
-    const lv = await (await fetch(`/b/api/levels?since_ms=${Math.floor(r.t0_ms)}`)).json();
+    const lv = await (await fetch(`/b/api/levels?since_ms=${Math.floor(r.t0_ms || 0)}`)).json();
     reply(out, drawLevels(plot, lv, `${b.pattern}, strength ${$("#force").value}%, travel ${b.strength}%`));
   };
   m.append(card("Chime",
@@ -354,7 +355,7 @@ function syncSensors() {
 
 // ---- radar scope
 const FOV = 60;                                   // LD2450: +/-60 degrees
-let scopeData = null, scopeAt = 0, scopeLoop = null, trails = [[], [], []];
+let scopeData = null, scopeAt = 0, scopeLoop = null, trails = [];
 function radarPts(r) {
   if (!r || !r.present) return [];
   if (Array.isArray(r.pts) && r.pts.length) return r.pts.map(p => ({ x: p[0], y: p[1], v: p[2] || 0 }));
@@ -374,7 +375,11 @@ function startScope() {
     if (!cvs.length) return;
     scopeFetch();
     const pts = radarPts(scopeData || S.radar);
-    pts.forEach((p, i) => { const tr = trails[i] || (trails[i] = []); const last = tr[tr.length - 1];
+    pts.forEach(p => {                              // a point joins the trail whose newest point is closest (within 60 cm)
+      let tr = null, best = 60;
+      for (const t of trails) { const l = t[t.length - 1]; if (l) { const d = Math.hypot(l.x - p.x, l.y - p.y); if (d < best) { best = d; tr = t; } } }
+      if (!tr) { if (trails.length >= 3) trails.shift(); tr = []; trails.push(tr); }
+      const last = tr[tr.length - 1];
       if (!last || Math.hypot(last.x - p.x, last.y - p.y) > 2) { tr.push({ ...p, t: Date.now() }); if (tr.length > 40) tr.shift(); } });
     trails.forEach(tr => { while (tr.length && Date.now() - tr[0].t > 6000) tr.shift(); });
     cvs.forEach(c => drawScope(c, pts, t));
@@ -453,7 +458,8 @@ async function learnRoom() {
   const out = $("#zoneout");
   if (!confirm("Leave the room (or at least the radar's view) for 30 seconds after you press OK.\n\nEverything the radar sees while you're gone becomes an ignore zone.")) return;
   const seen = [], t0 = Date.now();
-  while (Date.now() - t0 < 30000) {
+  out.classList.add("busy-tool");
+  try { while (Date.now() - t0 < 30000) {
     out.textContent = `listening to the empty room… ${Math.ceil((30000 - (Date.now() - t0)) / 1000)} s`;
     try {
       const r = await (await fetch("/b/api/radar", { cache: "no-store" })).json();
@@ -464,6 +470,7 @@ async function learnRoom() {
     }
     await new Promise(res => setTimeout(res, 300));
   }
+  } finally { out.classList.remove("busy-tool"); }
   if (!seen.length) { out.textContent = "The room was empty: nothing to ignore."; return; }
   // cluster: points within 40 cm of a cluster's box join it; keep clusters seen in at least 10% of the samples
   const cl = [];
@@ -505,7 +512,7 @@ async function poll() {
     if (!r.ok) throw new Error(r.status);
     const first = !lastOk;
     S = await r.json(); lastOk = Date.now();
-    if (first) go(section);                    // the section was drawn before the board answered: redraw with real values
+    if (first && !document.querySelector(".busy-tool")) go(section);   // redraw with real values, unless a tool is mid-run
     const busy = S.busy || (S.state && S.state !== "idle");
     pill("#p-state", busy ? "working" : "done", S.state || "?");
     pill("#p-brain", S.brain && S.brain.pc ? "done" : "failed", S.brain && S.brain.pc ? "brain connected" : "no brain");
