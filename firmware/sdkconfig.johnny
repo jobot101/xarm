@@ -1,6 +1,6 @@
 # Johnny: shop helper, brain on the PC (pc.c). Layered on sdkconfig.defaults by CI.
 CONFIG_XARM_JOHNNY=y
-CONFIG_XARM_NAME="johnny"
+CONFIG_XARM_NAME="shop-mothership"
 CONFIG_XARM_UPDATE_URL="https://jobot101.github.io/xarm/fw/johnny/"
 # Eyes (eye.c): internal RAM was down to 12 KB free. WiFi/LWIP buffers go to PSRAM, the camera DMA buffer stays small.
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y

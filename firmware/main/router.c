@@ -112,8 +112,9 @@ int router_phrases(char out[][48], int max)
     ADD("robot stop");
     ADD("freeze robot");
 #if JOHNNY
-    // Johnny: the PC hears everything else; on board only the instant stop, which works with no PC at all
-    ADD("johnny stop"); ADD("stop johnny"); ADD("stop stop");
+    // Shop MotherShip (Johnny build): the PC hears everything else; on board only the instant stop, which works
+    // with no PC at all
+    ADD("mother ship stop"); ADD("stop mother ship"); ADD("stop stop");
     return n;
 #endif
     ADD("go home");

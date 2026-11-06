@@ -1,4 +1,4 @@
-"""johnny_app.py — Johnny's desktop app: see what he sees, tune the bell and the mics, send him commands.
+"""johnny_app.py — Shop MotherShip's desktop app: see what it sees, tune the bell and the mics, send him commands.
 
     python johnny_app.py                     # board from johnny.json (johnny.local)
     python johnny_app.py --board 192.168.1.27
@@ -25,8 +25,8 @@ BG, PANEL, INK, DIM, BRASS, RED, BLUE, OK = "#211a14", "#2d241c", "#f1e6d2", "#a
 
 
 def load_board():
-    try: return json.load(open(os.path.join(HERE, "johnny.json"))).get("board", "johnny.local")
-    except (OSError, ValueError): return "johnny.local"
+    try: return json.load(open(os.path.join(HERE, "johnny.json"))).get("board", "shop-mothership.local")
+    except (OSError, ValueError): return "shop-mothership.local"
 
 
 def ring_stats(db, pre):
@@ -77,7 +77,7 @@ class App:
     def __init__(self, root, board):
         self.root, self.b = root, board
         self.st, self.img, self.cam_err, self.busy = {}, None, "", False
-        root.title("Johnny")
+        root.title("Shop MotherShip")
         root.configure(bg=BG)
         root.minsize(980, 640)
         s = ttk.Style(); s.theme_use("clam")
@@ -102,7 +102,7 @@ class App:
         right = ttk.Frame(body); right.grid(row=0, column=1, sticky="nsew")
 
         # ---- eyes
-        eyes = ttk.LabelFrame(left, text="What Johnny sees", padding=8); eyes.pack(fill="x")
+        eyes = ttk.LabelFrame(left, text="What MotherShip sees", padding=8); eyes.pack(fill="x")
         # a pixel-sized placeholder: a Label with no image measures width/height in text characters
         self.tkimg = ImageTk.PhotoImage(Image.new("RGB", VIEW, "black"))
         self.cam = tk.Label(eyes, image=self.tkimg, bg="black", bd=0); self.cam.pack()
@@ -120,7 +120,7 @@ class App:
         self.build_quick(tabs["Quick"]); self.build_drive(tabs["Drive"]); self.build_joints(tabs["Joints"])
         self.build_teach(tabs["Teach"]); self.build_tricks(tabs["Tricks"]); self.build_all(tabs["All commands"])
         row = ttk.Frame(left); row.pack(fill="x", pady=(6, 0))
-        ttk.Label(row, text="Say to Johnny").pack(side="left", padx=(0, 6))
+        ttk.Label(row, text="Say to MotherShip").pack(side="left", padx=(0, 6))
         self.say = ttk.Entry(row); self.say.pack(side="left", fill="x", expand=True)
         self.say.bind("<Return>", lambda e: self.send(self.say.get()))
         ttk.Button(row, text="Send", command=lambda: self.send(self.say.get())).pack(side="left", padx=(6, 0))
@@ -160,7 +160,7 @@ class App:
         ttk.Button(r, text="Set gain", command=self.set_gain).pack(side="left")
         ttk.Button(r, text="Level to my voice (talk 5 s)", command=self.level_voice).pack(side="left", padx=6)
         self.dual = tk.BooleanVar()
-        ttk.Checkbutton(mic, text="Use both mics (restarts Johnny)", variable=self.dual, command=self.set_dual).pack(anchor="w", pady=(6, 0))
+        ttk.Checkbutton(mic, text="Use both mics (restarts MotherShip)", variable=self.dual, command=self.set_dual).pack(anchor="w", pady=(6, 0))
         self.mic_note = ttk.Label(mic, text="", style="Dim.TLabel", wraplength=360); self.mic_note.pack(anchor="w", pady=(4, 0))
 
         self.synced = False
@@ -259,7 +259,7 @@ class App:
     # ---------------------------------------------------------------- control tabs
     def act(self, path, body, what, confirm=None):
         """POST to the board and show its answer under the tabs."""
-        if confirm and not messagebox.askyesno("Johnny", confirm): return
+        if confirm and not messagebox.askyesno("Shop MotherShip", confirm): return
         self.reply.config(text=f"{what} ...")
         self.bg(lambda: self.b.post(path, body), lambda r: self.reply.config(
             text=f"{what}: " + (str(r) if isinstance(r, Exception) else r.get("msg", "ok" if r.get("ok") else "failed"))))
@@ -354,14 +354,14 @@ class App:
         ttk.Button(top, text="Save", command=lambda: self.act("/api/moves", {"action": "save", "name": self.trick_name.get().strip() or "trick"}, "saved")).pack(side="left", padx=2)
         ttk.Button(top, text="Cancel", command=lambda: self.act("/api/moves", {"action": "cancel"}, "cancelled")).pack(side="left", padx=2)
         self.rec_lbl = ttk.Label(f, text="Record, move the arm (Limp it and pose by hand, or Drive), then Save with a name. "
-                                 "Then \"Johnny, do the <name>\" plays it.", style="Dim.TLabel", wraplength=520)
+                                 "Then \"MotherShip, do the <name>\" plays it.", style="Dim.TLabel", wraplength=520)
         self.rec_lbl.pack(anchor="w", pady=(6, 4))
         self.trick_box = ttk.Frame(f); self.trick_box.pack(fill="x")
         self.tricks_seen = None
 
     def build_all(self, f):
         top = ttk.Frame(f); top.pack(fill="x")
-        ttk.Label(top, text="Everything Johnny can do (tap to run):", style="Dim.TLabel").pack(side="left")
+        ttk.Label(top, text="Everything MotherShip can do (tap to run):", style="Dim.TLabel").pack(side="left")
         ttk.Button(top, text="Refresh", command=self.load_phrases).pack(side="right")
         cv = tk.Canvas(f, bg=BG, highlightthickness=0, height=150); sb = ttk.Scrollbar(f, orient="vertical", command=cv.yview)
         self.phr = ttk.Frame(cv); self.phr.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
@@ -512,7 +512,7 @@ class App:
 
     def set_dual(self):
         on = self.dual.get()
-        if not messagebox.askyesno("Mics", f"{'Use both mics' if on else 'Use one mic'}? Johnny restarts (about 15 s)."):
+        if not messagebox.askyesno("Mics", f"{'Use both mics' if on else 'Use one mic'}? MotherShip restarts (about 15 s)."):
             self.dual.set(not on); return
         self.bg(lambda: self.b.voice(dual=int(on)), lambda r: self.mic_note.config(text=str(r) if isinstance(r, Exception) else r.get("msg", "")))
 

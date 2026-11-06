@@ -1,8 +1,8 @@
-"""johnny.py — Johnny's brain, running on the shop PC.
+"""johnny.py — Shop MotherShip's brain (the Johnny firmware build), running on the shop PC.
 
 The arm board (Johnny build) is ears, mouth and hands; this is everything else:
   mic audio from the board -> voice detector -> Whisper (local, faster-whisper)
-  -> "Johnny ..." -> the local model in LM Studio picks what to say + which arm commands to run
+  -> "MotherShip ..." -> the local model in LM Studio picks what to say + which arm commands to run
   -> ElevenLabs speaks it in Johnny's voice (Windows' own voice if that's down) -> back to the board's speaker.
 
     python johnny.py                 # board at johnny.local
@@ -20,7 +20,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 CFG_PATH = os.path.join(HERE, "johnny.json")
 DEFAULTS = {
-    "board": "johnny.local",
+    "board": "shop-mothership.local",
     "lmstudio_url": "http://localhost:1234/v1",
     "model": "",                          # blank = whatever LM Studio has loaded
     "whisper_model": "auto",              # auto: large-v3-turbo on a GPU, small.en on CPU
@@ -31,7 +31,8 @@ DEFAULTS = {
     "follow_up_s": 10,                    # after he answers, no need to say "Johnny" for this long
 }
 RATE = 16000
-WAKE = re.compile(r"\b(hey |ok |okay )?(jo(h)?n+(y|ie|ey|i)?|johnny)\b[,.!?]?", re.I)
+# "MotherShip": Whisper writes it as "MotherShip", "Mothership", "mother ship" or "Shop MotherShip"
+WAKE = re.compile(r"\b(hey |ok |okay )?(shop )?mother[\s-]?ship\b[,.!?]?", re.I)
 
 # Plain router text the board understands (firmware/main/router.c). The model may only pick from these.
 COMMANDS = {
@@ -51,10 +52,9 @@ COMMANDS = {
     "stop":             "stop everything right now",
 }
 
-PERSONA = """You are Johnny, the shop helper at Ragamuffin Workshop in McCoysville, Pennsylvania: a small six-joint
-robot arm on the bench, with a deep, unhurried, plainspoken voice. You're the man in black from the old records
-come back as a workshop hand: dry humor, a little gravel, a lot of patience, respect for honest work. You call
-people "friend" now and then, never overdo it. You never say your last name, and you never say "Cash" at all.
+PERSONA = """You are Shop MotherShip, MotherShip for short: the robot that runs the bench at Ragamuffin Workshop in
+McCoysville, Pennsylvania, a small six-joint arm with a calm, unhurried, plainspoken voice. Dry humor, a lot of
+patience, respect for honest work. You call people "friend" now and then, never overdo it.
 
 You talk OUT LOUD through a small speaker in a working shop, and you are a man of very few words. Most of the
 time say nothing at all: leave "say" empty and just do the job. When a word helps, use two to five, like
@@ -231,7 +231,7 @@ class Ears:
         # lines from its own prompt ("Put it down."). Low-confidence segments are dropped for the same reason.
         segs, _ = self.model.transcribe(x, language="en", beam_size=1, vad_filter=True, condition_on_previous_text=False,
                                         vad_parameters={"min_silence_duration_ms": 300},
-                                        initial_prompt="Johnny, hold this for me. Grab it. Let go. A little left. Put it down.")
+                                        initial_prompt="MotherShip, hold this for me. Grab it. Let go. A little left. Put it down.")
         return " ".join(s.text for s in segs if s.no_speech_prob < 0.5 and s.avg_logprob > -0.9).strip()
 
 
@@ -315,7 +315,7 @@ class Johnny:
         except Exception as e:
             print("brain error:", e)
             out = {"say": "Brain's down. Check LM Studio.", "actions": []}
-        print(f"   johnny: {out['say']}  {out['actions']}")
+        print(f"   mothership: {out['say']}  {out['actions']}")
         await self.send(led="idle")
         talk = asyncio.create_task(self.say(out["say"]))
         for a in out["actions"]:
@@ -397,7 +397,7 @@ class Johnny:
 
 def text_mode(cfg):
     b = Brain(cfg)
-    print("type to Johnny (ctrl-c to quit)")
+    print("type to MotherShip (ctrl-c to quit)")
     while True:
         try: t = input("> ")
         except (EOFError, KeyboardInterrupt): return
