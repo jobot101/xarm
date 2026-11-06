@@ -272,7 +272,8 @@ class Johnny:
 
     def someone(self):
         """Is anybody at the bench? Without a radar reading we understand, always assume so."""
-        return not self.radar or not self.radar_seen or self.present or time.time() - self.left_at < 10
+        # the LD2450 tracks moving people and loses someone standing still, so "nobody" needs a long grace period
+        return not self.radar or not self.radar_seen or self.present or time.time() - self.left_at < 120
 
     async def say(self, text):
         if not text: return
@@ -383,7 +384,7 @@ class Johnny:
                     if self.present: self.radar_seen = True
                     else: self.left_at = time.time()
                     print("radar:", "someone's here" if self.present else
-                          "nobody - not listening" if self.radar_seen else "nobody (hasn't seen anyone yet, still listening)")
+                          "nobody - stop listening in 2 min unless someone shows up" if self.radar_seen else "nobody (hasn't seen anyone yet, still listening)")
                 elif ev == "cmd" and e.get("id") in self.replies:
                     f = self.replies.pop(e["id"])
                     if not f.done(): f.set_result(e)
