@@ -6,7 +6,7 @@ if not exist .venv (
   echo Setting up the brain...
   py -3 -m venv .venv || python -m venv .venv
   .venv\Scripts\python -m pip install --upgrade pip
-  .venv\Scripts\pip install -r requirements.txt
+  .venv\Scripts\python -m pip install -r requirements.txt
 )
 .venv\Scripts\python brain.py %*
 pause

@@ -261,7 +261,7 @@ class Ears:
 
 
 # ------------------------------------------------------------------ the link to the board
-class Brain:
+class Runner:
     def __init__(self, cfg, board):
         self.cfg, self.board = cfg, board
         self.brain, self.voice, self.ears = Brain(cfg), Voice(cfg), Ears(cfg)
@@ -491,4 +491,4 @@ if __name__ == "__main__":
     a = ap.parse_args()
     cfg = load_cfg()
     if a.text: text_mode(cfg); sys.exit()
-    asyncio.run(Brain(cfg, a.board or cfg["board"]).run())
+    asyncio.run(Runner(cfg, a.board or cfg["board"]).run())
