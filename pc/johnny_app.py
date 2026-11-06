@@ -6,7 +6,7 @@
 Talks to the board's web API only (/api/state, /cam.jpg, /api/bell, /api/voice, /api/cmd), so it runs alongside
 johnny.py (the brain) and eye.py (the color finder) without getting in their way. Needs: requests, pillow.
 """
-import argparse, io, json, os, statistics, threading, time
+import argparse, io, json, os, socket, statistics, threading, time
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -41,12 +41,31 @@ def ring_stats(db, pre):
     return {"floor": floor, "peak": peak, "rise": peak - floor, "ring_ms": ring * 16, "clip": peak > -1.0}
 
 
+def resolve(host):
+    """The board's address. Windows often can't look up "johnny.local" (mDNS), so the last address that worked is
+    kept in board_ip.txt and used when the name doesn't resolve."""
+    cache = os.path.join(HERE, "board_ip.txt")
+    try:
+        ip = socket.gethostbyname(host)
+        if not host.replace(".", "").isdigit():
+            with open(cache, "w") as f: f.write(ip)
+        return ip
+    except OSError:
+        try: return open(cache).read().strip() or host
+        except OSError: return host
+
+
 class Board:
     def __init__(self, host):
-        self.base = "http://" + host
+        self.host = host
+        self.base = "http://" + resolve(host)
         self.s = requests.Session()
 
-    def state(self): return self.s.get(self.base + "/api/state", timeout=6).json()
+    def state(self):
+        try: return self.s.get(self.base + "/api/state", timeout=6).json()
+        except requests.ConnectionError:
+            self.base = "http://" + resolve(self.host)      # the board may have a new address: look again
+            raise
     def jpg(self): return self.s.get(self.base + "/cam.jpg", timeout=4)
     def post(self, path, body, timeout=8): return self.s.post(self.base + path, json=body, timeout=timeout).json()
     def cmd(self, text): return self.post("/api/cmd", {"text": text})
