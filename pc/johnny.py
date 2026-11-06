@@ -175,6 +175,14 @@ class Ears:
     FRAME = 480                           # 30 ms
 
     def __init__(self, cfg):
+        # Whisper's GPU engine needs cuBLAS 12 + cuDNN 9 DLLs; reuse the copies Ollama and ComfyUI already have
+        # (same fix as shop-brain/ai/server/voice.py). Missing folders are skipped -> CPU fallback below.
+        for d in cfg.get("cuda_dll_dirs") or [
+                os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\lib\ollama\cuda_v12"),
+                r"C:\Dev\ComfyUI\python_embeded\Lib\site-packages\torch\lib"]:
+            if os.path.isdir(d):
+                os.add_dll_directory(d)
+                os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
         import webrtcvad
         from faster_whisper import WhisperModel
         self.vad = webrtcvad.Vad(2)
