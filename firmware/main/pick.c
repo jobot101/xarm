@@ -1020,11 +1020,10 @@ static void rest_pose(uint16_t p[NSERVO], float lift_k)
     p[5] = clamp_pos(g_cfg.home[5] + (int)(s_face * FACE_MAX));
     if (s_reach_k > 0.01f) {                                 // someone nearby: reach out toward them (base already faces them)
         for (int i = 1; i < 5; i++) p[i] = clamp_pos(p[i] + (int)(g_reach[i] * s_reach_k));
-        if (s_reach_k >= 0.3f && !s_holding) {               // ...with an open hand that flexes a little each breath
-            static bool flex;
-            flex = !flex;
+        if (s_reach_k >= 0.3f && !s_holding) {               // ...with an open hand, flexing only now and then, and only a little
+            static int breath;
             int span = (int)g_cfg.grip_close - (int)g_cfg.grip_open;
-            p[0] = clamp_pos(g_cfg.grip_open + (flex ? span / 4 : 0));
+            p[0] = clamp_pos(g_cfg.grip_open + (++breath % 3 == 0 ? span / 10 : 0));
         }
     }
     if (s_listen_pose) {
