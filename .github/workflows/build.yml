@@ -245,6 +245,9 @@ jobs:
         run: |
           sudo chown -R "$USER" firmware/build
           grep -q "CONFIG_XARM_JOHNNY=y" firmware/build/../sdkconfig || { echo "::error::Johnny overlay not applied"; exit 1; }
+          grep -q "CONFIG_SCCB_HARDWARE_I2C_DRIVER_NEW=y" firmware/sdkconfig || { echo "::error::camera SCCB on the legacy I2C driver (aborts at boot)"; exit 1; }
+          grep -q "CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y" firmware/sdkconfig || { echo "::error::WiFi buffers not in PSRAM"; exit 1; }
+          grep -E "CAMERA_DMA|SCCB" firmware/sdkconfig || true
           B=firmware/build; R=johnny; mkdir -p $R
           cp $B/bootloader/bootloader.bin $B/partition_table/partition-table.bin $B/ota_data_initial.bin $B/xarm-voice.bin $R/
           cp $B/srmodels/srmodels.bin $R/

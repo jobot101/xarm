@@ -56,11 +56,12 @@ robot arm on the bench, with a deep, unhurried, plainspoken voice. You're the ma
 come back as a workshop hand: dry humor, a little gravel, a lot of patience, respect for honest work. You call
 people "friend" now and then, never overdo it. You never say your last name, and you never say "Cash" at all.
 
-You talk OUT LOUD through a small speaker in a working shop, so: one or two short sentences, plain words,
-no lists, no emoji, no stage directions, no markdown. Numbers in words when spoken naturally.
+You talk OUT LOUD through a small speaker in a working shop, and you are a man of very few words. Most of the
+time say nothing at all: leave "say" empty and just do the job. When a word helps, use two to five, like
+"Got it." or "Can't lift that." A question gets one short sentence, never more. No lists, no emoji, no stage
+directions, no markdown, no small talk, no asking how they are. Numbers in words when spoken naturally.
 
-You are a real arm. What you can do is ONLY the actions listed. You have no camera: you can't see, so don't
-claim to. You're small: light parts only, about the weight of a phone. Never hold anything sharp, hot or
+You are a real arm. What you can do is ONLY the actions listed. {sight} You're small: light parts only, about the weight of a phone. Never hold anything sharp, hot or
 spinning near someone's hand; say so plainly. When someone asks you to hold something, use "hold this for me",
 then "grab it" once they say it's in your hand. "a little ..." nudges are for fine positioning.
 
@@ -86,6 +87,7 @@ class Brain:
         self.rq, self.url, self.model = requests, cfg["lmstudio_url"].rstrip("/"), cfg["model"]
         self.history = deque(maxlen=12)
         self.moves = []
+        self.slots = []                   # colors the camera can pick, from the board's hello (empty = no eyes)
 
     def _model(self):
         if not self.model:
@@ -96,9 +98,13 @@ class Brain:
 
     def think(self, heard, arm_state):
         cmds = dict(COMMANDS)
+        for s in self.slots:
+            cmds[f"pick up the {s}"] = f"find the {s} thing on the mat with the camera, grab it and lift it"
+        sight = (f"You have a camera over the mat: you can find and pick up {' and '.join(self.slots)} things, nothing else."
+                 if self.slots else "You have no camera: you can't see, so don't claim to.")
         for m in self.moves: cmds[f"do the {m}"] = f"play the recorded move '{m}'"
         menu = "\n".join(f'- "{k}": {v}' for k, v in cmds.items())
-        sys_p = (PERSONA + f"\n\nActions (run in order, at most 3):\n{menu}\n\nThe arm right now: {arm_state}.\n"
+        sys_p = (PERSONA.replace("{sight}", sight) + f"\n\nActions (run in order, at most 3):\n{menu}\n\nThe arm right now: {arm_state}.\n"
                  'Reply as JSON: {"say": "<what you say out loud>", "actions": ["<action>", ...]}')
         schema = {"type": "object", "additionalProperties": False, "required": ["say", "actions"], "properties": {
             "say": {"type": "string"},
@@ -213,7 +219,7 @@ class Ears:
     def hear(self, pcm):
         x = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768
         segs, _ = self.model.transcribe(x, language="en", beam_size=1, vad_filter=False, condition_on_previous_text=False,
-                                        initial_prompt="Johnny, hold this for me. Grab it. Let go. A little left. Put it down.")
+                                        initial_prompt="Johnny, hold this for me. Grab it. Let go. A little left. Put it down. Pick up the red.")
         return " ".join(s.text for s in segs if s.no_speech_prob < 0.6).strip()
 
 
@@ -289,7 +295,7 @@ class Johnny:
             out = await self.loop.run_in_executor(None, self.brain.think, heard, self.arm_words())
         except Exception as e:
             print("brain error:", e)
-            out = {"say": "My head's not on straight right now. Check LM Studio on the PC.", "actions": []}
+            out = {"say": "Brain's down. Check LM Studio.", "actions": []}
         print(f"   johnny: {out['say']}  {out['actions']}")
         await self.send(led="idle")
         talk = asyncio.create_task(self.say(out["say"]))
@@ -348,9 +354,9 @@ class Johnny:
                 ev = e.get("ev")
                 if ev == "hello":
                     self.brain.moves = e.get("moves", [])
-                    print(f"board: {e.get('name')} {e.get('version')} - moves {self.brain.moves}")
+                    self.brain.slots = e.get("slots", []) if e.get("camera") else []
+                    print(f"board: {e.get('name')} {e.get('version')} - moves {self.brain.moves} - eyes {self.brain.slots or 'off'}")
                     await self.send(volume=self.cfg["volume"])
-                    asyncio.create_task(self.say("Johnny's here."))
                 elif ev == "state":
                     self.state = e
                 elif ev == "cmd" and e.get("id") in self.replies:

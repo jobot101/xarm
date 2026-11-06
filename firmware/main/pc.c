@@ -18,6 +18,7 @@
 #include "pick.h"
 #include "moves.h"
 #include "cam.h"
+#include "store.h"
 #include "fx.h"
 
 static const char *TAG = "pc";
@@ -90,6 +91,8 @@ static void hello(void)
     cJSON_AddStringToObject(j, "version", esp_app_get_description()->version);
     cJSON_AddNumberToObject(j, "rate", AUDIO_RATE);
     cJSON_AddBoolToObject(j, "camera", cam_enabled());
+    cJSON *sl = cJSON_AddArrayToObject(j, "slots");    // colors it can pick: "pick up the <slot>"
+    for (int i = 0; i < NSLOT; i++) if (g_cfg.slot_name[i][0]) cJSON_AddItemToArray(sl, cJSON_CreateString(g_cfg.slot_name[i]));
     cJSON *m = cJSON_AddArrayToObject(j, "moves");      // recorded tricks: "do the <name>"
     for (int i = 0; i < MOVE_MAX; i++) if (moves_name(i)[0]) cJSON_AddItemToArray(m, cJSON_CreateString(moves_name(i)));
     send_json(j);

@@ -28,6 +28,7 @@
 #include "sdkconfig.h"
 #include "audio.h"
 #include "school.h"
+#include "eye.h"
 #include "pc.h"
 #include <unistd.h>
 
@@ -126,6 +127,7 @@ static esp_err_t h_state(httpd_req_t *r)
     cJSON *cam = cJSON_AddObjectToObject(j, "cam");
     cJSON_AddBoolToObject(cam, "enabled", cam_enabled());
     cJSON_AddBoolToObject(cam, "ok", cam_ok());
+    cJSON_AddStringToObject(cam, "ribbon", eye_sensor());
     cam_raw_hex(buf, sizeof buf);
     cJSON_AddStringToObject(cam, "raw", buf);
     cJSON *slots = cJSON_AddArrayToObject(cam, "slots");
@@ -405,7 +407,8 @@ static esp_err_t h_i2c(httpd_req_t *r)
     cam_scan(list, sizeof list);
     cJSON *j = cJSON_CreateObject();
     cJSON_AddStringToObject(j, "found", list);
-    cJSON_AddBoolToObject(j, "cam", strstr(list, "0x52") != NULL);
+    cJSON_AddBoolToObject(j, "cam", strstr(list, "0x52") != NULL || eye_ok());
+    cJSON_AddStringToObject(j, "ribbon", eye_sensor());
     char *txt = cJSON_PrintUnformatted(j);
     cJSON_Delete(j);
     httpd_resp_set_type(r, "application/json");
@@ -775,6 +778,7 @@ bool web_start(void)
     };
 #if JOHNNY
     pc_register(h);                           // ws://<board>/ws: the PC brain (before the "/*" catch-all)
+    eye_register(h);                          // /cam.jpg + /api/blobs: the PC sees through the ribbon camera
 #endif
     for (size_t i = 0; i < sizeof routes / sizeof *routes; i++) httpd_register_uri_handler(h, &routes[i]);
     ESP_LOGI(TAG, "web up on :80");

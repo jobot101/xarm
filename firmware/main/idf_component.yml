@@ -4,3 +4,4 @@ dependencies:
   espressif/esp_codec_dev: "~1.6.2"
   espressif/mdns: "^1.8.0"
   espressif/led_strip: "~3.0.1"
+  espressif/esp32-camera: "^2.0.15"   # Johnny: the board's ribbon (DVP) camera, eye.c

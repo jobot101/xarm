@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "eye.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -14,6 +16,8 @@ static box_t s_box[2];
 static bool s_seen[2];
 static uint8_t s_raw[2][CAM_BYTES];
 static volatile bool s_ok;
+static bool s_ext;                       // Johnny: blobs come from the PC, not the I2C module
+static volatile int64_t s_feed_us;
 
 static void task(void *arg)
 {
@@ -60,6 +64,9 @@ esp_err_t cam_init(i2c_master_bus_handle_t bus)
     if (nvs_open("xarm", NVS_READONLY, &h) == ESP_OK) { nvs_get_u8(h, "cam_on", &v); nvs_close(h); }
     s_enabled = v;
     if (!s_enabled) { ESP_LOGI(TAG, "camera switched off"); return ESP_OK; }
+#if CONFIG_XARM_JOHNNY
+    if (eye_init(bus)) { s_ext = true; ESP_LOGI(TAG, "ribbon camera %s: the PC finds the colors", eye_sensor()); return ESP_OK; }
+#endif
     i2c_device_config_t d = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = CAM_ADDR,
@@ -77,10 +84,20 @@ bool cam_get(int slot, box_t *out)
 {
     if (slot < 0 || slot > 1) return false;
     *out = s_box[slot];
-    return s_ok && s_seen[slot];
+    return cam_ok() && s_seen[slot];
 }
 
-bool cam_ok(void) { return s_ok; }
+bool cam_ok(void) { return s_ext ? s_feed_us && esp_timer_get_time() - s_feed_us < 1500000 : s_ok; }
+
+void cam_feed(int slot, const box_t *b, bool seen)
+{
+    if (slot < 0 || slot > 1) return;
+    s_box[slot] = *b;
+    s_seen[slot] = seen;
+    const int16_t v[CAM_BYTES] = { b->x, b->y, b->w, b->h };
+    for (int i = 0; i < CAM_BYTES; i++) s_raw[slot][i] = (uint8_t)(v[i] < 0 ? 0 : v[i] > 255 ? 255 : v[i]);
+    s_feed_us = esp_timer_get_time();
+}
 
 void cam_raw_hex(char *out, size_t n)
 {

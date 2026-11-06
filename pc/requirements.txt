@@ -2,6 +2,7 @@
 websockets>=12
 requests
 numpy
+pillow
 faster-whisper>=1.1
 webrtcvad-wheels
 pyttsx3

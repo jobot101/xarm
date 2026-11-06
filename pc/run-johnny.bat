@@ -8,5 +8,8 @@ if not exist .venv (
   .venv\Scripts\python -m pip install --upgrade pip
   .venv\Scripts\pip install -r requirements.txt
 )
+rem eyes: finds colors in the board's camera pictures (eye.py), in its own window
+if not exist .venv\Lib\site-packages\PIL .venv\Scripts\pip install pillow
+start "Johnny eyes" /min .venv\Scripts\python eye.py
 .venv\Scripts\python johnny.py %*
 pause
