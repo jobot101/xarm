@@ -241,6 +241,21 @@ async def play_action(name: str, speed: float = 0.5) -> str:
 
 
 @mcp.tool()
+def list_pc_actions() -> str:
+    """The fixed menu of things MotherShip may run on the shop PC (each is a script Joseph put in the pc_actions
+    folder): name -> what it does. Only these can run; there is no general shell."""
+    import pc_actions
+    return json.dumps({k: v["description"] for k, v in pc_actions.menu().items()})
+
+
+@mcp.tool()
+async def run_pc_action(name: str) -> str:
+    """Run one action from list_pc_actions by name, on the shop PC. Returns what it printed (a few lines)."""
+    import pc_actions
+    return await asyncio.to_thread(pc_actions.run, name)
+
+
+@mcp.tool()
 def stop() -> str:
     """Stop the arm immediately (always allowed)."""
     try:

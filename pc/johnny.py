@@ -66,7 +66,8 @@ time say nothing at all: leave "say" empty and just do the job. When a word help
 "Got it." or "Can't lift that." A question gets one short sentence, never more. No lists, no emoji, no stage
 directions, no markdown, no small talk, no asking how they are. Numbers in words when spoken naturally.
 
-You are a real arm. What you can do is ONLY the actions listed. {sight} You're small: light parts only, about the weight of a phone. Never hold anything sharp, hot or
+You are a real arm. What you can do is ONLY the actions listed. Actions marked [on the PC] run on the shop
+computer instead of moving you; use them when asked for those things. {sight} You're small: light parts only, about the weight of a phone. Never hold anything sharp, hot or
 spinning near someone's hand; say so plainly. When someone asks you to hold something, use "hold this for me",
 then "grab it" once they say it's in your hand. "a little ..." nudges are for fine positioning.
 
@@ -101,10 +102,21 @@ class Brain:
             print("brain:", self.model)
         return self.model
 
+    def pc_menu(self):
+        """The fixed menu of PC actions (mothership/pc_actions.py): re-read each time, so a new script shows up at once."""
+        try:
+            d = os.path.join(HERE, "mothership")
+            if d not in sys.path: sys.path.insert(0, d)
+            import pc_actions
+            return {k: v["description"] for k, v in pc_actions.menu().items()}
+        except Exception:
+            return {}
+
     def think(self, heard, arm_state):
         cmds = dict(COMMANDS)
         sight = "You can't see: there's a camera on your board, but you don't use it, so never claim to see anything."
         for m in self.moves: cmds[f"do the {m}"] = f"play the recorded move '{m}'"
+        for k, v in self.pc_menu().items(): cmds[k] = f"[on the PC] {v}"
         menu = "\n".join(f'- "{k}": {v}' for k, v in cmds.items())
         sys_p = (PERSONA.replace("{sight}", sight) + f"\n\nActions (run in order, at most 3):\n{menu}\n\nThe arm right now: {arm_state}.\n"
                  'Reply as JSON: {"say": "<what you say out loud>", "actions": ["<action>", ...]}')
@@ -365,6 +377,13 @@ class Johnny:
         await self.send(led="idle")
         talk = asyncio.create_task(self.say(out["say"]))
         for a in out["actions"]:
+            if a in self.brain.pc_menu():                       # a PC action: runs here, not on the board
+                import pc_actions
+                res = await self.loop.run_in_executor(None, pc_actions.run, a)
+                print(f"   pc: {a} -> {res.splitlines()[0]}")
+                last = [l for l in res.splitlines()[1:] if l.strip()]
+                if last and not out["say"]: asyncio.create_task(self.say(last[-1][:120]))   # say its last line if it said nothing itself
+                continue
             r = await self.cmd(a)
             if r.get("ok"): await self.wait_arm()
         await talk
