@@ -129,7 +129,11 @@ static void presence_tick(void)
 {
     int away = radar_away_s();                 // -1: no radar reading we understand -> act as if someone's here
     bool here = away <= 0;
-    if (here != s_here) { s_here = here; radar_event(here); }
+    if (here != s_here) {
+        s_here = here;
+        radar_event(here);
+        if (here) pick_attention();            // someone walked up: perk up (wakes him from a nap)
+    }
     bool rest = away >= REST_AFTER_S;
     if (rest != s_resting) { s_resting = rest; eye_pause(rest); fx_away(rest); }
     if (here) s_put_down = false;
