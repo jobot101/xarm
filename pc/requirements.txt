@@ -1,0 +1,8 @@
+# Johnny's PC brain (johnny.py) + the USB flasher (flash_johnny.py)
+websockets>=12
+requests
+numpy
+faster-whisper>=1.1
+webrtcvad-wheels
+pyttsx3
+esptool
