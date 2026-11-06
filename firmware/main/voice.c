@@ -37,6 +37,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/idf_additions.h"
+#include "freertos/queue.h"
 #include "sdkconfig.h"
 
 #define MAX_PHRASES 200          // MultiNet7 takes up to 300
@@ -276,6 +277,46 @@ static void run_cloud(const char *t, bool unsure)
     }
     note(t, 100, why);
     ESP_LOGI(TAG, "☁ \"%s\"%s -> %s", t, unsure ? " (unsure)" : "", why);
+}
+
+// ---- commands heard on a PSRAM-stack detect_task are run elsewhere. A router command can write flash (NVS, School),
+// and a flash write from a task whose stack is in PSRAM crashes the chip (that was the reboot after every "stop").
+// So detect_task only queues them; pc.c's tx task (internal stack, every 60 ms) calls voice_pump() to run them.
+static bool s_ext_stack;                 // detect_task runs on a PSRAM stack: commands must not run on it
+typedef struct { char p[64]; float pr; bool stop; } heard_t;
+static QueueHandle_t s_heardq;
+static void run_text(const char *t, float pr, const char *tag);
+
+static void run_stop(const char *p, float pr)
+{
+    char msg[64];
+    strlcpy(s_last, p, sizeof s_last);
+    s_prob = pr;
+    router_exec(p, msg, sizeof msg);
+    note(p, pr, msg);
+    ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", p, pr, msg);
+}
+
+static void dispatch(const char *p, float pr, bool stop)
+{
+    if (s_ext_stack) {
+        if (!s_heardq) s_heardq = xQueueCreateWithCaps(4, sizeof(heard_t), MALLOC_CAP_SPIRAM);
+        heard_t h = { .pr = pr, .stop = stop };
+        strlcpy(h.p, p, sizeof h.p);
+        if (s_heardq && xQueueSend(s_heardq, &h, 0) == pdTRUE) return;
+        if (!stop) return;                     // no queue: drop a command rather than crash; a stop still stops the arm
+        pick_stop();
+        return;
+    }
+    if (stop) run_stop(p, pr); else run_text(p, pr, "");
+}
+
+void voice_pump(void)
+{
+    heard_t h;
+    while (s_heardq && xQueueReceive(s_heardq, &h, 0) == pdTRUE) {
+        if (h.stop) run_stop(h.p, h.pr); else run_text(h.p, h.pr, "");
+    }
 }
 
 // one command, from either ear
@@ -542,15 +583,10 @@ static void detect_task(void *arg)
                         if (is_stop(p)) s_seg_stopped = s_seg_on;
                         fx_event(FX_HEARD);
                         if (is_stop(p)) {
-                            char msg[64];
-                            strlcpy(s_last, p, sizeof s_last);
-                            s_prob = pr;
-                            router_exec(p, msg, sizeof msg);
-                            note(p, pr, msg);
-                            ESP_LOGI(TAG, "heard \"%s\" (p=%.2f) -> %s", p, pr, msg);
+                            dispatch(p, pr, true);
                         } else {
                             if (is_wake(p)) face_voice();   // turn toward whoever said its name
-                            run_text(p, pr, "");            // "hey muffin" opens the window, commands keep it open
+                            dispatch(p, pr, false);         // "hey muffin" opens the window, commands keep it open
                         }
                     }
                 }
@@ -602,6 +638,7 @@ static void spawn(TaskFunction_t fn, const char *name, uint32_t stack, int core)
             // (Muffin's run router commands that write NVS, which must not happen on an external stack.)
     if (xTaskCreatePinnedToCoreWithCaps(fn, name, stack, NULL, 5, NULL, core, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
         ESP_LOGW(TAG, "%s: no internal RAM for its stack, running it from PSRAM", name);
+        if (fn == detect_task) s_ext_stack = true;
         return;
     }
 #endif

@@ -21,6 +21,7 @@
 #include "store.h"
 #include "fx.h"
 #include "radar.h"
+#include "voice.h"
 #include "eye.h"
 
 static const char *TAG = "pc";
@@ -154,6 +155,7 @@ static void tx_task(void *arg)
         size_t n = xStreamBufferReceive(s_mic, buf, sizeof buf, pdMS_TO_TICKS(60));
         static int64_t last_presence;
         if (esp_timer_get_time() - last_presence > 500000) { last_presence = esp_timer_get_time(); presence_tick(); }
+        voice_pump();                          // "stop" and other commands the ears heard (they can't run on its PSRAM stack)
         if (s_fd < 0) { last[0] = 0; continue; }
         if (n) send_raw(HTTPD_WS_TYPE_BINARY, buf, n & ~1u);
         if (s_spoke) { s_spoke = false; ev("spoke"); }

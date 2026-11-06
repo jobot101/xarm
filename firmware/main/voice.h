@@ -17,6 +17,7 @@ int  voice_face(void);                    // turn toward voices: 1 on, -1 on (mi
 void voice_face_set(int v);               // saved; needs "Use both mics"
 // music in the room? its beat period and when the next beat lands (esp_timer us); false = no clear beat
 bool voice_beat(int *period_ms, int64_t *next_us);
+void voice_pump(void);                    // run commands the ears queued (call from a task with an internal stack)
 int  voice_levels_since(int64_t t0_us, float *mic1, float *mic2, int max, int *pre);   // bell tuning, dBFS per 16 ms
 void voice_hold_open(bool on);            // School's in class: ears stay open, no "Hey Muffin" needed
 
