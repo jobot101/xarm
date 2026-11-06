@@ -575,7 +575,9 @@ bool pick_chime(const chime_t *c, char *msg, size_t n)
     s_play = *c;
     chime_clean(&s_play);
     s_play_set = true;
-    return pick_run(OP_BELL, 0, msg, n);
+    bool ok = pick_run(OP_BELL, 0, msg, n);
+    if (!ok) s_play_set = false;               // refused (busy): the next "ring the bell" uses the saved settings
+    return ok;
 }
 
 // back off along the lift, away from the bell (a chime above the arm: downward), by k of the lift

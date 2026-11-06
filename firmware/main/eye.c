@@ -100,13 +100,12 @@ const char *eye_sensor(void) { return s_sensor; }
 
 static void apply(void)
 {
-    bool on = s_hold || s_want_pause;
-    if (!s_ok || on == s_paused) return;
-    xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (on) cam_stop(); else cam_start();
-    s_paused = on;
+    if (!s_ok) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);     // decide AND act under the lock: a pause and a hold can race otherwise
+    bool on = s_hold || s_want_pause, changed = s_ok && on != s_paused;
+    if (changed) { if (on) cam_stop(); else cam_start(); s_paused = on; }
     xSemaphoreGive(s_lock);
-    ESP_LOGI(TAG, "%s", on ? (s_hold ? "camera held: writing flash" : "camera resting: nobody here") : "camera awake");
+    if (changed) ESP_LOGI(TAG, "%s", on ? (s_hold ? "camera held: writing flash" : "camera resting: nobody here") : "camera awake");
 }
 
 void eye_pause(bool on) { s_want_pause = on; apply(); }
@@ -130,22 +129,25 @@ static esp_err_t h_jpg(httpd_req_t *r)
         return httpd_resp_sendstr(r, "camera resting: nobody here");
     }
     if (!s_ok) { httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "no camera frame"); return ESP_OK; }
-    xSemaphoreTake(s_lock, portMAX_DELAY);
-    camera_fb_t *fb = s_paused ? NULL : esp_camera_fb_get();
-    xSemaphoreGive(s_lock);
-    if (!fb) { httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "no camera frame"); return ESP_OK; }
+    // the frame is borrowed from the driver: hold the lock until it's returned, so eye_off() (an update) can't
+    // deinit the driver and free the buffer while it's being encoded or sent
+    if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(1500)) != pdTRUE) { httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "camera busy"); return ESP_OK; }
+    camera_fb_t *fb = s_ok && !s_paused ? esp_camera_fb_get() : NULL;
+    if (!fb) { xSemaphoreGive(s_lock); httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "no camera frame"); return ESP_OK; }
     uint8_t *buf = fb->buf;
     size_t len = fb->len;
     bool own = false;
-    if (fb->format != PIXFORMAT_JPEG) {
-        own = frame2jpg(fb, 70, &buf, &len);
-        if (!own) { esp_camera_fb_return(fb); httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "jpeg encode"); return ESP_OK; }
+    esp_err_t e = ESP_OK;
+    if (fb->format != PIXFORMAT_JPEG && !(own = frame2jpg(fb, 70, &buf, &len))) {
+        httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "jpeg encode");
+    } else {
+        httpd_resp_set_type(r, "image/jpeg");
+        httpd_resp_set_hdr(r, "Cache-Control", "no-store");
+        e = httpd_resp_send(r, (const char *)buf, len);
+        if (own) free(buf);
     }
-    httpd_resp_set_type(r, "image/jpeg");
-    httpd_resp_set_hdr(r, "Cache-Control", "no-store");
-    esp_err_t e = httpd_resp_send(r, (const char *)buf, len);
-    if (own) free(buf);
     esp_camera_fb_return(fb);
+    xSemaphoreGive(s_lock);
     return e;
 }
 

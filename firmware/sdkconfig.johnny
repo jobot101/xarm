@@ -16,20 +16,10 @@ CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
 CONFIG_ESP_WIFI_RX_BA_WIN=6
 # mmWave radar (Hi-Link) on IO7 (radar.c): presence output or serial, it tells which
 CONFIG_XARM_RADAR_GPIO=7
-# "ring the bell": the arm taps the chime that hangs above it (the solenoid stays on /api/bell for testing)
+# "ring the bell": the solenoid (fixed at the chime) does the ringing; BELL_ABOVE only matters for the arm path
 # CONFIG_XARM_BELL_ARM is not set (the solenoid is fixed at the chime: it does the ringing)
 CONFIG_XARM_BELL_ABOVE=1
-# Internal RAM squeeze (MotherShip): smaller system task stacks and WiFi/LWIP buffers; no BT; logs at INFO
-CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=2304
-CONFIG_ESP_TIMER_TASK_STACK_SIZE=3072
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584
-CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=2560
-CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=12
-CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=12
-CONFIG_ESP_WIFI_TX_BUFFER_TYPE=1
-CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=2
-CONFIG_ESP_WIFI_MGMT_SBUF_NUM=16
-CONFIG_LWIP_TCP_SND_BUF_DEFAULT=5760
-CONFIG_LWIP_TCP_WND_DEFAULT=5760
-CONFIG_LWIP_MAX_SOCKETS=10
-CONFIG_MDNS_TASK_STACK_SIZE=3072
+# PSRAM stacks for our own tasks need this (psram_task.h, voice.c, radar.c)
+CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
+# (a first squeeze that also shrank the system task stacks and WiFi buffers failed to boot and rolled back: not repeated)
+CONFIG_LWIP_MAX_SOCKETS=13

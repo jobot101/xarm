@@ -69,6 +69,7 @@ int radar_zones_set(const int16_t z[][4], int n)
 }                                       // LD2450: every target, x / y cm and speed cm/s (0,0 = none)
 static char s_fmt[12] = "", s_raw[100] = "";
 static esp_timer_handle_t s_tmr;
+static volatile bool s_want_serial;            // set by the 1 s timer; the switch-over (UART install, task) runs in a task
 static bool s_ok;
 
 static void set_present(bool p)
@@ -197,10 +198,21 @@ static void serial_task(void *arg)
     ESP_LOGI(TAG, "reading the radar at %d baud", best);
     for (;;) {
         int n = uart_read_bytes(UARTN, buf, sizeof buf, pdMS_TO_TICKS(200));
+        if (s_frame_us && esp_timer_get_time() - s_frame_us > 3000000) {   // unplugged or silent: nobody, and say so
+            set_present(false);
+            if (s_fmt[0]) { ESP_LOGW(TAG, "radar went quiet"); s_fmt[0] = 0; }   // radar_known() false until frames return
+        }
         if (n <= 0) continue;
         if (!parse_ld2450(buf, n) && !parse_ld2410(buf, n) && !parse_text(buf, n)) raw_sample(buf, n < 32 ? n : 32);
-        if (s_frame_us && esp_timer_get_time() - s_frame_us > 3000000) set_present(false);   // went quiet
     }
+}
+
+static void go_serial(void);
+static void switch_task(void *arg)            // tiny, PSRAM stack: waits for the timer's verdict, then installs the UART
+{
+    while (!s_want_serial) vTaskDelay(pdMS_TO_TICKS(250));
+    go_serial();
+    vTaskDelete(NULL);
 }
 
 static void go_serial(void)
@@ -229,7 +241,7 @@ static void every_second(void *arg)
     if (s_serial) return;
     bool lv = gpio_get_level(PIN);
     s_level = lv;
-    if (e >= SERIAL_EDGES) { esp_timer_stop(s_tmr); go_serial(); return; }   // it's data, not a level: read it
+    if (e >= SERIAL_EDGES) { esp_timer_stop(s_tmr); s_want_serial = true; return; }   // it's data: switch over (from a task)
     set_present(lv);
 }
 
@@ -245,6 +257,8 @@ void radar_init(void)
     const esp_timer_create_args_t t = { .callback = every_second, .name = "radar" };
     if (esp_timer_create(&t, &s_tmr) != ESP_OK) return;
     esp_timer_start_periodic(s_tmr, 1000000);
+    if (xTaskCreatePinnedToCoreWithCaps(switch_task, "radar_sw", 2048, NULL, 2, NULL, 0, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS)
+        ESP_LOGW(TAG, "no memory for the radar switch task (a serial radar won't be read)");
     s_since_us = esp_timer_get_time();
     s_ok = true;
     zones_load();

@@ -457,7 +457,7 @@ static esp_err_t h_chime(httpd_req_t *r)
     char *txt = cJSON_PrintUnformatted(o);
     cJSON_Delete(o);
     httpd_resp_set_type(r, "application/json");
-    esp_err_t e = httpd_resp_sendstr(r, txt);
+    esp_err_t e = httpd_resp_sendstr(r, txt ? txt : "{}");
     free(txt);
     return e;
 }
@@ -482,7 +482,7 @@ static esp_err_t h_levels(httpd_req_t *r)
     char *txt = cJSON_PrintUnformatted(o);
     cJSON_Delete(o);
     httpd_resp_set_type(r, "application/json");
-    esp_err_t e = httpd_resp_sendstr(r, txt);
+    esp_err_t e = httpd_resp_sendstr(r, txt ? txt : "{}");
     free(txt);
     return e;
 }
@@ -532,7 +532,7 @@ static esp_err_t h_i2c(httpd_req_t *r)
     char *txt = cJSON_PrintUnformatted(j);
     cJSON_Delete(j);
     httpd_resp_set_type(r, "application/json");
-    esp_err_t e = httpd_resp_sendstr(r, txt);
+    esp_err_t e = httpd_resp_sendstr(r, txt ? txt : "{}");
     free(txt);
     return e;
 }
@@ -601,7 +601,7 @@ static esp_err_t h_phrases(httpd_req_t *r)
     char *txt = cJSON_PrintUnformatted(a);
     cJSON_Delete(a);
     httpd_resp_set_type(r, "application/json");
-    esp_err_t e = httpd_resp_sendstr(r, txt);
+    esp_err_t e = httpd_resp_sendstr(r, txt ? txt : "{}");
     free(txt);
     return e;
 }

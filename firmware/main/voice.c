@@ -300,13 +300,15 @@ static void run_stop(const char *p, float pr)
 static void dispatch(const char *p, float pr, bool stop)
 {
     if (s_ext_stack) {
+        // the arm must stop within ~20 ms of the word, whatever the PC link is doing: pick_stop() is s_abort +
+        // queue reset + arm_hold (RAM and UART only, no flash), so it is safe right here on the PSRAM stack.
+        // Only the bookkeeping (note, pc_stopped, chat) waits for voice_pump on an internal-stack task.
+        if (stop) pick_stop();
         if (!s_heardq) s_heardq = xQueueCreateWithCaps(4, sizeof(heard_t), MALLOC_CAP_SPIRAM);
         heard_t h = { .pr = pr, .stop = stop };
         strlcpy(h.p, p, sizeof h.p);
         if (s_heardq && xQueueSend(s_heardq, &h, 0) == pdTRUE) return;
-        if (!stop) return;                     // no queue: drop a command rather than crash; a stop still stops the arm
-        pick_stop();
-        return;
+        return;                                // no queue: drop a command rather than crash (a stop already stopped the arm)
     }
     if (stop) run_stop(p, pr); else run_text(p, pr, "");
 }

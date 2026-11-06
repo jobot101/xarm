@@ -300,7 +300,8 @@ void pc_register(httpd_handle_t h)
     // pc_spk only plays audio; pc_tx streams the mic and runs presence_tick (bell_strike, pick_attention: no flash)
     // and voice_pump — which DOES run router commands that may write NVS, so pc_tx must keep an internal stack.
     task_psram(spk_task, "pc_spk", 4096, NULL, 5, NULL, tskNO_AFFINITY);
-    xTaskCreate(tx_task, "pc_tx", 4096, NULL, 3, NULL);
+    if (xTaskCreate(tx_task, "pc_tx", 6144, NULL, 3, NULL) != pdPASS)   // runs voice_pump (router -> NVS): internal, roomy
+        ESP_LOGE(TAG, "no memory for the mic/command task");
     httpd_uri_t u = { .uri = "/ws", .method = HTTP_GET, .handler = h_ws, .is_websocket = true };
     httpd_register_uri_handler(h, &u);
     fx_pc(FX_PC_NONE);

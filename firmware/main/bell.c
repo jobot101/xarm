@@ -70,7 +70,8 @@ void bell_strike(int ms)
     int64_t rest = s_last_us + (int64_t)REST_MS * 1000 - esp_timer_get_time();
     if (rest > 0) vTaskDelay(pdMS_TO_TICKS(rest / 1000 + 1));
     gpio_set_level(PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(ms));
+    int64_t t = esp_timer_get_time();
+    while (esp_timer_get_time() - t < (int64_t)ms * 1000) ;          // busy-wait: exact length, at most 30 ms
     gpio_set_level(PIN, 0);
     s_last_us = esp_timer_get_time();
     xSemaphoreGive(s_lock);
@@ -89,10 +90,11 @@ static esp_err_t h_bell(httpd_req_t *r)
     bool save = j && cJSON_IsTrue(cJSON_GetObjectItem(j, "save"));
     bool listen = !j || !cJSON_IsFalse(cJSON_GetObjectItem(j, "listen"));
     cJSON_Delete(j);
+    // this runs on the web server's only task: keep it short (the PC websocket and every request wait behind it)
     if (cnt < 1) cnt = 1;
-    if (cnt > 5) cnt = 5;
+    if (cnt > 3) cnt = 3;
     if (gap < 150) gap = 150;
-    if (gap > 3000) gap = 3000;
+    if (gap > 600) gap = 600;
 
     cJSON *o = cJSON_CreateObject();
     cJSON_AddBoolToObject(o, "ok", bell_ready());
@@ -119,7 +121,7 @@ static esp_err_t h_bell(httpd_req_t *r)
     char *txt = cJSON_PrintUnformatted(o);
     cJSON_Delete(o);
     httpd_resp_set_type(r, "application/json");
-    esp_err_t e = httpd_resp_sendstr(r, txt);
+    esp_err_t e = httpd_resp_sendstr(r, txt ? txt : "{}");
     free(txt);
     return e;
 }

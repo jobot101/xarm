@@ -73,7 +73,7 @@ static esp_err_t ota_run(httpd_req_t *r)
     }
 
     ESP_LOGW(TAG, "updated to slot %s, rebooting", part->label);
-    xTaskCreate(restart_task, "ota_restart", 2048, NULL, 5, NULL);
+    if (xTaskCreate(restart_task, "ota_restart", 2048, NULL, 5, NULL) != pdPASS) { vTaskDelay(pdMS_TO_TICKS(500)); esp_restart(); }
     return reply(r, true, "updated — rebooting");
 }
 
