@@ -29,6 +29,7 @@
 #include "audio.h"
 #include "school.h"
 #include "eye.h"
+#include "bell.h"
 #include "pc.h"
 #include <unistd.h>
 
