@@ -224,15 +224,17 @@ jobs:
           python-version: "3.12"
       - name: silent sound bank (header only matters)
         run: pip install -q numpy scipy && python3 tools/make_sounds.py --no-voice | tail -2
-      - name: stamp version
-        run: echo "${GITHUB_SHA::7}" > firmware/version.txt
+      - name: stamp version, layer the Johnny settings on the defaults
+        run: |
+          echo "${GITHUB_SHA::7}" > firmware/version.txt
+          cat firmware/sdkconfig.johnny >> firmware/sdkconfig.defaults
       - name: build firmware (Johnny)
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.1
           target: esp32s3
           path: firmware
-          command: "idf.py -B build -D SDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.johnny' build 2>&1 | tee build.log; exit ${PIPESTATUS[0]}"
+          command: "idf.py build 2>&1 | tee build.log; exit ${PIPESTATUS[0]}"
       - name: report compile errors
         if: failure()
         run: |
