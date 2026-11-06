@@ -244,6 +244,7 @@ class Johnny:
         self.speaking_until = 0.0
         self.window_until = 0.0
         self.radar, self.present, self.left_at = False, True, 0.0   # board's radar: no one at the bench = don't listen
+        self.radar_seen = False           # trust "nobody" only after the radar has seen someone once (it's aimed at the bench)
         self.replies = {}
         self.next_id = 1
         self.loop = None
@@ -271,7 +272,7 @@ class Johnny:
 
     def someone(self):
         """Is anybody at the bench? Without a radar reading we understand, always assume so."""
-        return not self.radar or self.present or time.time() - self.left_at < 10
+        return not self.radar or not self.radar_seen or self.present or time.time() - self.left_at < 10
 
     async def say(self, text):
         if not text: return
@@ -379,8 +380,10 @@ class Johnny:
                     self.state = e
                 elif ev == "radar":
                     self.present = bool(e.get("present"))
-                    if not self.present: self.left_at = time.time()
-                    print("radar:", "someone's here" if self.present else "nobody - not listening")
+                    if self.present: self.radar_seen = True
+                    else: self.left_at = time.time()
+                    print("radar:", "someone's here" if self.present else
+                          "nobody - not listening" if self.radar_seen else "nobody (hasn't seen anyone yet, still listening)")
                 elif ev == "cmd" and e.get("id") in self.replies:
                     f = self.replies.pop(e["id"])
                     if not f.done(): f.set_result(e)
