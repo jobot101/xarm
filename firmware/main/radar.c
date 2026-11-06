@@ -32,6 +32,7 @@ static volatile bool s_level, s_present, s_serial;
 static volatile int64_t s_since_us, s_frame_us;
 static volatile int s_baud, s_dist_cm = -1, s_frames;
 static volatile int s_x_cm, s_y_cm, s_angle = 999, s_targets;     // LD2450 only: nearest target, x left/right, y ahead
+static int16_t s_pts[3][3];                                       // LD2450: every target, x / y cm and speed cm/s (0,0 = none)
 static char s_fmt[12] = "", s_raw[100] = "";
 static esp_timer_handle_t s_tmr;
 static bool s_ok;
@@ -83,8 +84,9 @@ static bool parse_ld2450(const uint8_t *b, int n)
         int best = -1, bd = 1 << 30, cnt = 0, bx = 0, by = 0;
         for (int t = 0; t < 3; t++) {
             const uint8_t *p = b + i + 4 + t * 8;
-            if (!(p[0] | p[1] | p[2] | p[3])) continue;
+            if (!(p[0] | p[1] | p[2] | p[3])) { s_pts[t][0] = s_pts[t][1] = s_pts[t][2] = 0; continue; }
             int x = ld_s16(p), y = ld_s16(p + 2), d = x * x + y * y;
+            s_pts[t][0] = (int16_t)(x / 10); s_pts[t][1] = (int16_t)(y / 10); s_pts[t][2] = (int16_t)ld_s16(p + 4);
             cnt++;
             if (d < bd) { bd = d; best = t; bx = x; by = y; }
         }
@@ -234,6 +236,13 @@ void radar_json(cJSON *o)
         cJSON_AddNumberToObject(r, "distance_cm", s_dist_cm);
         if (!strcmp(s_fmt, "ld2450")) {
             cJSON_AddNumberToObject(r, "targets", s_targets);
+            cJSON *pts = cJSON_AddArrayToObject(r, "pts");             // [[x_cm, y_cm, speed_cm_s], ...] every target seen
+            for (int t = 0; t < 3; t++) {
+                if (!s_pts[t][0] && !s_pts[t][1]) continue;
+                cJSON *q = cJSON_CreateArray();
+                for (int k = 0; k < 3; k++) cJSON_AddItemToArray(q, cJSON_CreateNumber(s_pts[t][k]));
+                cJSON_AddItemToArray(pts, q);
+            }
             if (s_angle != 999) {
                 cJSON_AddNumberToObject(r, "angle_deg", s_angle);
                 cJSON_AddNumberToObject(r, "x_cm", s_x_cm);

@@ -487,6 +487,19 @@ static esp_err_t h_levels(httpd_req_t *r)
     return e;
 }
 
+// ---------- GET /api/radar: just the radar block, small enough for the app's scope to poll 5x a second ----------
+static esp_err_t h_radar(httpd_req_t *r)
+{
+    cJSON *o = cJSON_CreateObject();
+    radar_json(o);
+    char *txt = cJSON_PrintUnformatted(cJSON_GetObjectItem(o, "radar"));
+    cJSON_Delete(o);
+    httpd_resp_set_type(r, "application/json");
+    esp_err_t e = httpd_resp_sendstr(r, txt ? txt : "{}");
+    free(txt);
+    return e;
+}
+
 // ---------- GET /api/i2c -> {"found":"0x18 0x20 0x40 0x51 0x52","cam":true} ----------
 static esp_err_t h_i2c(httpd_req_t *r)
 {
@@ -837,7 +850,7 @@ static void on_close(httpd_handle_t hd, int fd)
 bool web_start(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 30;
+    c.max_uri_handlers = 34;
     c.close_fn = on_close;
     c.uri_match_fn = httpd_uri_match_wildcard;
     c.lru_purge_enable = true;
@@ -868,6 +881,7 @@ bool web_start(void)
         {"/api/i2c",    HTTP_GET,  h_i2c},
         {"/api/chime",  HTTP_POST, h_chime},
         {"/api/levels", HTTP_GET,  h_levels},
+        {"/api/radar",  HTTP_GET,  h_radar},
         {"/api/phrases",HTTP_GET,  h_phrases},
         {"/api/sys",    HTTP_GET,  h_sys},
         {"/*",          HTTP_GET,  h_app},       // keep last
