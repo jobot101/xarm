@@ -9,26 +9,25 @@ Run the steps below in a terminal in this folder (`Documents\Ragamuffin Workshop
 1. **Check the build is published.** Open https://jobot101.github.io/xarm/fw/johnny/manifest.json.
    It must show `"name": "xarm johnny"`. If it gives a 404, the cloud build isn't finished: wait 2 minutes and try again
    (give up after 20 minutes and say so). **Don't flash before this loads.**
-2. **Register the board** with the shop tools, so later tool calls aren't blocked (it's the same board Muffin ran on):
-   ```
-   uv run ports.py mark-muffin COM4
-   ```
-3. **Install the flasher** (once):
+2. **Install the flasher** (once). `flash_johnny.py` talks to COM4 directly, so the shop tools' port registration (`ports.py`) isn't needed:
    ```
    python -m pip install --upgrade esptool
    ```
-4. **Flash, keeping the board's settings** (WiFi, taught poses):
+3. **Flash, keeping the board's settings** (WiFi, taught poses):
    ```
    python flash_johnny.py --port COM4
    ```
-5. **Success** looks like `Hash of data verified.` after each file, then `Done: xarm johnny <version> is on the board.`
+4. **Success** looks like `Hash of data verified.` after each file, then `Done: xarm johnny <version> is on the board.`
+
+COM4 is running **Muffin** right now (camera on). This replaces Muffin's firmware with Johnny's and keeps WiFi, poses and the
+camera setting. `--muffin` puts Muffin back. The exact pre-Johnny state is backed up at `C:\Users\mark\esp32s3_backup\full_flash_16MB.bin`.
 
 ## If something goes wrong
 
 | What you see | Do this |
 |---|---|
-| `could not open port 'COM4'` / `Access is denied` | Another program has the port (Arduino IDE serial monitor, a browser flasher tab, the ragamuffin MCP). Close it, then run step 4 again. |
-| `Failed to connect` / `No serial data received` | Hold the board's **BOOT** button, tap **RESET**, release BOOT, then run step 4 again. |
+| `could not open port 'COM4'` / `Access is denied` | Another program has the port (Arduino IDE serial monitor, a browser flasher tab, the ragamuffin MCP). Close it, then run step 3 again. |
+| `Failed to connect` / `No serial data received` | Hold the board's **BOOT** button, tap **RESET**, release BOOT, then run step 3 again. |
 | `could not open port 'COM4'` / `FileNotFoundError` | The port number changed after a reset. Run `python flash_johnny.py` with no `--port` (it finds the board by its USB ID). |
 | Board boots but acts strange | `python flash_johnny.py --port COM4 --erase`. This wipes WiFi and poses. |
 
