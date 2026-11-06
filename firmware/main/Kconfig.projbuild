@@ -110,6 +110,15 @@ menu "xArm Voice"
         default -1
         range -1 48
 
+    config XARM_BELL_ARM
+        bool "\"ring the bell\" taps the bell with the arm even when a solenoid is set up"
+        default n
+
+    config XARM_BELL_ABOVE
+        int "the bell hangs above the arm (1: back off downward and strike up) or below it (0)"
+        default 0
+        range 0 1
+
     config XARM_JOHNNY
         bool "Johnny: the brain runs on the shop PC (Muffin off)"
         default n

@@ -1,3 +1,4 @@
+#include "sdkconfig.h"
 #include "pick.h"
 #include "bell.h"
 #include <math.h>
@@ -531,16 +532,20 @@ static void do_dance(void)
 // hover over the bell, strike 3 times
 static void do_bell(void)
 {
+#if !CONFIG_XARM_BELL_ARM
     if (bell_ready()) {                      // a real bell on the solenoid: it rings itself, the arm stays put
         set("ringing", "ding!");
         for (int i = 0; i < 3; i++) { bell_strike(0); if (!wait_ms(700)) return; }
         set("idle", "rang the bell");
         return;
     }
+#endif
     fx_say(SND_BELL);
     set("ringing", "ding!");
     uint16_t up[NSERVO], hit[NSERVO];
-    pose(up, g_cfg.bell, 0.5f, g_cfg.grip_close);
+    // the taught Bell pose is the moment of contact; the arm backs off half a lift away from the bell between taps.
+    // A bell below the arm: back off upward. A chime hanging above it (Johnny's): back off downward and strike up.
+    pose(up, g_cfg.bell, CONFIG_XARM_BELL_ABOVE ? -0.5f : 0.5f, g_cfg.grip_close);
     pose(hit, g_cfg.bell, 0.0f, g_cfg.grip_close);
     if (!go(up, g_cfg.move_ms)) return;
     for (int i = 0; i < 3; i++) {
