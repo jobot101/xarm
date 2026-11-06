@@ -188,8 +188,20 @@ class Ears:
         except Exception:
             gpu = False
         if m == "auto": m = "large-v3-turbo" if gpu else "small.en"
-        print(f"ears: whisper {m} on {'GPU' if gpu else 'CPU'} (first run downloads it)")
-        self.model = WhisperModel(m, device="cuda" if gpu else "cpu", compute_type="float16" if gpu else "int8")
+        self.model = None
+        if gpu and cfg.get("whisper_device", "auto") != "cpu":
+            # a GPU can be there without CUDA's cuBLAS/cuDNN installed: that only shows when it first transcribes,
+            # so try one second of silence now and fall back to the CPU (same model, no new download)
+            try:
+                self.model = WhisperModel(m, device="cuda", compute_type="float16")
+                list(self.model.transcribe(np.zeros(RATE, np.float32), language="en")[0])
+                print(f"ears: whisper {m} on GPU")
+            except Exception as e:
+                print(f"ears: GPU not usable ({str(e)[:70]}), using the CPU")
+                self.model = None
+        if self.model is None:
+            print(f"ears: whisper {m} on CPU (first run downloads it)")
+            self.model = WhisperModel(m, device="cpu", compute_type="int8")
         self.buf, self.ring, self.seg, self.quiet, self.on = b"", deque(maxlen=10), [], 0, False
 
     def feed(self, pcm):
