@@ -18,8 +18,8 @@ from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CAMERAS = [("OBSBOT Tiny 2 StreamCamera", "1280x720", 0.5),  # (DirectShow name, size, % change that counts as MOVED);
-           ("USB2.0 PC CAMERA", "640x480", 2.5)]            # first that opens wins. Same order as mothership/webcam.py.
-                                                            # The bench webcam flickers ~1% on a still scene, hence 2.5.
+           ("USB2.0 PC CAMERA", "640x480", 1.8)]            # first that opens wins. Same order as mothership/webcam.py.
+                                                            # Bench webcam: a still scene peaks ~1.2%, a small wrist tilt ~2.3%.
 
 
 def board():
