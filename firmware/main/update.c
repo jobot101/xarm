@@ -118,6 +118,7 @@ static void install(const char *ver)
     status("installing %s…", ver);
     fx_state("updating");
     eye_hold(true);                                // no camera DMA while the flash is being written
+    eye_off();                                     // and its RAM back: HTTPS needs more internal RAM than is left with it on
     esp_err_t e = esp_https_ota(&oc);              // writes the idle slot + sets it to boot
     if (e != ESP_OK) eye_hold(false);
     if (e == ESP_OK) {

@@ -110,6 +110,16 @@ static void apply(void)
 }
 
 void eye_pause(bool on) { s_want_pause = on; apply(); }
+
+void eye_off(void)
+{
+    if (!s_ok) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_ok = false;                              // /cam.jpg and pause/resume stop touching it
+    esp_camera_deinit();                       // DMA buffers, descriptors and its task go back to internal RAM
+    xSemaphoreGive(s_lock);
+    ESP_LOGI(TAG, "camera off until the next boot (freeing RAM for an update)");
+}
 void eye_hold(bool on) { s_hold = on; apply(); if (on) vTaskDelay(pdMS_TO_TICKS(60)); }   // let the last DMA land
 
 static esp_err_t h_jpg(httpd_req_t *r)
@@ -176,6 +186,7 @@ void eye_register(httpd_handle_t h)
 
 #else   // Muffin: no ribbon camera
 void eye_pause(bool on) { (void)on; }
+void eye_off(void) {}
 void eye_hold(bool on) { (void)on; }
 bool eye_init(i2c_master_bus_handle_t bus) { (void)bus; return false; }
 bool eye_ok(void) { return false; }
