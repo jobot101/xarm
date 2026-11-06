@@ -1,35 +1,43 @@
 # Task for the local model: flash Johnny onto the arm board
 
-The Waveshare ESP32-S3 arm board is plugged into this PC over USB-C. Put the **Johnny** firmware on it.
-Everything is scripted. Don't write new code. Run the steps below in a terminal in this folder and report what happened.
+The Waveshare ESP32-S3 arm board is on **COM4**, plugged into this PC over USB-C. Put the **Johnny** firmware on it.
+It's all scripted. Don't write new code, and don't use the `flash_s3` tool: it flashes Muffin's files.
+Run the steps below in a terminal in this folder (`Documents\Ragamuffin Workshop\johnny`) and report what happened.
 
 ## Steps
 
-1. Check the build is out: open https://jobot101.github.io/xarm/fw/johnny/manifest.json.
-   It must load and show `"name": "xarm johnny"`. If it 404s, the cloud build isn't published yet: stop and say so.
-2. Install the flasher tool (once):
+1. **Check the build is published.** Open https://jobot101.github.io/xarm/fw/johnny/manifest.json.
+   It must show `"name": "xarm johnny"`. If it gives a 404, the cloud build isn't finished: wait 2 minutes and try again
+   (give up after 20 minutes and say so). **Don't flash before this loads.**
+2. **Register the board** with the shop tools, so later tool calls aren't blocked (it's the same board Muffin ran on):
+   ```
+   uv run ports.py mark-muffin COM4
+   ```
+3. **Install the flasher** (once):
    ```
    python -m pip install --upgrade esptool
    ```
-3. Flash, keeping the board's settings (WiFi, taught poses):
+4. **Flash, keeping the board's settings** (WiFi, taught poses):
    ```
-   python flash_johnny.py
+   python flash_johnny.py --port COM4
    ```
-4. Success looks like `Hash of data verified.` for every file, then `Done: xarm johnny <version> is on the board.`
+5. **Success** looks like `Hash of data verified.` after each file, then `Done: xarm johnny <version> is on the board.`
 
 ## If something goes wrong
 
 | What you see | Do this |
 |---|---|
-| `No ESP32-S3 found on USB` | Check the USB-C cable carries data (try another). Unplug and replug the board, then run step 3 again. |
-| `Failed to connect` / `No serial data received` | Hold the board's **BOOT** button, tap **RESET**, release BOOT, then run step 3 again. |
-| `could not open port ... Access is denied` | Something else has the port (Arduino IDE serial monitor, a browser flasher tab). Close it, then run step 3 again. |
-| Board boots but acts strange | `python flash_johnny.py --erase`. This wipes WiFi and poses, so they get set again at http://johnny.local or on WiFi "Johnny". |
+| `could not open port 'COM4'` / `Access is denied` | Another program has the port (Arduino IDE serial monitor, a browser flasher tab, the ragamuffin MCP). Close it, then run step 4 again. |
+| `Failed to connect` / `No serial data received` | Hold the board's **BOOT** button, tap **RESET**, release BOOT, then run step 4 again. |
+| `could not open port 'COM4'` / `FileNotFoundError` | The port number changed after a reset. Run `python flash_johnny.py` with no `--port` (it finds the board by its USB ID). |
+| Board boots but acts strange | `python flash_johnny.py --port COM4 --erase`. This wipes WiFi and poses. |
 
-To put Muffin back, run `python flash_johnny.py --muffin`.
+Don't try anything else: no `idf.py`, no editing the firmware, no other offsets. To put Muffin back, run `python flash_johnny.py --port COM4 --muffin`.
 
-## After it's flashed
+## After it's flashed (tell Joseph)
 
 - The LED ring breathes **dim gold**: Johnny is running and waiting for the PC brain.
-- If the board had WiFi saved, it shows up at http://johnny.local and http://johnny. Otherwise join the WiFi network **Johnny** (password `ragamuffin`) and open http://192.168.4.1 to set the shop WiFi (ClarkShop).
-- From now on it updates itself over WiFi from `fw/johnny/` whenever a new build is pushed.
+- With WiFi saved, it's at http://johnny.local. Otherwise join WiFi **Johnny** (password `ragamuffin`), open
+  http://192.168.4.1 and set ClarkShop.
+- The PC brain is `run-johnny.bat` in this folder. It needs LM Studio's server on (port 1234) with a model loaded.
+  Before the first run, put Johnny's ElevenLabs voice id and key in `johnny.json`.
