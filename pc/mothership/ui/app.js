@@ -245,7 +245,48 @@ function buildChime(m) {
       h("button", { class: "ghost", onclick: async () => { const r = await api("/api/chime", { ...body(), save: true, play: false }); reply(out, r.ok ? `saved: “ring the bell” plays ${body().pattern}` : "not saved"); } }, "Save as default"),
       h("button", { class: "ghost", onclick: async () => { if (!confirm("Save the arm's pose right now as the chime's strike point?\n\nPose it first: closed gripper just touching the chime.")) return; reply(out, (await api("/api/teach", { what: "bell" })).msg); } }, "Teach strike point"),
       h("button", { class: "ghost", onclick: async () => { const r = await api("/api/bell", { ms: 12 }); reply(out, r.ok ? drawLevels(plot, r, "solenoid tap 12 ms") : "no solenoid in this firmware"); } }, "Solenoid test")),
-    plot, out));
+    plot, out),
+    buildSolenoid());
+}
+
+// ---- the solenoid (fixed at the chime): find the pulse where the plunger just reaches it, and save that
+function buildSolenoid() {
+  const out = h("div", { class: "reply" }), plot = h("canvas", { class: "plot", width: 900, height: 110 });
+  const ms = h("input", { type: "range", min: 3, max: 30, value: 12, id: "pulse" }), pv = h("span", { class: "val" }, "12 ms");
+  const set = v => { ms.value = Math.max(3, Math.min(30, v)); pv.textContent = ms.value + " ms"; };
+  ms.addEventListener("input", () => set(+ms.value));
+  const tap = async n => {
+    const r = await api("/api/bell", { ms: +ms.value, n, gap: 450 });
+    reply(out, r.ok ? drawLevels(plot, r, `tap ${ms.value} ms${n > 1 ? " ×" + n : ""}`) : "no solenoid in this firmware");
+  };
+  const find = async () => {
+    if (!confirm("Tap the chime with short pulses from 3 ms upward, one at a time, and stop at the first one the mics hear clearly?\n\nKeep the shop quiet for about a minute.")) return;
+    for (let p = 3; p <= 30; p++) {
+      set(p); reply(out, `trying ${p} ms…`);
+      const r = await api("/api/bell", { ms: p });
+      if (!r.ok) return reply(out, "no solenoid in this firmware");
+      drawLevels(plot, r, `${p} ms`);
+      const s = ringStats(r.mic1, r.pre);
+      if (s && s.rise >= 8) {                       // a clear hit over the room
+        const pick = Math.min(30, p + 2);
+        set(pick);
+        return reply(out, `Strike point found: the plunger first reaches the chime at ${p} ms (${s.rise.toFixed(0)} dB over the room). Suggest ${pick} ms for a sure tap. Press Save pulse to keep it.`);
+      }
+      await new Promise(res => setTimeout(res, 300));
+    }
+    reply(out, "No clear hit up to 30 ms: check the solenoid's supply and wiring, or move it closer to the chime.");
+  };
+  return card("Solenoid (fixed at the chime)",
+    h("p", { class: "small-text muted" }, "A short pulse throws the plunger only part way; a longer one reaches the chime. The strike point is the shortest pulse that clearly taps it. Pulses are capped at 30 ms."),
+    h("div", { class: "slider" }, h("span", { class: "lab" }, "Pulse"), ms, pv),
+    h("div", { class: "row" },
+      h("button", { class: "small ghost", onclick: () => set(+ms.value - 1) }, "−1 ms"),
+      h("button", { class: "small ghost", onclick: () => set(+ms.value + 1) }, "+1 ms"),
+      h("button", { onclick: () => tap(1) }, "Tap"),
+      h("button", { class: "ghost", onclick: () => tap(3) }, "Tap ×3"),
+      h("button", { class: "ghost", onclick: find }, "Find strike point"),
+      h("button", { class: "ghost", onclick: async () => reply(out, (await api("/api/bell", { ms: +ms.value, save: true, listen: false })).ok ? `saved: “ring the bell” taps at ${ms.value} ms` : "not saved") }, "Save pulse")),
+    plot, out);
 }
 function ringStats(db, pre) {
   if (!db || !db.length || pre < 1 || db.length <= pre) return null;

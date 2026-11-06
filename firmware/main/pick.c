@@ -584,9 +584,16 @@ static void bell_back(uint16_t p[NSERVO], float k) { pose(p, g_cfg.bell, CONFIG_
 static void do_bell(void)
 {
 #if !CONFIG_XARM_BELL_ARM
-    if (bell_ready()) {                      // a real bell on the solenoid: it rings itself, the arm stays put
+    if (bell_ready()) {                      // the solenoid sits at the bell: it taps the pattern, the arm stays put
+        chime_t c = s_play_set ? s_play : s_chime;
+        s_play_set = false;
         set("ringing", "ding!");
-        for (int i = 0; i < 3; i++) { bell_strike(0); if (!wait_ms(700)) return; }
+        int base = bell_ms();                // the saved tap (bell.c caps every pulse at 30 ms)
+        for (int i = 0; c.pattern[i]; i++) {
+            char ch = c.pattern[i];
+            if (ch != '.') bell_strike(ch == '!' ? base + 3 : ch == 'o' ? base - 4 : base);
+            if (!wait_ms(c.gap_ms)) return;
+        }
         set("idle", "rang the bell");
         return;
     }
