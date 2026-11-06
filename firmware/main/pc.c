@@ -115,6 +115,7 @@ void pc_mic(const int16_t *pcm, int n)
 // ---------------------------------------------------------------- the radar: who's at the bench
 #define REST_AFTER_S 60             // nobody for a minute: camera stops, ring goes nearly dark
 #define PUTDOWN_AFTER_S 180         // holding a part and nobody for 3 minutes: set it down at the drop spot
+#define FOLLOW_MIN_CM 50            // closer than this, stop turning toward the person
 
 static void radar_event(bool here)
 {
@@ -135,6 +136,11 @@ static void presence_tick(void)
         radar_event(here);
         if (here) pick_attention();            // someone walked up: perk up (wakes him from a nap)
     }
+    // follow: the nearest person's angle (LD2450) turns the resting pose's base, like "turn toward voices" does.
+    // Workshop -> Voice -> Turn toward voices sets the direction (1, flipped -1) or switches it off (0).
+    // Closer than FOLLOW_MIN_CM: hold the heading (no turning toward a hand that's right at the arm).
+    int deg, cm = radar_distance_cm(), dir = voice_face();
+    if (here && dir && radar_angle(&deg) && cm >= FOLLOW_MIN_CM) pick_face(dir * deg / 35.0f);
     bool rest = away >= REST_AFTER_S;
     if (rest != s_resting) { s_resting = rest; eye_pause(rest); fx_away(rest); }
     if (here) s_put_down = false;
