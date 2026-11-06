@@ -57,7 +57,7 @@ untouched; Johnny is a second build of the same firmware. The owner can go back 
 1. **Get Johnny on the board and talking.** After flashing: ring breathes dim gold. WiFi: board keeps saved WiFi
    (keep-settings flash); else WiFi `Johnny` / `ragamuffin` → http://192.168.4.1 → ClarkShop. Then on the PC:
    LM Studio server on with a model loaded, `johnny.json` filled (`elevenlabs_api_key`,
-   `elevenlabs_voice_id` = the Oracle's Johnny voice: ask the owner, it's in his ElevenLabs account), `run-johnny.bat`.
+   `elevenlabs_voice_id` = bqsTahalhKOL86e5RIT5, already set in johnny.json on the PC), `run-johnny.bat`.
    If `johnny.local` doesn't resolve on Windows, use the board's IP (`--board 192.168.x.x`, shown on the board's web page).
 2. **Add Johnny to the Ragamuffin Flasher** (owner asked; not done). Repo `jobot101/Ragamuffin-Flasher`: a
    "xArm Johnny" button next to Muffin's that reads `https://jobot101.github.io/xarm/fw/johnny/manifest.json` the same
