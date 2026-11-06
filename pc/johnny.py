@@ -27,7 +27,7 @@ DEFAULTS = {
     "elevenlabs_api_key": "",
     "elevenlabs_voice_id": "",            # Johnny's voice (the same one the Oracle phone uses)
     "elevenlabs_model": "eleven_flash_v2_5",
-    "volume": 80,
+    "volume": 40,                         # the board's speaker, 0-100 (quiet shop voice)
     "follow_up_s": 10,                    # after he answers, no need to say "Johnny" for this long
 }
 RATE = 16000
@@ -394,11 +394,17 @@ class Johnny:
                     self.radar, self.present = bool(e.get("radar")), e.get("present", True)
                     print(f"board: {e.get('name')} {e.get('version')} - moves {self.brain.moves} - eyes {self.brain.slots or 'off'}")
                     await self.send(volume=self.cfg["volume"])
+                    asyncio.create_task(self.say("MotherShip online."))
                 elif ev == "state":
                     self.state = e
                 elif ev == "radar":
                     self.present = bool(e.get("present"))
                     if self.present: self.radar_seen = True
+                    # a quiet hello when someone walks up (the board taps the chime too); at most every 3 minutes
+                    if self.present and not self.busy and time.time() - getattr(self, "greeted", 0) > 180:
+                        self.greeted = time.time()
+                        import random
+                        asyncio.create_task(self.say(random.choice(["Hello.", "Evening, friend.", "Welcome back.", "Hey there."])))
                     else: self.left_at = time.time()
                     print("radar:", "someone's here" if self.present else
                           "nobody - stop listening in 2 min unless someone shows up" if self.radar_seen else "nobody (hasn't seen anyone yet, still listening)")
