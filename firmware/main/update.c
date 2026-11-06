@@ -1,4 +1,5 @@
 #include "update.h"
+#include "eye.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -116,7 +117,9 @@ static void install(const char *ver)
     pick_stop();
     status("installing %s…", ver);
     fx_state("updating");
+    eye_hold(true);                                // no camera DMA while the flash is being written
     esp_err_t e = esp_https_ota(&oc);              // writes the idle slot + sets it to boot
+    if (e != ESP_OK) eye_hold(false);
     if (e == ESP_OK) {
         nvs_str("tried", (char *)ver, 0, true);     // one attempt per version: a build that rolls back isn't retried
         status("installed %s — rebooting", ver);
@@ -152,7 +155,10 @@ static bool bank_hash_is(const esp_partition_t *p, uint32_t off, int size, const
 // The sound bank (voice + bells, tools/make_sounds.py) lives in the "model" partition after the speech
 // models, not in the app, so it's synced on its own: download sounds.bin into place, then reload.
 // No reboot. Sounds go quiet for the ~30 s it takes.
-static bool sync_sounds(void)
+static bool sync_sounds_run(void);
+static bool sync_sounds(void) { bool r = sync_sounds_run(); eye_hold(false); return r; }
+
+static bool sync_sounds_run(void)
 {
     char have[24];
     nvs_str("sndver", have, sizeof have, false);
@@ -194,7 +200,7 @@ static bool sync_sounds(void)
         if (esp_http_client_open(h, 0) == ESP_OK && esp_http_client_fetch_headers(h) >= 0)
             code = esp_http_client_get_status_code(h);
         if (code == 200 || code == 206) {
-            if (!released) { snd_status("downloading Muffin's voice…"); fx_bank_release(); released = true; }
+            if (!released) { snd_status("downloading Muffin's voice…"); eye_hold(true); fx_bank_release(); released = true; }
             int skip = code == 200 ? got : 0;            // server ignored Range: throw away what we already have
             int r = 0;
             while (got < s_snd_size && (r = esp_http_client_read(h, (char *)buf, 4096)) > 0) {
@@ -429,7 +435,10 @@ static esp_err_t up_reply(httpd_req_t *r, bool ok, const char *msg)
 
 // POST /api/sounds?v=<hash>: the phone relays sounds.bin (it has internet, the board may not, e.g. an
 // iPhone on Muffin's own WiFi). Same erase-ahead write as the WiFi sync, no reboot.
-esp_err_t update_sounds_upload(httpd_req_t *r)
+static esp_err_t sounds_upload_run(httpd_req_t *r);
+esp_err_t update_sounds_upload(httpd_req_t *r) { eye_hold(true); esp_err_t e = sounds_upload_run(r); eye_hold(false); return e; }
+
+static esp_err_t sounds_upload_run(httpd_req_t *r)
 {
     char q[64] = "", ver[24] = "";
     if (httpd_req_get_url_query_str(r, q, sizeof q) == ESP_OK) httpd_query_key_value(q, "v", ver, sizeof ver);

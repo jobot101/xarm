@@ -1,4 +1,5 @@
 #include "ota.h"
+#include "eye.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +35,10 @@ static void restart_task(void *arg)
 }
 
 // POST /api/ota: stream the image into the inactive slot, make it the boot slot, reboot
-esp_err_t ota_handle(httpd_req_t *r)
+static esp_err_t ota_run(httpd_req_t *r);
+esp_err_t ota_handle(httpd_req_t *r) { eye_hold(true); esp_err_t e = ota_run(r); eye_hold(false); return e; }
+
+static esp_err_t ota_run(httpd_req_t *r)
 {
     pick_stop();
     for (int i = 0; i < 50 && pick_busy(); i++) vTaskDelay(pdMS_TO_TICKS(20));

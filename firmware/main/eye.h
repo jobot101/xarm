@@ -14,4 +14,7 @@ bool eye_init(i2c_master_bus_handle_t bus);   // wakes the camera; true if a sen
 bool eye_ok(void);
 const char *eye_sensor(void);                 // "OV2640", ... or "none"
 void eye_register(httpd_handle_t h);          // adds /cam.jpg and /api/blobs
-void eye_pause(bool on);                      // stop capturing (nobody here): frees CPU, /cam.jpg answers 503
+void eye_pause(bool on);
+void eye_hold(bool on);                       // flash writes (OTA, sound bank): capture stops and stays stopped until
+                                              // released, whatever the radar says. The camera's DMA into PSRAM while
+                                              // the flash cache is off crashed the board (interrupt watchdog).                      // stop capturing (nobody here): frees CPU, /cam.jpg answers 503

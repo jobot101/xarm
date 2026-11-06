@@ -18,7 +18,7 @@
 static const char *TAG = "eye";
 static bool s_ok;
 static char s_sensor[16] = "none";
-static volatile bool s_paused;
+static volatile bool s_paused, s_hold, s_want_pause;
 static SemaphoreHandle_t s_lock;              // a frame being sent vs. pausing the capture
 
 // esp32-camera's capture start/stop (cam_hal.c): not in its public header, but plain global functions
@@ -98,15 +98,19 @@ bool eye_init(i2c_master_bus_handle_t bus)
 bool eye_ok(void) { return s_ok; }
 const char *eye_sensor(void) { return s_sensor; }
 
-void eye_pause(bool on)
+static void apply(void)
 {
+    bool on = s_hold || s_want_pause;
     if (!s_ok || on == s_paused) return;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     if (on) cam_stop(); else cam_start();
     s_paused = on;
     xSemaphoreGive(s_lock);
-    ESP_LOGI(TAG, "%s", on ? "camera resting: nobody here" : "camera awake");
+    ESP_LOGI(TAG, "%s", on ? (s_hold ? "camera held: writing flash" : "camera resting: nobody here") : "camera awake");
 }
+
+void eye_pause(bool on) { s_want_pause = on; apply(); }
+void eye_hold(bool on) { s_hold = on; apply(); if (on) vTaskDelay(pdMS_TO_TICKS(60)); }   // let the last DMA land
 
 static esp_err_t h_jpg(httpd_req_t *r)
 {
@@ -172,6 +176,7 @@ void eye_register(httpd_handle_t h)
 
 #else   // Muffin: no ribbon camera
 void eye_pause(bool on) { (void)on; }
+void eye_hold(bool on) { (void)on; }
 bool eye_init(i2c_master_bus_handle_t bus) { (void)bus; return false; }
 bool eye_ok(void) { return false; }
 const char *eye_sensor(void) { return "none"; }
