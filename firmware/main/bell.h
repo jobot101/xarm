@@ -1,4 +1,4 @@
-// bell.h — a real bell: a solenoid striker on a GPIO (Johnny: IO8, through a MOSFET with a flyback diode).
+// bell.h — a real bell: a solenoid striker on a GPIO (Shop MotherShip: IO3, through a MOSFET with a flyback diode).
 // CONFIG_XARM_BELL_GPIO = -1 (Muffin's default) means no solenoid: everything here is a no-op.
 //   POST /api/bell {"ms":40, "n":1, "gap":600, "save":false, "listen":true}
 //     strikes n times with an ms-long pulse; "save" keeps ms as the pulse for "ring the bell";
