@@ -72,21 +72,38 @@ const card = (title, ...kids) => h("section", { class: "card" }, h("span", { cla
 
 // ---- overview
 let camTimer = null;
+// camera source: "obsbot" (the webcam on this PC, sharp) or "board" (the ribbon camera, blurry but always there).
+// The OBSBOT falls back to the board while something else (Video Control recording) holds it.
+let camSrc = localStorage.getItem("ms-cam") || "obsbot", camFallback = false;
 function camLoop(img, note) {
   clearTimeout(camTimer);
-  const next = () => { camTimer = setTimeout(() => camLoop(img, note), 400); };
+  const next = ms => { camTimer = setTimeout(() => camLoop(img, note), ms); };
   if (!document.body.contains(img)) return;
+  const useObsbot = camSrc === "obsbot" && !camFallback;
   const t = new Image();
-  t.onload = () => { img.src = t.src; note.textContent = `camera ${S.cam && S.cam.ribbon || ""}: live`; next(); };
-  t.onerror = () => { note.textContent = S.radar && !S.radar.present ? "camera resting: nobody at the bench" : "no camera picture"; camTimer = setTimeout(() => camLoop(img, note), 2000); };
-  t.src = "/b/cam.jpg?t=" + Date.now();
+  t.onload = () => { img.src = t.src; note.textContent = useObsbot ? "OBSBOT: live" : `board camera ${S.cam && S.cam.ribbon || ""}: live` + (camSrc === "obsbot" ? "  (OBSBOT busy: falling back)" : ""); next(useObsbot ? 150 : 400); };
+  t.onerror = async () => {
+    if (useObsbot) {                              // find out why, then fall back to the board for a while
+      let why = "OBSBOT not available";
+      try { const r = await fetch("/webcam"); const s = await r.json(); why = s.error || why; } catch {}
+      note.textContent = why; camFallback = true; setTimeout(() => camFallback = false, 15000); next(300); return;
+    }
+    note.textContent = S.radar && !S.radar.present ? "camera resting: nobody at the bench" : "no camera picture"; next(2000);
+  };
+  t.src = (useObsbot ? "/webcam.jpg?t=" : "/b/cam.jpg?t=") + Date.now();
+}
+function camSwitch() {
+  const b = h("div", { class: "row", style: "margin-top:6px" });
+  for (const [k, label] of [["obsbot", "OBSBOT"], ["board", "Board camera"]])
+    b.append(h("button", { class: "small " + (camSrc === k ? "" : "ghost"), onclick: () => { camSrc = k; camFallback = false; localStorage.setItem("ms-cam", k); go("overview"); } }, label));
+  return b;
 }
 function buildOverview(m) {
   const img = h("img", { class: "view", alt: "" }), note = h("div", { class: "viewnote" }, "waiting for a picture…");
   const out = h("div", { class: "reply" });
   const say = h("input", { type: "text", placeholder: "say to MotherShip, e.g. hold this for me", onkeydown: e => { if (e.key === "Enter") cmd(say.value, out); } });
   m.append(h("div", { class: "grid2" },
-    card("What MotherShip sees", img, note, h("div", { class: "chips", id: "chips" }),
+    card("What MotherShip sees", img, note, camSwitch(), h("div", { class: "chips", id: "chips" }),
       h("canvas", { class: "scope", style: "width:100%;height:220px;display:block;margin-top:4px" })),
     card("Tell MotherShip",
       h("div", { class: "say" }, say, h("button", { onclick: () => cmd(say.value, out) }, "Send")), out,
