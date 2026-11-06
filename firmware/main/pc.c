@@ -35,6 +35,7 @@ static StreamBufferHandle_t s_spk, s_mic;
 static volatile bool s_hush, s_playing, s_spoke, s_stopped;
 static volatile float s_lvl;
 static volatile int64_t s_since_us;
+static bool s_here = true, s_resting, s_put_down;   // the radar: someone at the bench / camera resting / held part set down
 
 bool pc_connected(void) { return s_fd >= 0; }
 bool pc_speaking(void) { return s_playing || (s_spk && xStreamBufferBytesAvailable(s_spk) > 0); }
@@ -113,7 +114,6 @@ void pc_mic(const int16_t *pcm, int n)
 // ---------------------------------------------------------------- the radar: who's at the bench
 #define REST_AFTER_S 60             // nobody for a minute: camera stops, ring goes nearly dark
 #define PUTDOWN_AFTER_S 180         // holding a part and nobody for 3 minutes: set it down at the drop spot
-static bool s_here = true, s_resting, s_put_down;
 
 static void radar_event(bool here)
 {
