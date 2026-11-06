@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI = os.path.join(HERE, "ui")
 ROOT = os.path.dirname(HERE)                     # the johnny folder: johnny.json, board_ip.txt
+sys.path.insert(0, HERE)                         # actions.py
 PORT = 47620
 
 
@@ -59,6 +60,11 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/b/"): return self.proxy("GET")
         if self.path == "/ping": return self.send(200, json.dumps({"ok": True, "board": H.board}).encode())
+        if self.path == "/actions":
+            import actions
+            lib = actions.library()
+            return self.send(200, json.dumps({"actions": [{"name": n, "frames": len(actions.load(f)), "secs": sum(t for t, _ in actions.load(f)) / 1000} for n, f in lib.items()],
+                                              "last": getattr(H, "last_action", "")}).encode())
         if self.path == "/commands":                 # the brain's action menu (johnny.py COMMANDS), all plain router text
             try:
                 sys.path.insert(0, ROOT); import johnny; cmds = list(johnny.COMMANDS)
@@ -71,7 +77,17 @@ class H(BaseHTTPRequestHandler):
         self.send(200, open(f, "rb").read(), mimetypes.guess_type(f)[0] or "application/octet-stream")
 
     def do_POST(self):
-        if self.path.startswith("/b/"): return self.proxy("POST")
+        if self.path.startswith("/b/"):
+            if self.path.startswith("/b/api/cmd"):            # STOP from the panel also ends a playing action
+                try:
+                    import actions; actions.stop()
+                except Exception: pass
+            return self.proxy("POST")
+        if self.path == "/actions/play":
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            import actions
+            threading.Thread(target=lambda: setattr(H, "last_action", actions.play(H.board, body.get("name", ""), body.get("speed", 0.5), log=lambda *a: None)), daemon=True).start()
+            return self.send(200, json.dumps({"ok": True, "msg": f"playing {body.get('name')}"}).encode())
         self.send(404, b"not found", "text/plain")
 
 

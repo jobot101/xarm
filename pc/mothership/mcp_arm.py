@@ -164,8 +164,27 @@ def ring_chime(pattern: str = "xxx", strength: int = 50) -> str:
 
 
 @mcp.tool()
+def list_actions() -> str:
+    """Hiwonder's ready-made action sequences that can be played (pick-and-place moves, swings left/right)."""
+    import actions
+    lib = actions.library()
+    return json.dumps({n: f"{len(actions.load(f))} frames, {sum(t for t, _ in actions.load(f)) / 1000:.1f} s" for n, f in lib.items()})
+
+
+@mcp.tool()
+def play_action(name: str, speed: float = 0.5) -> str:
+    """Play one of the Hiwonder action sequences by name (see list_actions). speed 0.1-1.0, default 0.5 (half speed).
+    Positions are kept inside the joint limits, and it slows down further with someone close."""
+    import actions
+    return actions.play(BOARD, name, speed, log=lambda *a: None)
+
+
+@mcp.tool()
 def stop() -> str:
     """Stop the arm immediately (always allowed)."""
+    try:
+        import actions; actions.stop()
+    except Exception: pass
     return _call("/api/cmd", {"text": "stop"}).get("msg", "stopped")
 
 

@@ -174,8 +174,22 @@ function buildTricks(m) {
       h("button", { onclick: async () => reply(out, (await api("/api/moves", { action: "record" })).msg) }, "● Record"), name,
       h("button", { class: "ghost", onclick: async () => reply(out, (await api("/api/moves", { action: "save", name: name.value.trim() || "trick" })).msg) }, "Save"),
       h("button", { class: "ghost", onclick: async () => reply(out, (await api("/api/moves", { action: "cancel" })).msg) }, "Cancel")),
-    out, h("div", { class: "list", id: "tricks" })));
+    out, h("div", { class: "list", id: "tricks" })),
+    card("Hiwonder actions",
+      h("p", { class: "small-text muted" }, "Ready-made sequences from Hiwonder, played from the PC. Half speed by default; kept inside the joint limits. They were made for an arm standing on a table, so watch the first run."),
+      h("div", { class: "slider" }, h("span", { class: "lab" }, "Speed"), h("input", { type: "range", min: 10, max: 100, value: 50, id: "acspd", oninput: e => $("#acv").textContent = e.target.value + "%" }), h("span", { class: "val", id: "acv" }, "50%")),
+      h("div", { class: "list", id: "actions" }, h("span", { class: "muted" }, "loading…")), h("div", { class: "reply", id: "acout" })));
   syncTricks(true);
+  fetch("/actions").then(r => r.json()).then(d => {
+    $("#actions").replaceChildren(...(d.actions.length ? d.actions.map(a => h("div", { class: "item" },
+      h("span", { class: "nm" }, a.name, h("span", { class: "muted small-text" }, `  ${a.frames} frames · ${a.secs.toFixed(1)} s`)),
+      h("button", { class: "small", onclick: async () => {
+        if (!confirm(`Play “${a.name}” at ${$("#acspd").value}% speed?
+
+Make sure the arm has room to swing.`)) return;
+        const r = await (await fetch("/actions/play", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: a.name, speed: $("#acspd").value / 100 }) })).json();
+        $("#acout").textContent = r.msg; } }, "Play"))) : [h("p", { class: "small-text muted" }, "No action files in johnny\mothership\actions.")]));
+  }).catch(() => {});
 }
 let tricksSeen = "";
 function syncTricks(force) {

@@ -17,3 +17,6 @@ firmware/main/sounds_hq.bin
 web/dist-preview/
 __pycache__/
 solenoid/version.h
+
+# Hiwonder action files (.rob) stay local: their files, not ours
+pc/mothership/actions/
