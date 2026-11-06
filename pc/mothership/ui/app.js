@@ -37,6 +37,7 @@ const SECTIONS = {
   teach:    { name: "Teach poses", detail: () => "home, drop, hand-off, helper, chime", build: buildTeach },
   tricks:   { name: "Tricks", detail: () => S.moves ? (S.moves.recording ? `recording · ${S.moves.frames} frames` : `${(S.moves.list || []).length} saved`) : "", build: buildTricks },
   chime:    { name: "Chime", detail: () => S.chime ? `${S.chime.pattern} · ${S.chime.strength}%` : "", build: buildChime },
+  radar:    { name: "Radar scan", detail: () => radarWords(), build: buildRadar },
   sensors:  { name: "Mics & radar", detail: () => S.voice ? `${(S.voice.level * 0.6 - 60).toFixed(0)} dBFS · ${radarWords()}` : "", build: buildSensors },
   commands: { name: "All commands", detail: () => "everything it can do", build: buildCommands },
 };
@@ -85,11 +86,12 @@ function buildOverview(m) {
   const out = h("div", { class: "reply" });
   const say = h("input", { type: "text", placeholder: "say to MotherShip, e.g. hold this for me", onkeydown: e => { if (e.key === "Enter") cmd(say.value, out); } });
   m.append(h("div", { class: "grid2" },
-    card("What MotherShip sees", img, note, h("div", { class: "chips", id: "chips" })),
+    card("What MotherShip sees", img, note, h("div", { class: "chips", id: "chips" }),
+      h("canvas", { class: "scope", style: "width:100%;height:220px;display:block;margin-top:4px" })),
     card("Tell MotherShip",
       h("div", { class: "say" }, say, h("button", { onclick: () => cmd(say.value, out) }, "Send")), out,
       h("div", { class: "btns" }, QUICK.map(q => h("button", { class: "ghost", onclick: () => cmd(q, out) }, q))))));
-  camLoop(img, note); chips();
+  camLoop(img, note); chips(); startScope();
 }
 function chips() {
   const c = $("#chips"); if (!c || !S.arm) return;
@@ -303,6 +305,94 @@ function syncSensors() {
     h("p", { class: "small-text muted" }, "While someone's here it listens and follows with its base. After a minute of nobody, the camera rests and the ring dims; after three, a held part is put down."));
 }
 
+// ---- radar scope
+const FOV = 60;                                   // LD2450: +/-60 degrees
+let scopeData = null, scopeAt = 0, scopeLoop = null, trails = [[], [], []];
+function radarPts(r) {
+  if (!r || !r.present) return [];
+  if (Array.isArray(r.pts) && r.pts.length) return r.pts.map(p => ({ x: p[0], y: p[1], v: p[2] || 0 }));
+  if (r.x_cm != null && r.y_cm != null) return [{ x: r.x_cm, y: r.y_cm, v: 0 }];      // older firmware: nearest only
+  return [];
+}
+async function scopeFetch() {
+  if (Date.now() - scopeAt < 180) return;
+  scopeAt = Date.now();
+  try { const r = await fetch("/b/api/radar", { cache: "no-store" }); if (r.ok) { const d = await r.json(); if (d && d.kind) scopeData = d; return; } } catch {}
+  scopeData = S.radar || null;                    // no /api/radar on this firmware yet
+}
+function startScope() {
+  cancelAnimationFrame(scopeLoop);
+  const tick = t => {
+    const cvs = document.querySelectorAll("canvas.scope");
+    if (!cvs.length) return;
+    scopeFetch();
+    const pts = radarPts(scopeData || S.radar);
+    pts.forEach((p, i) => { const tr = trails[i] || (trails[i] = []); const last = tr[tr.length - 1];
+      if (!last || Math.hypot(last.x - p.x, last.y - p.y) > 2) { tr.push({ ...p, t: Date.now() }); if (tr.length > 40) tr.shift(); } });
+    trails.forEach(tr => { while (tr.length && Date.now() - tr[0].t > 6000) tr.shift(); });
+    cvs.forEach(c => drawScope(c, pts, t));
+    scopeLoop = requestAnimationFrame(tick);
+  };
+  scopeLoop = requestAnimationFrame(tick);
+}
+function drawScope(c, pts, t) {
+  const dpr = window.devicePixelRatio || 1, W = c.clientWidth, H = c.clientHeight;
+  if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const far = Math.max(200, ...pts.map(p => Math.hypot(p.x, p.y) * 1.3)), range = Math.min(600, Math.ceil(far / 100) * 100);
+  const ox = W / 2, oy = H - 22, R = Math.min(H - 40, W / 2 / Math.sin(FOV * Math.PI / 180) - 10);
+  const toXY = (x, y) => [ox + x / range * R, oy - y / range * R];
+  const a0 = -Math.PI / 2 - FOV * Math.PI / 180, a1 = -Math.PI / 2 + FOV * Math.PI / 180;
+  // field of view
+  g.fillStyle = "rgba(184,146,58,.05)"; g.beginPath(); g.moveTo(ox, oy); g.arc(ox, oy, R, a0, a1); g.closePath(); g.fill();
+  g.strokeStyle = "rgba(184,146,58,.22)"; g.lineWidth = 1; g.font = "11px DM Sans, Segoe UI"; g.fillStyle = "#b0a28e";
+  const step = range <= 300 ? 50 : 100;
+  for (let d = step; d <= range; d += step) {
+    g.beginPath(); g.arc(ox, oy, d / range * R, a0, a1); g.stroke();
+    if (d % 100 === 0) g.fillText(`${d / 100} m`, ox + 4, oy - d / range * R + 12);
+  }
+  for (const deg of [-60, -30, 0, 30, 60]) {
+    const a = -Math.PI / 2 + deg * Math.PI / 180;
+    g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox + Math.cos(a) * R, oy + Math.sin(a) * R); g.stroke();
+    if (deg) g.fillText(`${Math.abs(deg)}°`, ox + Math.cos(a) * (R + 2) - 8, oy + Math.sin(a) * (R + 2) - 2);
+  }
+  // sweep (for looks: the LD2450 sees the whole fan at once)
+  const s = Math.sin(t / 900), sa = -Math.PI / 2 + s * FOV * Math.PI / 180, dir = Math.cos(t / 900) >= 0 ? -1 : 1;
+  const grad = g.createRadialGradient(ox, oy, 0, ox, oy, R); grad.addColorStop(0, "rgba(168,201,138,.0)"); grad.addColorStop(1, "rgba(168,201,138,.22)");
+  g.fillStyle = grad; g.beginPath(); g.moveTo(ox, oy); g.arc(ox, oy, R, Math.min(sa, sa + dir * 0.35), Math.max(sa, sa + dir * 0.35)); g.closePath(); g.fill();
+  g.strokeStyle = "rgba(168,201,138,.6)"; g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox + Math.cos(sa) * R, oy + Math.sin(sa) * R); g.stroke();
+  // trails and people
+  trails.forEach(tr => tr.forEach((p, k) => {
+    const [x, y] = toXY(p.x, p.y), age = (Date.now() - p.t) / 6000;
+    g.fillStyle = `rgba(168,201,138,${(1 - age) * 0.35})`; g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill();
+  }));
+  pts.forEach((p, i) => {
+    const [x, y] = toXY(p.x, p.y), d = Math.hypot(p.x, p.y), ang = Math.round(Math.atan2(p.x, p.y) * 57.3);
+    const glow = g.createRadialGradient(x, y, 0, x, y, 18); glow.addColorStop(0, "rgba(168,201,138,.9)"); glow.addColorStop(1, "rgba(168,201,138,0)");
+    g.fillStyle = glow; g.beginPath(); g.arc(x, y, 18, 0, 7); g.fill();
+    g.fillStyle = "#e8f5dc"; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill();
+    g.fillStyle = "#f4efe6"; g.font = "13px DM Sans, Segoe UI";
+    g.fillText(`${i + 1} · ${(d / 100).toFixed(1)} m ${ang ? Math.abs(ang) + "° " + (ang > 0 ? "R" : "L") : "ahead"}${Math.abs(p.v) > 5 ? " · moving" : ""}`, x + 10, y - 8);
+  });
+  // MotherShip at the bottom, and the 45 cm "no reach" zone
+  g.strokeStyle = "rgba(255,155,138,.5)"; g.setLineDash([3, 4]); g.beginPath(); g.arc(ox, oy, 45 / range * R, a0, a1); g.stroke(); g.setLineDash([]);
+  g.fillStyle = "#b8923a"; g.beginPath(); g.arc(ox, oy, 7, 0, 7); g.fill();
+  g.fillStyle = "#d4aa55"; g.font = "12px DM Sans, Segoe UI"; g.fillText("MotherShip", ox + 12, oy + 4);
+  if (!pts.length) { g.fillStyle = "#b0a28e"; g.font = "15px Sorts Mill Goudy, Georgia"; g.fillText("nobody in view", ox - 50, oy - R * 0.55); }
+}
+function buildRadar(m) {
+  m.append(card("Radar scan", h("canvas", { class: "scope", style: "width:100%;height:440px;display:block" }),
+    h("div", { class: "chips", id: "radarchips" }),
+    h("p", { class: "small-text muted" }, "What the LD2450 sees: up to three people, with where they are and a short trail. The dashed red arc is 45 cm: closer than that MotherShip stops reaching toward you.")));
+  startScope(); syncRadarChips();
+}
+function syncRadarChips() {
+  const c = $("#radarchips"); if (!c) return;
+  const r = scopeData || S.radar || {}, pts = radarPts(r);
+  c.replaceChildren(...[["People", pts.length], ["Nearest", radarWords()], ["Module", (r.format || r.kind || "none") + (r.baud ? ` · ${r.baud} baud` : "")],
+    ["Seen for", `${r.since_s || 0} s`]].map(([k, v]) => h("div", { class: "chip" }, h("b", {}, v), k)));
+}
+
 // ---- all commands
 async function buildCommands(m) {
   const out = h("div", { class: "reply" }), box = h("div", { class: "btns" }, h("span", { class: "muted" }, "loading…"));
@@ -330,7 +420,7 @@ async function poll() {
     const b = S.boot || {}, bad = /brownout|crash|watchdog|glitch/.test(b.reset || "") && (b.uptime_s || 0) < 600;
     pill("#p-fw", bad ? "failed" : "incomplete", `fw ${S.fw ? S.fw.version : "?"}` + (bad ? ` · reset: ${b.reset}` : ""));
     document.querySelectorAll(".nav .detail").forEach(d => d.textContent = SECTIONS[d.dataset.k].detail());
-    chips(); syncJoints(); syncTricks(); syncSensors();
+    chips(); syncJoints(); syncTricks(); syncSensors(); syncRadarChips();
   } catch (e) {
     if (Date.now() - lastOk > 4000) pill("#p-state", "failed", "can't reach the board");
   }

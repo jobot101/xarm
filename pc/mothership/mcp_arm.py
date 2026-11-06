@@ -52,6 +52,26 @@ def _call(path: str, body: dict | None = None, timeout: float = 10) -> dict:
 def _state() -> dict: return _call("/api/state")
 
 
+def _people(r: dict) -> list[dict]:
+    """Every person the radar tracks: distance, angle (+ = to MotherShip's right), x/y in cm, moving or still."""
+    if not r or not r.get("present"): return []
+    pts = r.get("pts") or ([[r["x_cm"], r["y_cm"], 0]] if r.get("x_cm") is not None else [])
+    out = []
+    for x, y, v in pts:
+        import math
+        out.append({"distance_cm": round(math.hypot(x, y)), "angle_deg": round(math.degrees(math.atan2(x, y))),
+                    "side": "ahead" if abs(x) < 10 else ("right" if x > 0 else "left"),
+                    "x_cm": x, "y_cm": y, "moving": abs(v) > 5})
+    if not out and r.get("distance_cm", -1) >= 0:
+        out.append({"distance_cm": r["distance_cm"], "angle_deg": r.get("angle_deg")})
+    return sorted(out, key=lambda p: p["distance_cm"])
+
+
+def _radar() -> dict:
+    try: return _call("/api/radar", timeout=4)             # newer firmware: every target, small and fast
+    except Exception: return _state().get("radar") or {}
+
+
 def _near(st: dict) -> bool:
     r = st.get("radar") or {}
     return bool(r.get("present")) and 0 <= (r.get("distance_cm") if r.get("distance_cm") is not None else -1) < NEAR_CM
@@ -96,7 +116,21 @@ def arm_state() -> str:
         "busy": st.get("busy"), "state": st.get("state"), "detail": st.get("detail"),
         "holding": st.get("holding"), "motors_on": arm.get("torque"),
         "person": {"present": r.get("present"), "distance_cm": r.get("distance_cm"), "angle_deg": r.get("angle_deg")},
+        "people": _people(r),
     })
+
+
+@mcp.tool()
+def radar_scan() -> str:
+    """Who the radar (HLK-LD2450, 24 GHz, ~120 degree view, up to 6 m) sees right now: up to three people, each with
+    distance in cm, angle in degrees (0 = straight ahead of MotherShip, + = to its right), x/y in cm and whether
+    they are moving. Also how long someone has been there or how long the bench has been empty.
+    A target that never moves at a fixed spot very close (< 30 cm) for a long time is usually part of the setup,
+    not a person."""
+    r = _radar()
+    if not r or r.get("kind") in (None, "none"): return json.dumps({"radar": "none"})
+    return json.dumps({"module": r.get("format") or r.get("kind"), "someone_here": bool(r.get("present")),
+                       "for_s": r.get("since_s"), "people": _people(r)})
 
 
 @mcp.tool()

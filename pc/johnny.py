@@ -297,7 +297,24 @@ class Johnny:
 
     def arm_words(self):
         s = self.state
-        return f"{s.get('state')}{', holding something' if s.get('holding') else ''}{', moving' if s.get('busy') else ''}"
+        return f"{s.get('state')}{', holding something' if s.get('holding') else ''}{', moving' if s.get('busy') else ''}; {self.people_words()}"
+
+    def people_words(self):
+        """What the radar sees, in a few words for the model: 'nobody at the bench' / 'one person 1.2 m away, to your left'."""
+        import math, requests
+        try: r = requests.get(f"http://{self.board}/api/radar", timeout=1.5).json()
+        except Exception:
+            try: r = requests.get(f"http://{self.board}/api/state", timeout=2).json().get("radar") or {}
+            except Exception: return "radar: unknown"
+        if not r or r.get("kind") in (None, "none"): return "no radar"
+        if not r.get("present"): return f"radar: nobody at the bench (for {r.get('since_s', 0)} s)"
+        pts = r.get("pts") or ([[r["x_cm"], r["y_cm"], 0]] if r.get("x_cm") is not None else [])
+        bits = []
+        for x, y, v in sorted(pts, key=lambda p: math.hypot(p[0], p[1])):
+            side = "straight ahead" if abs(x) < 10 else f"to your {'right' if x > 0 else 'left'}"
+            bits.append(f"{math.hypot(x, y) / 100:.1f} m away {side}{', moving' if abs(v) > 5 else ''}")
+        n = len(bits) or 1
+        return f"radar: {'one person' if n == 1 else f'{n} people'} " + ("; ".join(bits) if bits else f"{r.get('distance_cm', 0) / 100:.1f} m away")
 
     async def handle(self, text):
         now = time.time()
