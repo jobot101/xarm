@@ -530,6 +530,56 @@ static void do_dance(void)
 }
 
 // hover over the bell, strike 3 times
+static chime_t s_chime = { 50, 110, 470, "xxx" };
+static chime_t s_play;
+static volatile bool s_play_set;
+
+static void chime_clean(chime_t *c)
+{
+    if (c->strength < 10) c->strength = 10;
+    if (c->strength > 100) c->strength = 100;
+    if (c->hit_ms < 50) c->hit_ms = 50;
+    if (c->hit_ms > 400) c->hit_ms = 400;
+    if (c->gap_ms < 150) c->gap_ms = 150;
+    if (c->gap_ms > 3000) c->gap_ms = 3000;
+    c->pattern[sizeof c->pattern - 1] = 0;
+    int k = 0;
+    for (int i = 0; c->pattern[i]; i++) if (strchr("x!o.", c->pattern[i])) c->pattern[k++] = c->pattern[i];
+    c->pattern[k] = 0;
+    if (!strpbrk(c->pattern, "x!o")) strcpy(c->pattern, "x");
+}
+
+void chime_get(chime_t *c) { *c = s_chime; }
+
+void chime_save(const chime_t *c)
+{
+    s_chime = *c;
+    chime_clean(&s_chime);
+    nvs_handle_t h;
+    if (nvs_open("xarm", NVS_READWRITE, &h) == ESP_OK) { nvs_set_blob(h, "chime", &s_chime, sizeof s_chime); nvs_commit(h); nvs_close(h); }
+}
+
+static void chime_load(void)
+{
+    nvs_handle_t h;
+    chime_t c;
+    size_t n = sizeof c;
+    if (nvs_open("xarm", NVS_READONLY, &h) != ESP_OK) return;
+    if (nvs_get_blob(h, "chime", &c, &n) == ESP_OK && n == sizeof c) { chime_clean(&c); s_chime = c; }
+    nvs_close(h);
+}
+
+bool pick_chime(const chime_t *c, char *msg, size_t n)
+{
+    s_play = *c;
+    chime_clean(&s_play);
+    s_play_set = true;
+    return pick_run(OP_BELL, 0, msg, n);
+}
+
+// back off along the lift, away from the bell (a chime above the arm: downward), by k of the lift
+static void bell_back(uint16_t p[NSERVO], float k) { pose(p, g_cfg.bell, CONFIG_XARM_BELL_ABOVE ? -k : k, g_cfg.grip_close); }
+
 static void do_bell(void)
 {
 #if !CONFIG_XARM_BELL_ARM
@@ -542,17 +592,30 @@ static void do_bell(void)
 #endif
     fx_say(SND_BELL);
     set("ringing", "ding!");
+    chime_t c = s_play_set ? s_play : s_chime;     // a one-off from the app, else the saved settings
+    s_play_set = false;
+    // the taught Bell pose is the moment of contact. Each strike backs off by the strength (! a bit further,
+    // o less), then swings in over hit_ms and bounces straight off so the bell rings free.
+    // A bell below the arm backs off upward; a chime above it, downward.
+    float k = c.strength / 100.0f;
     uint16_t up[NSERVO], hit[NSERVO];
-    // the taught Bell pose is the moment of contact; the arm backs off half a lift away from the bell between taps.
-    // A bell below the arm: back off upward. A chime hanging above it (Johnny's): back off downward and strike up.
-    pose(up, g_cfg.bell, CONFIG_XARM_BELL_ABOVE ? -0.5f : 0.5f, g_cfg.grip_close);
     pose(hit, g_cfg.bell, 0.0f, g_cfg.grip_close);
+    bell_back(up, k);
     if (!go(up, g_cfg.move_ms)) return;
-    for (int i = 0; i < 3; i++) {
-        if (!go(hit, 110)) return;
+    for (int i = 0; c.pattern[i]; i++) {
+        char ch = c.pattern[i];
+        if (ch == '.') { if (!wait_ms(c.gap_ms)) return; continue; }
+        float kk = ch == '!' ? k * 1.4f : ch == 'o' ? k * 0.55f : k;
+        if (kk > 1.0f) kk = 1.0f;
+        int wind = 120 + (int)(kk * 120);         // further back takes a little longer to wind up
+        bell_back(up, kk);
+        if (!go(up, wind)) return;
+        if (!go(hit, ch == 'o' ? c.hit_ms * 3 / 2 : c.hit_ms)) return;
         fx_event(FX_BELL);
-        if (!go(up, 220)) return;
-        if (!wait_ms(250)) return;
+        bell_back(up, k * 0.5f);                   // bounce off the bell right away
+        if (!go(up, 90)) return;
+        int rest = c.gap_ms - wind - c.hit_ms - 90;
+        if (rest > 0 && !wait_ms(rest)) return;
     }
     if (!go_home()) return;
     set("idle", "rang the bell");
@@ -1161,6 +1224,7 @@ void pick_init(void)
     nvs_handle_t h;
     uint8_t a;
     if (nvs_open("xarm", NVS_READONLY, &h) == ESP_OK) { if (nvs_get_u8(h, "anim", &a) == ESP_OK) s_anim = a; nvs_close(h); }
+    chime_load();
     xTaskCreate(task, "pick", 4096, NULL, 5, NULL);
 }
 

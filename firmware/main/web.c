@@ -1,5 +1,6 @@
 #include "web.h"
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +30,8 @@
 #include "audio.h"
 #include "school.h"
 #include "eye.h"
+
+static void chime_json(cJSON *o, const chime_t *c);   // /api/chime, also in /api/state
 #include "bell.h"
 #include "radar.h"
 #include "pc.h"
@@ -127,6 +130,7 @@ static esp_err_t h_state(httpd_req_t *r)
     }
 
     radar_json(j);
+    { chime_t ch; chime_get(&ch); chime_json(cJSON_AddObjectToObject(j, "chime"), &ch); }
     {   // why the board last restarted: tells a brownout (solenoid on the same supply) from a crash, no USB needed
         static const char *const why[] = { [ESP_RST_UNKNOWN] = "unknown", [ESP_RST_POWERON] = "power on", [ESP_RST_EXT] = "reset pin",
             [ESP_RST_SW] = "restart", [ESP_RST_PANIC] = "crash", [ESP_RST_INT_WDT] = "watchdog (interrupt)",
@@ -412,6 +416,75 @@ static esp_err_t h_limits(httpd_req_t *r)
     if (i < 0 || i >= NSERVO || hi - lo < 20) return reply(r, false, "bad limits");
     arm_limits_set(i, lo, hi);
     return reply(r, true, "limits saved");
+}
+
+// ---------- POST /api/chime {strength, hit_ms, gap_ms, pattern, save, play}: starts it and answers at once ----------
+// (waiting here would stall this server, and with it the mic stream to the PC). The app then reads /api/levels.
+static void chime_json(cJSON *o, const chime_t *c)
+{
+    cJSON_AddNumberToObject(o, "strength", c->strength);
+    cJSON_AddNumberToObject(o, "hit_ms", c->hit_ms);
+    cJSON_AddNumberToObject(o, "gap_ms", c->gap_ms);
+    cJSON_AddStringToObject(o, "pattern", c->pattern);
+}
+
+static esp_err_t h_chime(httpd_req_t *r)
+{
+    cJSON *b = body(r), *v;
+    chime_t c;
+    chime_get(&c);
+    if (b) {
+        c.strength = num(b, "strength", c.strength);
+        c.hit_ms = num(b, "hit_ms", c.hit_ms);
+        c.gap_ms = num(b, "gap_ms", c.gap_ms);
+        if (cJSON_IsString(v = cJSON_GetObjectItem(b, "pattern"))) strlcpy(c.pattern, v->valuestring, sizeof c.pattern);
+    }
+    bool save = b && cJSON_IsTrue(cJSON_GetObjectItem(b, "save"));
+    bool play = !b || !cJSON_IsFalse(cJSON_GetObjectItem(b, "play"));
+    cJSON_Delete(b);
+    char msg[96] = "saved";
+    bool ok = true;
+    if (save) chime_save(&c);
+    int64_t t0 = esp_timer_get_time();
+    if (play) ok = pick_chime(&c, msg, sizeof msg);
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddBoolToObject(o, "ok", ok);
+    cJSON_AddStringToObject(o, "msg", msg);
+    cJSON_AddNumberToObject(o, "t0_ms", (double)(t0 / 1000));
+    chime_t saved;
+    chime_get(&saved);
+    chime_json(cJSON_AddObjectToObject(o, "saved"), &saved);
+    char *txt = cJSON_PrintUnformatted(o);
+    cJSON_Delete(o);
+    httpd_resp_set_type(r, "application/json");
+    esp_err_t e = httpd_resp_sendstr(r, txt);
+    free(txt);
+    return e;
+}
+
+// ---------- GET /api/levels?since_ms=N: raw MIC1/MIC2 dBFS per 16 ms from just before N until now ----------
+static esp_err_t h_levels(httpd_req_t *r)
+{
+    char q[48] = "", val[24] = "";
+    int64_t since = esp_timer_get_time() - 3000000;
+    if (httpd_req_get_url_query_str(r, q, sizeof q) == ESP_OK && httpd_query_key_value(q, "since_ms", val, sizeof val) == ESP_OK)
+        since = (int64_t)atoll(val) * 1000;
+    static float l1[256], l2[256];
+    int pre = 0, k = voice_levels_since(since, l1, l2, 256, &pre);
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddNumberToObject(o, "hop_ms", 16);
+    cJSON_AddNumberToObject(o, "pre", pre);
+    cJSON *a = cJSON_AddArrayToObject(o, "mic1"), *m2 = cJSON_AddArrayToObject(o, "mic2");
+    for (int i = 0; i < k; i++) {
+        cJSON_AddItemToArray(a, cJSON_CreateNumber(roundf(l1[i] * 10) / 10));
+        cJSON_AddItemToArray(m2, cJSON_CreateNumber(roundf(l2[i] * 10) / 10));
+    }
+    char *txt = cJSON_PrintUnformatted(o);
+    cJSON_Delete(o);
+    httpd_resp_set_type(r, "application/json");
+    esp_err_t e = httpd_resp_sendstr(r, txt);
+    free(txt);
+    return e;
 }
 
 // ---------- GET /api/i2c -> {"found":"0x18 0x20 0x40 0x51 0x52","cam":true} ----------
@@ -786,6 +859,8 @@ bool web_start(void)
         {"/api/voice",  HTTP_POST, h_voice},
         {"/api/limits", HTTP_POST, h_limits},
         {"/api/i2c",    HTTP_GET,  h_i2c},
+        {"/api/chime",  HTTP_POST, h_chime},
+        {"/api/levels", HTTP_GET,  h_levels},
         {"/api/phrases",HTTP_GET,  h_phrases},
         {"/api/sys",    HTTP_GET,  h_sys},
         {"/*",          HTTP_GET,  h_app},       // keep last

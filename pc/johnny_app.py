@@ -16,7 +16,6 @@ from PIL import Image, ImageDraw, ImageTk
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAME = 240                                   # blob coordinates are on a 240x240 frame (board core.h)
 VIEW = (400, 300)
-SWEEP = [10, 15, 20, 30, 40, 55, 70, 90, 120]  # bell auto-tune: pulse lengths tried, ms
 COMMANDS = ["ring the bell", "hold this for me", "grab it", "let go", "put it down",
             "give it to me", "go home", "wave hello", "take a bow", "dance robot"]
 
@@ -132,21 +131,38 @@ class App:
         self.rtxt = ttk.Label(rad, text="no radar in this firmware yet", style="Big.TLabel"); self.rtxt.pack(side="left", padx=8)
         self.rsub = ttk.Label(rad, text="", style="Dim.TLabel"); self.rsub.pack(side="right")
 
-        # ---- bell
-        bell = ttk.LabelFrame(right, text="Bell", padding=8); bell.pack(fill="x")
-        r = ttk.Frame(bell); r.pack(fill="x")
-        ttk.Label(r, text="Pulse").pack(side="left")
-        self.ms = tk.IntVar(value=40)
-        ttk.Scale(r, from_=5, to=150, variable=self.ms, command=lambda v: self.ms_lbl.config(text=f"{int(float(v))} ms")).pack(side="left", fill="x", expand=True, padx=6)
-        self.ms_lbl = ttk.Label(r, text="40 ms", width=7); self.ms_lbl.pack(side="left")
+        # ---- chime: the arm plays it from the taught Bell pose
+        bell = ttk.LabelFrame(right, text="Chime", padding=8); bell.pack(fill="x")
+        self.ch_strength, self.ch_hit, self.ch_gap = tk.IntVar(value=50), tk.IntVar(value=110), tk.IntVar(value=470)
+        for k, (label, var, lo, hi, unit) in enumerate((("Strength", self.ch_strength, 10, 100, "%"),
+                                                        ("Strike speed", self.ch_hit, 50, 400, " ms"),
+                                                        ("Beat", self.ch_gap, 150, 1500, " ms"))):
+            r = ttk.Frame(bell); r.pack(fill="x", pady=1)
+            ttk.Label(r, text=label, width=11).pack(side="left")
+            lb = ttk.Label(r, text=f"{var.get()}{unit}", width=7)
+            ttk.Scale(r, from_=lo, to=hi, variable=var,
+                      command=lambda v, lb=lb, unit=unit, var=var: (var.set(int(float(v))), lb.config(text=f"{int(float(v))}{unit}"))
+                      ).pack(side="left", fill="x", expand=True, padx=6)
+            lb.pack(side="left")
+            setattr(self, f"ch_lbl{k}", (lb, unit))
+        r = ttk.Frame(bell); r.pack(fill="x", pady=(4, 0))
+        ttk.Label(r, text="Pattern", width=11).pack(side="left")
+        self.ch_pat = ttk.Entry(r, width=18); self.ch_pat.insert(0, "xxx"); self.ch_pat.pack(side="left", padx=6)
+        ttk.Label(r, text="x strike  ! accent  o soft  . rest", style="Dim.TLabel").pack(side="left")
+        r = ttk.Frame(bell); r.pack(fill="x", pady=(4, 0))
+        for name, pat in (("Single", "x"), ("Three", "xxx"), ("Double-double", "xx.xx"), ("Accent", "x.x..!"), ("Soft", "ooo"), ("Hour", "x" * 12)):
+            ttk.Button(r, text=name, command=lambda p=pat: (self.ch_pat.delete(0, "end"), self.ch_pat.insert(0, p))).pack(side="left", padx=(0, 3))
         r = ttk.Frame(bell); r.pack(fill="x", pady=(6, 0))
-        self.bell_btns = [ttk.Button(r, text="Strike", command=self.strike),
-                          ttk.Button(r, text="Auto-tune", command=self.autotune),
-                          ttk.Button(r, text="Save pulse", command=self.save_pulse)]
-        for w in self.bell_btns: w.pack(side="left", padx=(0, 6))
-        self.plot = tk.Canvas(bell, width=360, height=150, bg=PANEL, highlightthickness=0); self.plot.pack(fill="x", pady=(8, 0))
-        self.bell_note = ttk.Label(bell, text="Strike to hear it. Both mics are plotted.", style="Dim.TLabel", wraplength=360)
+        self.bell_btns = [ttk.Button(r, text="Ring", command=self.ring),
+                          ttk.Button(r, text="Save as default", command=self.save_chime),
+                          ttk.Button(r, text="Teach strike point", command=self.teach_bell),
+                          ttk.Button(r, text="Solenoid test", command=self.strike)]
+        for w in self.bell_btns: w.pack(side="left", padx=(0, 4))
+        self.plot = tk.Canvas(bell, width=360, height=110, bg=PANEL, highlightthickness=0); self.plot.pack(fill="x", pady=(8, 0))
+        self.bell_note = ttk.Label(bell, text="Teach the strike point first: closed gripper just touching the chime.",
+                                   style="Dim.TLabel", wraplength=360)
         self.bell_note.pack(anchor="w", pady=(4, 0))
+        self.ch_synced = False
 
         # ---- mics
         mic = ttk.LabelFrame(right, text="Mics", padding=8); mic.pack(fill="x", pady=(10, 0))
@@ -217,6 +233,7 @@ class App:
                 self.dual.set(bool(v.get("dual"))); self.synced = True
             self.draw_radar(st.get("radar"))
             self.sync_arm(st)
+            self.sync_chime(st.get("chime"))
             lvl = v.get("level", 0)
             self.meter.delete("all")
             w = self.meter.winfo_width() or 360
@@ -423,7 +440,7 @@ class App:
     def strike(self):
         if self.busy: return
         self.lock(True)
-        ms = self.ms.get()
+        ms = 60
         def done(r):
             self.lock(False)
             if isinstance(r, Exception) or not r.get("ok"):
@@ -434,7 +451,7 @@ class App:
     def show_ring(self, r, title=None):
         pre, m1, m2 = r.get("pre", 0), r.get("mic1", []), r.get("mic2", [])
         c = self.plot; c.delete("all")
-        W, H = c.winfo_width() or 360, 150
+        W, H = c.winfo_width() or 360, int(c.cget("height"))
         lo, hi = -80, 0
         y = lambda db: H - (max(lo, min(hi, db)) - lo) / (hi - lo) * H
         for g in (-60, -40, -20):
@@ -444,49 +461,55 @@ class App:
             if len(arr) > 1 and max(arr) > -98:
                 c.create_line(*[v for i, db in enumerate(arr) for v in (i / (len(arr) - 1) * W, y(db))], fill=col, width=2)
         a, b = ring_stats(m1, pre), ring_stats(m2, pre) if m2 and max(m2) > -98 else None
-        txt = title or f"{r.get('ms')} ms pulse"
+        txt = title or (f"{r.get('ms')} ms pulse" if r.get("ms") else "chime")
         if a: txt += f":  mic1 rang {a['rise']:.0f} dB over the room for {a['ring_ms']} ms" + ("  (clipping)" if a["clip"] else "")
         if b: txt += f";  mic2 {b['rise']:.0f} dB, {b['ring_ms']} ms (mic2 {b['peak'] - a['peak']:+.1f} dB vs mic1)" if a else ""
         if not a: txt += ": the mic didn't hear it"
         self.bell_note.config(text=txt)
         return a
 
-    def autotune(self):
+    def chime_body(self):
+        return {"strength": int(self.ch_strength.get()), "hit_ms": int(self.ch_hit.get()),
+                "gap_ms": int(self.ch_gap.get()), "pattern": self.ch_pat.get().strip() or "x"}
+
+    def ring(self):
         if self.busy: return
-        if not messagebox.askyesno("Auto-tune the bell", f"Strike the bell {2 * len(SWEEP)} times at different pulse lengths "
-                                   "and keep the one that rings loudest and longest?\n\nKeep the shop quiet while it runs (about a minute)."):
-            return
         self.lock(True)
+        body = self.chime_body()
+        self.bell_note.config(text=f"ringing {body['pattern']} ...")
         def run():
-            res = []
-            for ms in SWEEP:
-                scores = []
-                for _ in range(2):
-                    r = self.b.bell(ms=ms)
-                    if not r.get("ok"): raise RuntimeError("this firmware has no solenoid set up")
-                    a = ring_stats(r.get("mic1", []), r.get("pre", 0))
-                    self.root.after(0, self.show_ring, r, f"trying {ms} ms")
-                    # loud and long; a clipped peak can't show a difference in loudness, so ring time decides
-                    if a: scores.append(max(0, a["rise"]) * (a["ring_ms"] / 1000 + 0.05))
-                    time.sleep(0.4)
-                res.append((statistics.mean(scores) if scores else 0, ms))
-            return res
-        def done(res):
+            r = self.b.post("/api/chime", body, timeout=8)
+            if not r.get("ok"): return r
+            t_end = time.time() + 40                     # wait for the arm to finish (state goes idle), then listen
+            time.sleep(0.6)
+            while time.time() < t_end and self.st.get("state") not in ("idle", None): time.sleep(0.3)
+            time.sleep(1.2)
+            lv = self.b.s.get(self.b.base + f"/api/levels?since_ms={int(r['t0_ms'])}", timeout=6).json()
+            lv["msg"] = r.get("msg", "")
+            return lv
+        def done(r):
             self.lock(False)
-            if isinstance(res, Exception): self.bell_note.config(text=f"auto-tune stopped: {res}"); return
-            best = max(res)[1]
-            self.ms.set(best); self.ms_lbl.config(text=f"{best} ms")
-            table = "  ".join(f"{ms}:{s:.0f}" for s, ms in res)
-            self.bell_note.config(text=f"Best ring at {best} ms (score per pulse  {table}). Press Save pulse to keep it.")
+            if isinstance(r, Exception): self.bell_note.config(text=f"chime: {r}"); return
+            if "mic1" not in r: self.bell_note.config(text="chime: " + r.get("msg", "refused")); return
+            self.show_ring(r, f"{body['pattern']} at {body['strength']}%")
         self.bg(run, done)
 
-    def save_pulse(self):
-        if self.busy: return
-        ms = self.ms.get()
-        self.lock(True)
-        self.bg(lambda: self.b.bell(ms=ms, save=True, listen=False),
-                lambda r: (self.lock(False), self.bell_note.config(
-                    text=f"saved: \"ring the bell\" now uses {ms} ms" if not isinstance(r, Exception) and r.get("ok") else f"not saved: {r}")))
+    def save_chime(self):
+        body = dict(self.chime_body(), save=True, play=False)
+        self.bg(lambda: self.b.post("/api/chime", body), lambda r: self.bell_note.config(
+            text=f"saved: \"ring the bell\" plays {body['pattern']} at {body['strength']}%" if isinstance(r, dict) and r.get("ok") else f"not saved: {r}"))
+
+    def teach_bell(self):
+        self.act("/api/teach", {"what": "bell"}, "taught the strike point",
+                 confirm="Save the arm's pose right now as the chime's strike point?\n\n"
+                         "Pose it first (Drive, Joints or Limp): closed gripper just touching the chime.")
+
+    def sync_chime(self, ch):
+        if self.ch_synced or not ch: return
+        self.ch_synced = True
+        for k, (var, key) in enumerate(((self.ch_strength, "strength"), (self.ch_hit, "hit_ms"), (self.ch_gap, "gap_ms"))):
+            var.set(ch.get(key, var.get())); lb, unit = getattr(self, f"ch_lbl{k}"); lb.config(text=f"{var.get()}{unit}")
+        self.ch_pat.delete(0, "end"); self.ch_pat.insert(0, ch.get("pattern", "xxx"))
 
     # ---------------------------------------------------------------- mics
     def set_gain(self):
