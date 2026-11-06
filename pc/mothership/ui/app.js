@@ -208,15 +208,21 @@ function syncTricks(force) {
 
 // ---- chime
 function buildChime(m) {
-  const c = S.chime || { strength: 15, hit_ms: 110, gap_ms: 470, pattern: "xxx" };
+  const c = S.chime || { strength: 15, hit_ms: 50, gap_ms: 470, pattern: "xxx" };
   const mk = (label, key, lo, hi, unit) => {
     const r = h("input", { type: "range", min: lo, max: hi, value: c[key], "data-c": key }), v = h("span", { class: "val" }, c[key] + unit);
     r.addEventListener("input", () => v.textContent = r.value + unit);
     return h("div", { class: "slider" }, h("span", { class: "lab" }, label), r, v);
   };
+  // Strength = how hard it hits = how fast the strike comes in (hit_ms 400 gentle .. 50 full); Travel = distance
+  const mkForce = hit => {
+    const pct = Math.round((400 - hit) / 350 * 100), r = h("input", { type: "range", min: 0, max: 100, value: pct, id: "force" }), v = h("span", { class: "val" }, pct + "%");
+    r.addEventListener("input", () => v.textContent = r.value + "%");
+    return h("div", { class: "slider" }, h("span", { class: "lab" }, "Strength"), r, v);
+  };
   const pat = h("input", { type: "text", value: c.pattern, id: "pat" }), out = h("div", { class: "reply" });
   const plot = h("canvas", { class: "plot", width: 900, height: 130 });
-  const body = () => ({ strength: +$("[data-c=strength]").value, hit_ms: +$("[data-c=hit_ms]").value, gap_ms: +$("[data-c=gap_ms]").value, pattern: pat.value.trim() || "x" });
+  const body = () => ({ strength: +$("[data-c=strength]").value, hit_ms: Math.round(400 - +$("#force").value / 100 * 350), gap_ms: +$("[data-c=gap_ms]").value, pattern: pat.value.trim() || "x" });
   const ring = async () => {
     const b = body(); reply(out, `ringing ${b.pattern} …`);
     const r = await api("/api/chime", b);
@@ -226,11 +232,11 @@ function buildChime(m) {
     while (Date.now() < until && S.state && S.state !== "idle") await new Promise(res => setTimeout(res, 300));
     await new Promise(res => setTimeout(res, 1200));
     const lv = await (await fetch(`/b/api/levels?since_ms=${Math.floor(r.t0_ms)}`)).json();
-    reply(out, drawLevels(plot, lv, `${b.pattern} at ${b.strength}%`));
+    reply(out, drawLevels(plot, lv, `${b.pattern}, strength ${$("#force").value}%, travel ${b.strength}%`));
   };
   m.append(card("Chime",
-    h("p", { class: "small-text muted" }, "The arm plays the chime from its taught strike point with short, fast taps. Strength is how far it backs off before each strike, capped at 25% so it never swings the full distance."),
-    mk("Strength", "strength", 5, 25, "%"), mk("Strike speed", "hit_ms", 50, 400, " ms"), mk("Beat", "gap_ms", 150, 1500, " ms"),
+    h("p", { class: "small-text muted" }, "The arm plays the chime from its taught strike point with short, hard taps. Strength is how hard it hits (how fast the strike comes in); Travel is how far it backs off first, capped at 25% so it never swings the full distance."),
+    mkForce(c.hit_ms), mk("Travel", "strength", 5, 25, "%"), mk("Beat", "gap_ms", 150, 1500, " ms"),
     h("div", { class: "row" }, h("span", { class: "lab muted", style: "width:120px" }, "Pattern"), pat,
       h("span", { class: "small-text muted" }, h("code", {}, "x"), " strike  ", h("code", {}, "!"), " accent  ", h("code", {}, "o"), " soft  ", h("code", {}, "."), " rest")),
     h("div", { class: "row" }, PRESETS.map(([n, p]) => h("button", { class: "small ghost", onclick: () => pat.value = p }, n))),

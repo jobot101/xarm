@@ -531,7 +531,7 @@ static void do_dance(void)
 
 // hover over the bell, strike 3 times
 #define CHIME_MAX_STRENGTH 25       // % of the lift: taps, never a full-distance swing
-static chime_t s_chime = { 15, 110, 470, "xxx" };
+static chime_t s_chime = { 15, 50, 470, "xxx" };    // short travel, full strength (fastest strike)
 static chime_t s_play;
 static volatile bool s_play_set;
 

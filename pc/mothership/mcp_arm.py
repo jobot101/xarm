@@ -192,10 +192,12 @@ def run_command(text: str) -> str:
 
 
 @mcp.tool()
-def ring_chime(pattern: str = "xxx", strength: int = 15) -> str:
-    """Ring the chime with the arm: short fast taps. pattern: x strike, ! accent, o soft, . rest (up to 32).
-    strength 5-25 (how far it backs off; never more, a full swing can wreck the chime)."""
-    r = _call("/api/chime", {"pattern": pattern, "strength": max(5, min(25, int(strength)))})
+def ring_chime(pattern: str = "xxx", strength: int = 100, travel: int = 15) -> str:
+    """Ring the chime with the arm: short, hard taps. pattern: x strike, ! accent, o soft, . rest (up to 32).
+    strength 0-100: how hard it hits (100 = fastest strike). travel 5-25: how far it backs off first, % of the
+    lift (never more: a full-distance swing can wreck the chime)."""
+    hit_ms = round(400 - max(0, min(100, int(strength))) / 100 * 350)
+    r = _call("/api/chime", {"pattern": pattern, "strength": max(5, min(25, int(travel))), "hit_ms": hit_ms})
     return r.get("msg", "ok") if r.get("ok") else f"not done: {r.get('msg')}"
 
 
