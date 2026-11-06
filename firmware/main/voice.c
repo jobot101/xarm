@@ -36,6 +36,7 @@
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/idf_additions.h"
 #include "sdkconfig.h"
 
 #define MAX_PHRASES 200          // MultiNet7 takes up to 300
@@ -594,6 +595,20 @@ static bool afe_start(srmodel_list_t *models)
     return true;
 }
 
+static void spawn(TaskFunction_t fn, const char *name, uint32_t stack, int core)
+{
+    if (xTaskCreatePinnedToCore(fn, name, stack, NULL, 5, NULL, core) == pdPASS) return;
+#if JOHNNY   // Johnny's voice tasks only stream audio and handle "stop": no flash writes, so a PSRAM stack is safe.
+            // (Muffin's run router commands that write NVS, which must not happen on an external stack.)
+    if (xTaskCreatePinnedToCoreWithCaps(fn, name, stack, NULL, 5, NULL, core, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
+        ESP_LOGW(TAG, "%s: no internal RAM for its stack, running it from PSRAM", name);
+        return;
+    }
+#endif
+    ESP_LOGE(TAG, "%s: couldn't start the task at all", name);
+    strlcpy(s_status, "no memory for the ears", sizeof s_status);
+}
+
 void voice_start(i2c_master_bus_handle_t bus)
 {
     tune_load();
@@ -628,8 +643,10 @@ void voice_start(i2c_master_bus_handle_t bus)
     s_ok = true;
     ESP_LOGI(TAG, "listening (%s, %s VAD, %s), gain %d dB, threshold %d%%, %s", name, s_vad,
              audio_mic_dual() ? "both mics" : "one mic", s_gain, s_thresh, s_wake ? "Hey Muffin first" : "always on");
-    xTaskCreatePinnedToCore(feed_task, "voice_feed", 4096, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(detect_task, "voice", 8192, NULL, 5, NULL, 1);
+    // Internal RAM can be down to a few KB with no 8 KB block left: then xTaskCreate fails silently, nothing
+    // fetches the AFE ("Ringbuffer of AFE(FEED) is full") and the ears are dead. Fall back to a PSRAM stack.
+    spawn(feed_task, "voice_feed", 4096, 0);
+    spawn(detect_task, "voice", 8192, 1);
 }
 
 void voice_reload(void) { s_reload = true; }
