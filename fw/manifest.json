@@ -1,0 +1,40 @@
+{
+  "name": "xarm-voice",
+  "version": "c7ea979",
+  "sounds": "bb2f8d4e3b37",
+  "sounds_size": 3327860,
+  "sounds_hq": "c50afc3f10d7",
+  "sounds_hq_size": 52570740,
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "bootloader.bin",
+          "offset": 0
+        },
+        {
+          "path": "partition-table.bin",
+          "offset": 32768
+        },
+        {
+          "path": "ota_data_initial.bin",
+          "offset": 53248
+        },
+        {
+          "path": "xarm-voice.bin",
+          "offset": 65536
+        },
+        {
+          "path": "srmodels.bin",
+          "offset": 7405568
+        },
+        {
+          "path": "sounds.bin",
+          "offset": 11075584
+        }
+      ]
+    }
+  ]
+}
