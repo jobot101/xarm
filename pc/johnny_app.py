@@ -17,8 +17,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FRAME = 240                                   # blob coordinates are on a 240x240 frame (board core.h)
 VIEW = (400, 300)
 SWEEP = [10, 15, 20, 30, 40, 55, 70, 90, 120]  # bell auto-tune: pulse lengths tried, ms
-COMMANDS = ["ring the bell", "pick up the red", "pick up the blue", "hold this for me", "grab it", "let go",
-            "put it down", "give it to me", "go home", "wave hello"]
+COMMANDS = ["ring the bell", "hold this for me", "grab it", "let go", "put it down",
+            "give it to me", "go home", "wave hello", "take a bow", "dance robot"]
 
 # colors: oak, brass and ink, like the board's web app
 BG, PANEL, INK, DIM, BRASS, RED, BLUE, OK = "#211a14", "#2d241c", "#f1e6d2", "#a8977e", "#c9a14a", "#d0573f", "#5b8fd6", "#7bb36a"
@@ -250,21 +250,9 @@ class App:
             self.cam_note.config(text=self.cam_err or "waiting for a picture...")
             return
         im = self.img.resize(VIEW)
-        d = ImageDraw.Draw(im)
-        sx, sy = VIEW[0] / FRAME, VIEW[1] / FRAME
-        seen = []
-        for i, sl in enumerate(cam.get("slots", [])):
-            if not sl.get("seen"): continue
-            x, y, w, h = sl["x"], sl["y"], sl["w"], sl["h"]
-            col = RED if i == 0 else BLUE
-            d.rectangle([(x - w / 2) * sx, (y - h / 2) * sy, (x + w / 2) * sx, (y + h / 2) * sy], outline=col, width=3)
-            d.text(((x - w / 2) * sx + 4, (y - h / 2) * sy + 3), sl["name"], fill="white")
-            seen.append(sl["name"])
         self.tkimg = ImageTk.PhotoImage(im)
         self.cam.config(image=self.tkimg)
-        if self.cam_err: note = self.cam_err
-        elif not cam.get("ok"): note = f"camera {cam.get('ribbon', '')}: no color reports - is eye.py running?"
-        else: note = f"camera {cam.get('ribbon', '')}: sees " + (", ".join(seen) if seen else "nothing it knows")
+        note = self.cam_err or f"camera {cam.get('ribbon', '')}: live view"
         self.cam_note.config(text=note)
 
     # ---------------------------------------------------------------- commands
@@ -350,21 +338,13 @@ class App:
 
     TEACH = [("Home", "home", "where he rests"), ("Drop", "drop", "where \"put it down\" sets things"),
              ("Hand-off", "give", "where \"give it to me\" hands you things"), ("Helper", "helper", "the \"hold this for me\" spot"),
-             ("Bell", "bell", "over the bell"), ("Look", "look", "the camera's look pose"),
-             ("Red bin", "bin0", "where red things go"), ("Blue bin", "bin1", "where blue things go"), ("Tower", "tower", "first tower block")]
+             ("Bell", "bell", "over the bell")]
 
     def build_teach(self, f):
         ttk.Label(f, text="Pose the arm (Drive, Joints or Limp), then save where it is as:", style="Dim.TLabel").grid(row=0, column=0, columnspan=5, sticky="w")
         self.grid_buttons(f, [(lbl, lambda w=w, lbl=lbl, why=why: self.act("/api/teach", {"what": w}, f"taught {lbl}",
                                 confirm=f"Save the arm's pose right now as {lbl} ({why})?")) for lbl, w, why in self.TEACH], 5, 1)
-        ttk.Label(f, text="Camera calibration (3+ points): put a block down, Mark it, pose the open gripper on it, Add.",
-                  style="Dim.TLabel").grid(row=3, column=0, columnspan=5, sticky="w", pady=(8, 0))
-        self.grid_buttons(f, [("1 · Mark target", lambda: self.act("/api/teach", {"what": "calib_mark"}, "mark")),
-                              ("2 · Add point", lambda: self.act("/api/teach", {"what": "calib_add"}, "calibration point")),
-                              ("Undo last", lambda: self.act("/api/teach", {"what": "calib_undo"}, "undo")),
-                              ("Clear all", lambda: self.act("/api/teach", {"what": "calib_clear"}, "clear calibration",
-                                                             confirm="Forget every camera calibration point?"))], 4, 4)
-        self.calib_lbl = ttk.Label(f, text="", style="Dim.TLabel"); self.calib_lbl.grid(row=5, column=0, columnspan=5, sticky="w")
+
 
     def build_tricks(self, f):
         top = ttk.Frame(f); top.pack(fill="x")
@@ -399,8 +379,7 @@ class App:
             try:
                 import johnny; brain = list(johnny.COMMANDS)
             except Exception: brain = list(COMMANDS)
-            cam = self.st.get("cam", {})
-            colors = [f"pick up the {sl['name']}" for sl in cam.get("slots", []) if sl.get("name")] if cam.get("enabled") else []
+            colors = []
             tricks = [f"do the {t[1]}" for t in self.tricks_seen or []]
             ph, seen = [], set()
             for p in brain + colors + tricks + board:
@@ -417,8 +396,6 @@ class App:
             if i < len(lim): self.jscales[i].config(from_=lim[i][0], to=lim[i][1])
             if self.jdrag != i:
                 self.jvars[i].set(p); self.jlbls[i].config(text=str(p))
-        n = len(st.get("calib") or [])
-        self.calib_lbl.config(text=f"{n} calibration point{'s' if n != 1 else ''}" + ("  (need 3+)" if n < 3 else "  - ready to pick"))
         if mv.get("recording"): self.rec_lbl.config(text=f"● recording: {mv.get('frames', 0)} frames so far. Save or Cancel when done.")
         tl = [(t.get("i", k), t.get("name", "")) if isinstance(t, dict) else (k, t) for k, t in enumerate(mv.get("list") or [])]
         if tl != self.tricks_seen:

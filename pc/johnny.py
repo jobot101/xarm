@@ -98,10 +98,7 @@ class Brain:
 
     def think(self, heard, arm_state):
         cmds = dict(COMMANDS)
-        for s in self.slots:
-            cmds[f"pick up the {s}"] = f"find the {s} thing on the mat with the camera, grab it and lift it"
-        sight = (f"You have a camera over the mat: you can find and pick up {' and '.join(self.slots)} things, nothing else."
-                 if self.slots else "You have no camera: you can't see, so don't claim to.")
+        sight = "You can't see: there's a camera on your board, but you don't use it, so never claim to see anything."
         for m in self.moves: cmds[f"do the {m}"] = f"play the recorded move '{m}'"
         menu = "\n".join(f'- "{k}": {v}' for k, v in cmds.items())
         sys_p = (PERSONA.replace("{sight}", sight) + f"\n\nActions (run in order, at most 3):\n{menu}\n\nThe arm right now: {arm_state}.\n"
@@ -234,7 +231,7 @@ class Ears:
         # lines from its own prompt ("Put it down."). Low-confidence segments are dropped for the same reason.
         segs, _ = self.model.transcribe(x, language="en", beam_size=1, vad_filter=True, condition_on_previous_text=False,
                                         vad_parameters={"min_silence_duration_ms": 300},
-                                        initial_prompt="Johnny, hold this for me. Grab it. Let go. A little left. Put it down. Pick up the red.")
+                                        initial_prompt="Johnny, hold this for me. Grab it. Let go. A little left. Put it down.")
         return " ".join(s.text for s in segs if s.no_speech_prob < 0.5 and s.avg_logprob > -0.9).strip()
 
 
