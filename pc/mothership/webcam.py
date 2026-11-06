@@ -1,9 +1,9 @@
-"""webcam.py — the OBSBOT (or any DirectShow webcam) as a frame source for the panel.
+"""webcam.py — a webcam on this PC as a frame source for the panel: the OBSBOT if it's there, else the next one in CAMERAS.
 
 One capture is kept open while anyone is looking (frames arrive at 30 fps in a thread); the newest frame is
 JPEG-encoded on demand and shared by every viewer. The camera is released after IDLE_SECS with no viewer, so
 Video Control can record with it in between. If something else holds the camera, open() fails and the panel
-falls back to the board's own camera.
+falls back to the board's own camera. Each open tries CAMERAS in order, so whichever is plugged in (and free) is used.
 """
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import io
 import threading
 import time
 
-CAMERA = "video=OBSBOT Tiny 2 StreamCamera"
-SIZE = "1280x720"
+CAMERAS = [("OBSBOT Tiny 2 StreamCamera", "1280x720"),     # (DirectShow name, size), first that opens wins
+           ("USB2.0 PC CAMERA", "640x480")]               # the plain bench webcam: 640x480 is its biggest size
 IDLE_SECS = 20
 
 _lock = threading.Lock()
@@ -21,6 +21,7 @@ _frame = None        # newest PIL image
 _jpeg = (0.0, b"")   # (frame time, encoded)
 _last_view = 0.0
 _err = ""
+_device = ""         # the camera that's open now (or was last)
 
 
 def _run(c, s):
@@ -42,16 +43,22 @@ def _run(c, s):
 
 def _open() -> str:
     """Start the capture if it isn't running. Returns '' or an error."""
-    global _cap, _err
+    global _cap, _err, _device
     with _lock:
         if _cap is not None: return ""
-        try:
-            import av
-            c = av.open(CAMERA, format="dshow", options={"video_size": SIZE, "framerate": "30"})
-        except Exception as e:
-            _err = "the webcam is busy (Video Control recording? OBSBOT Center?)" if "I/O error" in str(e) else f"{type(e).__name__}: {e}"[:120]
+        import av
+        c, errs = None, []
+        for name, size in CAMERAS:
+            try:
+                c = av.open("video=" + name, format="dshow", options={"video_size": size, "framerate": "30"})
+                break
+            except Exception as e:                          # unplugged and busy both read as I/O error on DirectShow
+                errs.append(f"{type(e).__name__}: {e}"[:80])
+        if c is None:
+            _err = ("no webcam free: unplugged, or busy (Video Control recording? OBSBOT Center?)"
+                    if all("I/O error" in e for e in errs) else "; ".join(errs)[:160])
             return _err
-        _cap, _err = c, ""
+        _cap, _err, _device = c, "", name
         threading.Thread(target=_run, args=(c, c.streams.video[0]), daemon=True).start()
         return ""
 
@@ -73,4 +80,4 @@ def jpeg(quality: int = 80, max_age: float = 0.1) -> tuple[bytes, str]:
 
 
 def status() -> dict:
-    return {"open": _cap is not None, "error": _err, "device": CAMERA}
+    return {"open": _cap is not None, "error": _err, "device": _device, "cameras": [n for n, _ in CAMERAS]}

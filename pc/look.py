@@ -1,4 +1,4 @@
-"""look.py — check with the OBSBOT webcam that Johnny really did what the board says it did.
+"""look.py — check with the PC webcam (the OBSBOT, else the bench webcam) that Johnny really did what the board says it did.
 
     python look.py snap shot.jpg                          # one frame
     python look.py cmd "go home" --secs 5                 # film a router command
@@ -17,7 +17,9 @@ import requests
 from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CAMERA = "video=OBSBOT Tiny 2 StreamCamera"
+CAMERAS = [("OBSBOT Tiny 2 StreamCamera", "1280x720", 0.5),  # (DirectShow name, size, % change that counts as MOVED);
+           ("USB2.0 PC CAMERA", "640x480", 2.5)]            # first that opens wins. Same order as mothership/webcam.py.
+                                                            # The bench webcam flickers ~1% on a still scene, hence 2.5.
 
 
 def board():
@@ -28,14 +30,33 @@ def board():
 
 class Cam:
     """Keeps the webcam open and the newest frame at hand (frames arrive at 30 fps in a thread)."""
-    def __init__(self, size="1280x720"):
-        self.c = av.open(CAMERA, format="dshow", options={"video_size": size, "framerate": "30"})
+    def __init__(self):
+        errs = []
+        for name, size, moved in CAMERAS:
+            try:
+                self.c = av.open("video=" + name, format="dshow", options={"video_size": size, "framerate": "30"})
+                self.name, self.moved = name, moved
+                break
+            except Exception as e:
+                errs.append(f"{name}: {e}")
+        else:
+            raise OSError("[Errno 5] I/O error: no webcam opened (unplugged or busy): " + "; ".join(errs))
+        print("camera:", self.name, file=sys.stderr)
         self.s = self.c.streams.video[0]
         self.frame, self.t, self.on = None, 0.0, True
         threading.Thread(target=self._run, daemon=True).start()
         t0 = time.time()
         while self.frame is None and time.time() - t0 < 5: time.sleep(0.02)
-        time.sleep(0.4)                                        # let exposure settle
+        self.settle()
+
+    def settle(self, most=6.0):
+        """Wait for auto-exposure: until two frames 0.3 s apart barely differ (the bench webcam takes ~2-3 s)."""
+        t0, prev = time.time(), None
+        while time.time() - t0 < most:
+            time.sleep(0.3)
+            im = self.grab()
+            if prev is not None and motion(prev, im)[0] < 0.3: return
+            prev = im
 
     def _run(self):
         for f in self.c.decode(self.s):
@@ -64,7 +85,8 @@ def motion(a, b):
 
 
 def sheet(frames, path, cols=4):
-    w, h = 320, 180
+    w = 320
+    h = w * frames[0][1].height // frames[0][1].width            # 180 for the OBSBOT, 240 for the 4:3 bench webcam
     rows = (len(frames) + cols - 1) // cols
     out = Image.new("RGB", (cols * w, rows * h), "black")
     first = frames[0][1]
@@ -90,7 +112,7 @@ def film(cam, act, secs, fps, label):
     return frames, result
 
 
-def report(frames, result, name):
+def report(frames, result, name, moved=0.5):
     path = os.path.join(os.getcwd(), name + "_sheet.jpg")
     sheet(frames, path)
     first = frames[0][1]
@@ -99,7 +121,7 @@ def report(frames, result, name):
     print("board said:", json.dumps(result) if result is not None else "-")
     print("motion vs before:", " ".join(f"{p:.1f}" for p, _ in scores))
     print(f"peak {peak[0]:.1f}% of the picture changed" + (f", around x {peak[1][0]}-{peak[1][2]}, y {peak[1][1]}-{peak[1][3]}" if peak[1] else ""))
-    print("verdict:", "MOVED" if peak[0] >= 0.5 else "NO VISIBLE CHANGE")
+    print("verdict:", "MOVED" if peak[0] >= moved else "NO VISIBLE CHANGE")
     print("sheet:", path)
 
 
@@ -124,7 +146,7 @@ def main():
         else:
             act = None
         frames, result = film(cam, act, a.secs, a.fps, a.what)
-        report(frames, result, a.name)
+        report(frames, result, a.name, cam.moved)
     finally:
         cam.close()
 

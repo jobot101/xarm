@@ -60,7 +60,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/b/"): return self.proxy("GET")
         if self.path == "/ping": return self.send(200, json.dumps({"ok": True, "board": H.board}).encode())
-        if self.path.startswith("/webcam.jpg"):             # the OBSBOT on this PC (webcam.py); 503 + reason if it's held
+        if self.path.startswith("/webcam.jpg"):             # a webcam on this PC (webcam.py: OBSBOT, else the bench cam); 503 + reason if it's held
             import webcam
             data, why = webcam.jpeg()
             if not data: return self.send(503, json.dumps({"ok": False, "msg": why}).encode(), extra={"Retry-After": "2"})
