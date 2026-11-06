@@ -196,9 +196,14 @@ class App:
         elif st:
             br, v = st.get("brain", {}), st.get("voice", {})
             batt = st.get("arm", {}).get("battery_mv", 0) / 1000
-            self.status.config(foreground=INK, text=f"{st.get('state', '?')} - {st.get('detail', '')}    "
+            bt = st.get("boot", {})
+            up = bt.get("uptime_s", 0)
+            boot = f"    up {up // 60} min" if up >= 120 else f"    up {up} s" if bt else ""
+            if bt and up < 600: boot += f" (last reset: {bt.get('reset')})"
+            self.status.config(foreground=RED if bt.get("reset", "").startswith(("brownout", "crash", "watchdog", "power glitch")) and up < 600 else INK,
+                               text=f"{st.get('state', '?')} - {st.get('detail', '')}    "
                                f"brain {'connected' if br.get('pc') else 'not connected'}    "
-                               f"arm {batt:.1f} V    fw {st.get('fw', {}).get('version', '?')}")
+                               f"arm {batt:.1f} V    fw {st.get('fw', {}).get('version', '?')}{boot}")
             if not self.synced and v:
                 self.gain.set(v.get("gain", 24)); self.gain_lbl.config(text=f"{v.get('gain', 24)} dB")
                 self.dual.set(bool(v.get("dual"))); self.synced = True
@@ -217,15 +222,17 @@ class App:
             self.rdot.create_oval(3, 3, 23, 23, outline=DIM, width=2)
             self.rtxt.config(text="no radar" if r else "no radar in this firmware yet", foreground=DIM)
             self.rsub.config(text=f"GPIO{r['gpio']}" if r and r.get("gpio", -1) >= 0 else ""); return
-        if r.get("kind") == "serial":
+        if r.get("kind") == "serial" and r.get("format") in (None, "unknown", "finding baud"):
             self.rdot.create_oval(3, 3, 23, 23, fill=BRASS, width=0)
-            self.rtxt.config(text="radar is talking serial", foreground=BRASS)
-            self.rsub.config(text=f"{r.get('edges_s', 0)} edges/s on GPIO{r.get('gpio')}"); return
+            self.rtxt.config(text="radar: " + (r.get("format") or "talking serial"), foreground=BRASS)
+            self.rsub.config(text=f"{r.get('baud') or '?'} baud  {(r.get('raw') or '')[:24]}"); return
         here, t = r.get("present"), int(r.get("since_s", 0))
         span = f"{t // 60} min" if t >= 120 else f"{t} s"
         self.rdot.create_oval(3, 3, 23, 23, fill=OK if here else PANEL, outline=OK if here else DIM, width=2)
         self.rtxt.config(text=("someone's here" if here else "nobody") + f"  ({span})", foreground=INK if here else DIM)
-        self.rsub.config(text=f"GPIO{r.get('gpio')}  level {int(bool(r.get('level')))}  {r.get('edges_s', 0)} edges/s")
+        d = r.get("distance_cm", -1)
+        self.rsub.config(text=(f"{d / 100:.1f} m  " if here and d is not None and d >= 0 else "") +
+                         (f"{r.get('format')} {r.get('baud')} baud" if r.get("kind") == "serial" else f"GPIO{r.get('gpio')} level {int(bool(r.get('level')))}"))
 
     def draw_cam(self):
         cam = self.st.get("cam", {})

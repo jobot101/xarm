@@ -127,6 +127,17 @@ static esp_err_t h_state(httpd_req_t *r)
     }
 
     radar_json(j);
+    {   // why the board last restarted: tells a brownout (solenoid on the same supply) from a crash, no USB needed
+        static const char *const why[] = { [ESP_RST_UNKNOWN] = "unknown", [ESP_RST_POWERON] = "power on", [ESP_RST_EXT] = "reset pin",
+            [ESP_RST_SW] = "restart", [ESP_RST_PANIC] = "crash", [ESP_RST_INT_WDT] = "watchdog (interrupt)",
+            [ESP_RST_TASK_WDT] = "watchdog (task)", [ESP_RST_WDT] = "watchdog", [ESP_RST_DEEPSLEEP] = "deep sleep",
+            [ESP_RST_BROWNOUT] = "brownout (power dipped)", [ESP_RST_SDIO] = "sdio", [ESP_RST_USB] = "USB",
+            [ESP_RST_JTAG] = "JTAG", [ESP_RST_EFUSE] = "efuse", [ESP_RST_PWR_GLITCH] = "power glitch", [ESP_RST_CPU_LOCKUP] = "CPU lockup" };
+        esp_reset_reason_t rr = esp_reset_reason();
+        cJSON *bt = cJSON_AddObjectToObject(j, "boot");
+        cJSON_AddStringToObject(bt, "reset", (unsigned)rr < sizeof why / sizeof *why && why[rr] ? why[rr] : "other");
+        cJSON_AddNumberToObject(bt, "uptime_s", (double)(esp_timer_get_time() / 1000000));
+    }
     cJSON *cam = cJSON_AddObjectToObject(j, "cam");
     cJSON_AddBoolToObject(cam, "enabled", cam_enabled());
     cJSON_AddBoolToObject(cam, "ok", cam_ok());
