@@ -230,9 +230,12 @@ class Ears:
 
     def hear(self, pcm):
         x = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768
-        segs, _ = self.model.transcribe(x, language="en", beam_size=1, vad_filter=False, condition_on_previous_text=False,
+        # Silero VAD (ships with faster-whisper) trims non-speech first; on near-silence Whisper otherwise "hears"
+        # lines from its own prompt ("Put it down."). Low-confidence segments are dropped for the same reason.
+        segs, _ = self.model.transcribe(x, language="en", beam_size=1, vad_filter=True, condition_on_previous_text=False,
+                                        vad_parameters={"min_silence_duration_ms": 300},
                                         initial_prompt="Johnny, hold this for me. Grab it. Let go. A little left. Put it down. Pick up the red.")
-        return " ".join(s.text for s in segs if s.no_speech_prob < 0.6).strip()
+        return " ".join(s.text for s in segs if s.no_speech_prob < 0.5 and s.avg_logprob > -0.9).strip()
 
 
 # ------------------------------------------------------------------ the link to the board
